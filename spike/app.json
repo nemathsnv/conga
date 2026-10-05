@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Shortcut Spike",
+    "slug": "shortcut-video-spike",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "app.shortcut.spike",
+      "supportsTablet": false,
+      "appleTeamId": "7D66TF323B",
+      "infoPlist": {
+        "NSCameraUsageDescription": "The spike records test videos.",
+        "NSMicrophoneUsageDescription": "The spike records test videos with sound.",
+        "UIBackgroundModes": []
+      }
+    },
+    "android": {
+      "package": "app.shortcut.spike",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_NETWORK_STATE",
+        "READ_PHONE_STATE"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "The spike records test videos.",
+          "microphonePermission": "The spike records test videos with sound.",
+          "recordAudioAndroid": true
+        }
+      ],
+      "expo-video",
+      "expo-file-system",
+      "expo-cellular",
+      "expo-sharing"
+    ]
+  }
+}
