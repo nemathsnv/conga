@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+
+# env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.p12
+*.key
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+
+# Expo / React Native
+.expo/
+.expo-shared/
+dist/
+web-build/
+ios/
+android/
+*.jks
+*.keystore
+!debug.keystore
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# logs and OS
+*.log
+npm-debug.*
+yarn-error.*
+.DS_Store
+*.tsbuildinfo
+
+# spike recordings and exports
+spike/recordings/
+spike/logs/*.jsonl

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A1 — Followers and following</title>
+
+</head>
+<body>
+<style>
+body{margin:0}
+a{color:#1C1C1E;text-decoration:none}a:hover{color:#1C1C1E}
+.btn{height:52px;border-radius:26px;display:flex;align-items:center;justify-content:center;font:600 16px -apple-system,'SF Pro Text',sans-serif;letter-spacing:-0.2px}
+.grp{margin:0 16px;border-radius:14px;background:#F2F2F7;overflow:hidden}
+.row{min-height:48px;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:16px}
+.sep{height:0.5px;margin-left:16px;background:#D1D1D6}
+.sep.in{margin-left:60px}
+.cap{padding:22px 32px 7px;font-size:13px;color:#6E6E73}
+.foot{padding:7px 32px 0;font-size:13px;line-height:1.35;color:#8A8A8E}
+.sub{display:block;font-size:13px;color:#6E6E73;margin-top:1px}
+.chev{margin-left:auto;flex-shrink:0;color:#C7C7CC;display:flex;align-items:center;gap:6px;font-size:15px}
+.val{color:#8A8A8E}
+.pill{flex-shrink:0;height:30px;padding:0 13px;border:none;border-radius:15px;font:600 14px -apple-system,'SF Pro Text',sans-serif;display:inline-flex;align-items:center}
+.pill.blk{background:#1C1C1E;color:#FFFFFF}.pill.gry{background:#E5E5EA;color:#1C1C1E}.pill.wht{background:#FFFFFF;color:#1C1C1E}
+.tg{flex-shrink:0;margin-left:auto;width:51px;height:31px;border-radius:16px;background:#E5E5EA;position:relative}
+.tg::after{content:'';position:absolute;left:2px;top:2px;width:27px;height:27px;border-radius:14px;background:#FFFFFF;box-shadow:0 2px 5px rgba(0,0,0,0.18)}
+.tg.on{background:#34C759}.tg.on::after{left:22px}
+.ic{width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#FFFFFF}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:48px;color:#8A8A8E;font:500 10px -apple-system,'SF Pro Text',sans-serif}
+.tab.on{color:#1C1C1E}
+.av{border-radius:50%;object-fit:cover;flex-shrink:0}
+</style>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif">
+<header style="position: absolute; left: 6px; right: 6px; top: 50px; height: 44px; display: flex; align-items: center; justify-content: space-between"><a href="LV-MyProfile.html" aria-label="Back" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></a><div style="position: absolute; left: 60px; right: 60px; text-align: center; font-size: 17px; font-weight: 600; letter-spacing: -0.3px">lenahart</div><span style="display: flex"></span></header><div style="position: absolute; left: 0; right: 0; top: 98px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 0.5px solid #D1D1D6"><span style="height: 44px; display: flex; align-items: center; justify-content: center; position: relative; font-size: 15px; font-weight: 600">Followers <span style="font-weight: 400; color: #8A8A8E; margin-left: 4px">128</span><span style="position: absolute; left: 50%; bottom: -0.5px; width: 32px; margin-left: -16px; height: 2px; border-radius: 1px; background: #1C1C1E"></span></span><span style="height: 44px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; color: #8A8A8E">Following <span style="font-weight: 400; margin-left: 4px">64</span></span></div><div style="position: absolute; left: 0; right: 0; top: 150px"><div class="row" style="min-height: 64px"><img class="av" src="img/sofia_a.jpg" alt="" style="width: 40px; height: 40px"><span style="flex-grow: 1; min-width: 0"><span style="display: block; font-weight: 600">Sofia Marín</span><span class="sub">@sofiamarin</span></span><span class="pill gry">Following</span></div><div class="row" style="min-height: 64px"><img class="av" src="img/jordan_a.jpg" alt="" style="width: 40px; height: 40px"><span style="flex-grow: 1; min-width: 0"><span style="display: block; font-weight: 600">Theo Asante</span><span class="sub">@theoasante</span></span><span class="pill blk">Follow back</span></div><div class="row" style="min-height: 64px"><img class="av" src="img/putu_a.jpg" alt="" style="width: 40px; height: 40px"><span style="flex-grow: 1; min-width: 0"><span style="display: block; font-weight: 600">Putu Ayu</span><span class="sub">@putuayu</span></span><span class="pill gry">Following</span></div><div class="row" style="min-height: 64px"><img class="av" src="img/hatwoman_a.jpg" alt="" style="width: 40px; height: 40px"><span style="flex-grow: 1; min-width: 0"><span style="display: block; font-weight: 600">Hana Iwasaki</span><span class="sub">@hanaiwasaki</span></span><span class="pill blk">Follow back</span></div><div class="row" style="min-height: 64px"><img class="av" src="img/kal_a.jpg" alt="" style="width: 40px; height: 40px"><span style="flex-grow: 1; min-width: 0"><span style="display: block; font-weight: 600">Kalani Brooks</span><span class="sub">@kalani</span></span><span class="pill blk">Follow back</span></div><div class="row" style="min-height: 64px"><img class="av" src="img/wayan_a.jpg" alt="" style="width: 40px; height: 40px"><span style="flex-grow: 1; min-width: 0"><span style="display: block; font-weight: 600">Wayan Adi</span><span class="sub">@wayanadi</span></span><span class="pill gry">Following</span></div><div class="row" style="min-height: 64px"><img class="av" src="img/maya_a.jpg" alt="" style="width: 40px; height: 40px"><span style="flex-grow: 1; min-width: 0"><span style="display: block; font-weight: 600">Maya Lindqvist</span><span class="sub">@mayalind</span></span><span class="pill gry">Following</span></div></div>
+</div>
+</body>
+</html>
