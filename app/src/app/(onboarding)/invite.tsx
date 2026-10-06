@@ -32,7 +32,9 @@ export default function InviteScreen() {
 
   // Live check once the code has the full shape (O-Invite shows "Invited by Putu Ayu").
   const onCodeChange = (value: string) => {
-    setCode(normaliseInviteCode(value));
+    const next = normaliseInviteCode(value);
+    if (next === code) return;
+    setCode(next);
     setCheck(null);
   };
 

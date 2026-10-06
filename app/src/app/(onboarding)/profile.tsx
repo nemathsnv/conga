@@ -15,7 +15,7 @@ import { colors, fontFamily, layout, type } from '@/ui/theme';
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setPhotoStepPending } = useSession();
+  const { refresh, setPhotoStepPending } = useSession();
   const advance = useAdvance();
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -59,7 +59,9 @@ export default function ProfileScreen() {
     setBusy(true);
     try {
       await createProfile(name.trim(), username);
+      // The photo step shows the new name and username, so load the profile first.
       setPhotoStepPending(true);
+      await refresh();
       router.replace('/(onboarding)/photo');
     } catch (e) {
       if (e instanceof ServerError && e.code === 'username_taken') {
