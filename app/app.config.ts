@@ -50,6 +50,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     // No splash board exists: plain black with a transparent image (Android needs a drawable).
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'Shortcut records your responses and video replies on camera.',
+        microphonePermission: 'Shortcut records your responses and video replies with sound.',
+        recordAudioAndroid: true,
+      },
+    ],
+    'expo-video',
     ['expo-splash-screen', { backgroundColor: '#000000', image: './assets/splash-blank.png', imageWidth: 1 }],
     './plugins/withSceneLifecycle.js',
     ...(googleIosUrlScheme ? [googleSignInPlugin(googleIosUrlScheme)] : []),

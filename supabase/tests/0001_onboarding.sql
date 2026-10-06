@@ -16,7 +16,7 @@ values
   (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'email', '{"sub":"11111111-1111-1111-1111-111111111111","email":"lena@example.com"}', now(), now(), now()),
   (gen_random_uuid(), '22222222-2222-2222-2222-222222222222', 'apple-putu', 'apple', '{"sub":"apple-putu","email":"putu@example.com"}', now(), now(), now());
 
-select is((select count(*)::int from public.accounts), 3, 'the auth trigger creates one account per user');
+select is((select count(*)::int from public.accounts where id in ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222','33333333-3333-3333-3333-333333333333')), 3, 'the auth trigger creates one account per user');
 
 -- Putu already has a profile and an invite code; one expired code exists too.
 update public.accounts set age_confirmed_at = now() where id = '22222222-2222-2222-2222-222222222222';
@@ -63,7 +63,7 @@ select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-1111111
 select throws_ok($$ select public.team_create_invite('X-1') $$, '42501', null, 'a signed-in person cannot create invites');
 select throws_ok($$ select public.signin_providers_for_email('a@b.co') $$, '42501', null, 'a signed-in person cannot look up sign-in providers');
 select is((select count(*)::int from public.accounts), 1, 'a person reads only their own account');
-select is((select count(*)::int from public.profiles), 1, 'profiles are readable by signed-in people');
+select is((select count(*)::int from public.profiles where id = '22222222-2222-2222-2222-222222222222'), 1, 'profiles are readable by signed-in people');
 select is((select count(*)::int from public.invites), 0, 'invites of other people are not readable');
 
 select is(
@@ -100,7 +100,7 @@ select is(public.username_status('putu'), 'taken', 'taken username');
 select is(public.username_status('Lena'), 'invalid', 'uppercase is invalid');
 select is(public.username_status('ab'), 'invalid', 'too short is invalid');
 select is(public.username_status('lena.hart_1'), 'available', 'dots, underscores and digits are allowed');
-select is(public.username_suggestions('Putu Ayu', 'putu'), array['putuayu', 'putu.ayu', 'putu_a'], 'three suggestions built from the name');
+select is(public.username_suggestions('Lena Hart', 'lena'), array['lenahart', 'lena.hart', 'lena_h'], 'three suggestions built from the name (E-Username)');
 select throws_ok($$ select public.create_profile('Lena Hart', 'putu') $$, 'P0001', 'username_taken', 'create_profile reports a taken username');
 select throws_ok($$ select public.create_profile('', 'lenahart') $$, 'P0001', 'invalid_name', 'create_profile needs a name');
 select throws_ok($$ select public.create_profile('Lena Hart', 'Lena Hart') $$, 'P0001', 'invalid_username', 'create_profile validates the username');

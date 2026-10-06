@@ -12,9 +12,9 @@ insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, ra
   ('c3333333-3333-3333-3333-333333333333', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'maya@example.com', '{}', '{}', now(), now());
 update public.accounts set age_confirmed_at = now();
 insert into public.profiles (id, name, username) values
-  ('a1111111-1111-1111-1111-111111111111', 'Lena Hart', 'lenahart'),
-  ('b2222222-2222-2222-2222-222222222222', 'Adam Novak', 'adam'),
-  ('c3333333-3333-3333-3333-333333333333', 'Maya Lindqvist', 'mayalind');
+  ('a1111111-1111-1111-1111-111111111111', 'Lena Hart', 'testlena'),
+  ('b2222222-2222-2222-2222-222222222222', 'Adam Novak', 'testadam'),
+  ('c3333333-3333-3333-3333-333333333333', 'Maya Lindqvist', 'testmaya');
 
 select public.team_create_prompt('Be honest about the place you live.', null, (now() at time zone 'utc')::date);
 select public.team_create_prompt('Speak in every language you know.');
@@ -44,7 +44,7 @@ select throws_ok($$ select public.mark_response_live('up-x', 'a', 'p', 1000) $$,
 -- Home feed: featured prompt first, newest response shown, place prompts left out until phase 6.
 select is(jsonb_array_length(public.home_feed()), 2, 'home feed lists the global prompts');
 select is((public.home_feed())->0->'prompt'->>'text', 'Be honest about the place you live.', 'featured prompt comes first');
-select is((public.home_feed())->0->'response'->'author'->>'username', 'mayalind', 'newest response is shown when following nobody');
+select is((public.home_feed())->0->'response'->'author'->>'username', 'testmaya', 'newest response is shown when following nobody');
 select is((public.home_feed())->0->'prompt'->>'response_count', '2', 'response count on the prompt');
 select is((public.home_feed())->1->'response', 'null'::jsonb, 'a prompt with no responses is a conversation with no response (Z-Empty)');
 select is(jsonb_array_length(public.home_feed(array[(select id from public.prompts where text like 'Be honest%')])), 1, 'seen conversations are excluded');
@@ -53,15 +53,15 @@ select is(jsonb_array_length(public.home_feed(array[(select id from public.promp
 select is(jsonb_array_length(public.following_feed()), 0, 'following feed is empty before following anyone');
 select lives_ok($$ select public.follow_user('b2222222-2222-2222-2222-222222222222') $$, 'follow_user');
 select throws_ok($$ select public.follow_user('a1111111-1111-1111-1111-111111111111') $$, 'P0001', 'cannot_follow_self', 'cannot follow yourself');
-select is((public.home_feed())->0->'response'->'author'->>'username', 'adam', 'a followed person''s response is preferred on Home');
-select is((public.following_feed())->0->'response'->'author'->>'username', 'adam', 'following feed shows the followed person''s response');
+select is((public.home_feed())->0->'response'->'author'->>'username', 'testadam', 'a followed person''s response is preferred on Home');
+select is((public.following_feed())->0->'response'->'author'->>'username', 'testadam', 'following feed shows the followed person''s response');
 select is((public.get_profile('b2222222-2222-2222-2222-222222222222'))->>'is_following', 'true', 'profile shows is_following');
 select is((public.get_profile('b2222222-2222-2222-2222-222222222222'))->>'follower_count', '1', 'follower count');
 select is(jsonb_array_length(public.follow_list('b2222222-2222-2222-2222-222222222222', 'followers')), 1, 'followers list');
 
 -- Player order: entry first, then unseen followed, then newer.
-select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%'), (select id from public.responses where mux_upload_id = 'up-maya')))->'responses'->0->'author'->>'username', 'mayalind', 'entry response comes first');
-select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%')))->'responses'->0->'author'->>'username', 'adam', 'without an entry, unseen followed people come first');
+select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%'), (select id from public.responses where mux_upload_id = 'up-maya')))->'responses'->0->'author'->>'username', 'testmaya', 'entry response comes first');
+select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%')))->'responses'->0->'author'->>'username', 'testadam', 'without an entry, unseen followed people come first');
 
 -- Posting: disclosure first, one response per prompt, limits.
 select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', null, 5000) $$, 'P0001', 'disclosure_required', 'no post before the disclosure');

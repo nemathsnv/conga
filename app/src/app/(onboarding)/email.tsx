@@ -117,7 +117,7 @@ export default function EmailScreen() {
         <View style={s.codeBlock}>
           <Text style={s.codeTitle}>Enter the 6-digit code</Text>
           <Text style={s.codeSent}>Sent to {sentTo}</Text>
-          <Pressable onPress={() => codeInput.current?.focus()} style={s.boxes} accessibilityLabel={`Code, ${code.length} of 6 digits entered`}>
+          <View style={s.boxes} accessibilityLabel={`Code, ${code.length} of 6 digits entered`}>
             {Array.from({ length: OTP_LENGTH }, (_, i) => {
               const digit = code[i] ?? '';
               const active = !codeFailed && i === code.length;
@@ -128,22 +128,25 @@ export default function EmailScreen() {
                 </View>
               );
             })}
-          </Pressable>
-          <TextInput
-            ref={codeInput}
-            style={s.hiddenInput}
-            value={code}
-            onChangeText={(v) => {
-              setCodeFailed(false);
-              setCode(normaliseOtp(v));
-            }}
-            keyboardType="number-pad"
-            textContentType="oneTimeCode"
-            autoComplete="one-time-code"
-            maxLength={OTP_LENGTH}
-            caretHidden
-            onSubmitEditing={() => void verify()}
-          />
+            {/* The real input lies over the boxes, invisible, so a tap anywhere on them focuses it. */}
+            <TextInput
+              ref={codeInput}
+              style={s.codeInput}
+              value={code}
+              onChangeText={(v) => {
+                setCodeFailed(false);
+                setCode(normaliseOtp(v));
+              }}
+              keyboardType="number-pad"
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
+              maxLength={OTP_LENGTH}
+              caretHidden
+              contextMenuHidden
+              onSubmitEditing={() => void verify()}
+              accessibilityLabel="6-digit code"
+            />
+          </View>
           {codeFailed ? (
             <>
               <Text style={s.errorText}>That code didn&apos;t work. It may have expired, so use the newest email.</Text>
@@ -202,7 +205,7 @@ const s = StyleSheet.create({
   boxError: { backgroundColor: colors.dangerFill, borderWidth: 1.5, borderColor: colors.dangerBorder },
   boxDigit: { fontSize: 24, lineHeight: 30, fontWeight: '600', color: colors.text, fontFamily },
   caret: { width: 2, height: 26, backgroundColor: colors.text, borderRadius: 1 },
-  hiddenInput: { position: 'absolute', opacity: 0, height: 1, width: 1 },
+  codeInput: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, color: 'transparent', backgroundColor: 'transparent', fontSize: 1 },
   resend: { ...type.body14, color: colors.textTertiary, marginTop: 16, fontFamily },
   resendLink: { ...type.semi15, color: colors.text, marginTop: 14, fontFamily },
   errorText: { ...type.body14, color: colors.danger, marginTop: 14, fontFamily },
