@@ -49,7 +49,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         cameraPermission: 'Shortcut uses the camera when you take a profile photo.',
       },
     ],
-    ['expo-splash-screen', { backgroundColor: '#000000' }],
+    // No splash board exists: plain black with a transparent image (Android needs a drawable).
+    ['expo-splash-screen', { backgroundColor: '#000000', image: './assets/splash-blank.png', imageWidth: 1 }],
     './plugins/withSceneLifecycle.js',
     ...(googleIosUrlScheme ? [googleSignInPlugin(googleIosUrlScheme)] : []),
   ],
