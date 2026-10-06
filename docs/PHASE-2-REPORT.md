@@ -65,12 +65,12 @@ Not built: `W-Link` (invite links need the universal-link domain, SPEC.md Sectio
 | `npm test` (Jest) | 24 of 24 pass: validation rules, step resolver, invite copy |
 | Avatar storage policies + `set_profile_photo` (script against local Supabase) | upload refused before a profile exists and outside own folder; own upload, RPC and public read work |
 | iOS simulator build (`expo run:ios`, iPhone 17, iOS 27) | builds and runs |
-| iOS device build (Release, iPhone 17 Pro) | RESULT_IOS_DEVICE |
+| iOS device build (Release, iPhone 17 Pro) | **not produced.** Xcode refuses to create a provisioning profile for `app.shortcut`: the only team on this Mac (BP7TM32HCQ) is a personal team, and personal teams do not support the Sign in with Apple capability. A second attempt with the entitlement stripped from the generated project also failed because xcodebuild could no longer see the Apple account from this session, and the iPhone then showed as unavailable. The same code compiles and runs on the iOS 27 simulator. |
 | Android debug build (`gradlew :app:assembleDebug`, SDK 36, build-tools 35) | builds: `app-debug.apk` produced. Never run on an Android device or emulator. |
 
 ## 6. Verified on a real iPhone
 
-RESULT_IOS_DEVICE_DETAIL
+Nothing. No phase 2 build reached the iPhone in this session (see section 5). Every observation below comes from the iOS simulator and from scripts against the local backend.
 
 ## 7. Verified on the iOS simulator (not a real device)
 
@@ -115,13 +115,14 @@ None of these change the spec; each needs Nemat's yes or no.
 2. **Apple credentials:** Sign in with Apple capability on bundle id `app.shortcut` (team BP7TM32HCQ); for Android's web flow also a Services ID and client secret. Enter them in `supabase/.env`.
 3. **Google credentials:** iOS and web OAuth client ids and the web client secret (`supabase/.env`), plus `EXPO_PUBLIC_GOOGLE_*` and `GOOGLE_IOS_URL_SCHEME` in `app/.env`. Without them the Google button logs a configuration error.
 4. **Email provider:** the Supabase built-in sender is rate-limited (a few emails an hour) and only fine for the founder's own test. Section 22 still lists Resend / Postmark as open.
-5. **Android real device:** needed for the gate ("sign up on iOS and Android") and still needed for phase 1's video validation.
+5. **Apple Developer Program membership** (paid team). Required to sign any build that carries Sign in with Apple, so required for the iPhone build itself, not only for the store. Set `APPLE_TEAM_ID` in `app/.env` to that team.
+6. **Android real device:** needed for the gate ("sign up on iOS and Android") and still needed for phase 1's video validation.
 
 ## 11. Git
 
 Branch `phase-2-foundations`. Commits:
 
-COMMITS_PLACEHOLDER
+See `git log --oneline bcc9055..HEAD` on branch `phase-2-foundations`; the final SHA is in the session summary.
 
 ## 12. Gate 2 readiness
 
