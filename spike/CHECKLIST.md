@@ -2,38 +2,38 @@
 
 Do this alone, on **mobile data with Wi-Fi off**. Each line is one tap unless it says otherwise.
 
-## Before the runs
+## Round 1 (done 6 Oct 2026): 7 front-camera 1080p runs, default encoder. See REPORT.md.
 
-1. Settings → Wi-Fi → off. Confirm the status bar shows 4G/5G.
-2. Open **Shortcut Spike**. The top line must show `net CELLULAR 4G` (or 5G) and your carrier.
-3. Tap **Clear all** if the list has old runs from a previous session.
+## Round 2
 
-## One recording (repeat 5 times per camera)
+Home has two new toggles: **Encoder** (default / 4Mbps / 2Mbps) and **Fast start** (off / on). Both are shown in every run's label and log line.
 
-4. Tap **Record**. Grant camera and microphone the first time.
-5. Tap **Flip** to pick the camera. Run 5 with **front**, then 5 with **back**.
-6. Tap **Record**, talk for 10 to 15 seconds, tap **Stop**. For one run per camera, hold until it stops itself at 30 s.
-7. Preview plays looping with sound. Read the pill: duration, resolution, MB, kbps. Tap **Post**.
-8. Watch the progress bar fill. Don't leave the screen. When Mux is ready the Home loop opens automatically.
-9. Let it loop at least 3 times. Read the pill: first frame ms, stalls, loops. Tap **Back**.
+### Back camera (the Flip bug is fixed)
 
-## Extra runs (once each)
+1. Wi-Fi off. Open the app. Tap **Record**, tap **Flip** to back. The Record button should go live within a second.
+2. Record 5 clips of 10 to 15 s on the back camera, default encoder. Post each one. Let each loop 3 times, then Back.
+3. **Light, back**: Flip to back, **Light on**, record 5 s. The torch must be on while recording. Post it.
+4. **Light, front**: Flip to front, **Light on**, record 5 s. Note what happens (expected: nothing visible). Post it.
+5. **Zoom**: back camera, tap **Zoom** to 0.1 then 0.25, 3 s each, post both. Say in chat whether 0 looks like the normal 1× camera or the ultra-wide.
 
-10. **Light test, front**: Record → Flip to front → **Light on** → record 5 s. Note whether anything changes (expected: nothing, iPhone front has no torch).
-11. **Light test, back**: same with back camera. The torch must come on while recording.
-12. **Zoom test**: tap **Zoom** to 0.1, then 0.25, record 3 s each on the back camera. Note what the preview shows versus 1×.
-13. **Too short**: tap Record then Stop within 1 s. Expect the "Too short" message, no run created.
-14. **Re-record**: record 3 s, in Preview tap **Re-record**. Expect the camera again, run gone from Home.
-15. **Interrupted upload**: record 25 s, tap Post, and when the bar is around 30 % swipe the app away (kill it). Reopen. Expect the yellow "didn't post, saved on this phone" banner with the run and **Retry**. Tap Retry and let it finish.
-16. **Offline upload**: turn on Airplane mode, record 5 s, tap Post. Expect failure after the automatic retries, banner, run kept. Turn Airplane mode off, tap Retry.
-17. **720p**: tap the quality button to 720p, record one 15 s front clip, post it.
+### Encoder bitrate (this decides upload time)
 
-## Playback runs
+6. On Home set **Encoder: 4Mbps**. Record a 30 s front clip (hold until it stops itself). Post it.
+7. Set **Encoder: 2Mbps**. Record a 30 s front clip. Post it. Say in chat whether the preview looks noticeably worse than the default.
+8. Set quality to **720p** (button on the record screen), Encoder default. Record 15 s front. Post it.
 
-18. On Home tap **Play all ready**. Clips play one after another, sound on. Note first-frame per clip from the pill and any stalls. Use **Next** / **Prev** once each.
-19. Open any ready clip with **Play (Home loop)** again after 10 minutes. This measures a cold CDN start.
+### Playback start time
 
-## Export
+9. On Home, **Fast start: off**. Open 3 different ready clips with **Play (Home loop)**, 10 s each.
+10. Set **Fast start: on**. Open the same 3 clips again, 10 s each.
+11. **Play all ready** once with Fast start on.
 
-20. Tap **Export log** → AirDrop to the Mac. Save the file into `spike/logs/`.
-21. Tell Claude the file name. The report is built from it with `npm run summarize -- logs/<file>.jsonl`.
+### Failure cases (skip any you already did in round 1)
+
+12. **Re-record**: record 3 s, in Preview tap **Re-record**. Run must disappear from Home.
+13. **Interrupted upload**: record 25 s, Post, kill the app at about 30 %. Reopen, tap **Retry** once. Wait for it to finish.
+14. **Offline upload**: Airplane mode on, record 5 s, Post. Let it fail. Airplane mode off, Retry.
+
+### Export
+
+15. **Export log** → AirDrop into `spike/logs/`. Tell Claude the file name, and the answers to steps 5 and 7.

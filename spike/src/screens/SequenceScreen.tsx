@@ -6,6 +6,7 @@ import { log } from '../log';
 import { hlsUrl } from '../mux';
 import type { Run } from '../types';
 import { Button, Row, s } from '../ui';
+import { applyBufferOptions } from '../settings';
 import { StatsPill } from './PlayerScreen';
 
 /** Response Player: several clips, each plays once, auto-advance, swipe replaced by Next/Prev buttons. */
@@ -13,7 +14,7 @@ export function SequenceScreen({ runs, onBack }: { runs: Run[]; onBack: () => vo
   useKeepAwake();
   const [index, setIndex] = useState(0);
   const current = runs[index];
-  const player = useVideoPlayer(null, (p) => { p.loop = false; p.muted = false; p.timeUpdateEventInterval = 0.25; });
+  const player = useVideoPlayer(null, (p) => { applyBufferOptions(p); p.loop = false; p.muted = false; p.timeUpdateEventInterval = 0.25; });
   const startedAt = useRef(Date.now());
 
   useEffect(() => {

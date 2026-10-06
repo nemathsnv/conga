@@ -2,6 +2,7 @@
 import type { VideoPlayer } from 'expo-video';
 import { networkInfo } from './env';
 import { log } from './log';
+import { settings } from './settings';
 
 export interface PlaybackStats {
   firstFrameMs: number | null;
@@ -22,7 +23,7 @@ export function attachPlaybackMetrics(player: VideoPlayer, runId: string | undef
   let firstFrameSeen = false;
   const emit = () => onStats({ ...stats });
 
-  networkInfo().then((network) => log('playback_start', { label, source: 'hls' }, runId, network));
+  networkInfo().then((network) => log('playback_start', { label, source: 'hls', fastStart: settings.fastStart, bufferOptions: player.bufferOptions }, runId, network));
 
   const subs = [
     player.addListener('statusChange', ({ status, oldStatus, error }) => {
@@ -38,7 +39,9 @@ export function attachPlaybackMetrics(player: VideoPlayer, runId: string | undef
       } else if (status === 'loading' && readyOnce && firstFrameSeen && oldStatus === 'readyToPlay') {
         stats.stalls += 1;
         stallStartedAt = Date.now();
-        log('playback_stall', { label, atTime: player.currentTime, bufferedPosition: player.bufferedPosition }, runId);
+        const t = player.currentTime;
+        const atLoopBoundary = t < 0.1 || (player.duration > 0 && player.duration - t < 0.3);
+        log('playback_stall', { label, atTime: t, duration: player.duration, bufferedPosition: player.bufferedPosition, atLoopBoundary }, runId);
       } else if (status === 'error') {
         stats.errors += 1;
         log('playback_error', { label, error: error?.message ?? String(error) }, runId);

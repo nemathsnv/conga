@@ -9,10 +9,22 @@ import type { Run } from './types';
 export interface UploadProgress { bytesSent: number; totalBytes: number; attempt: number; phase: 'minting' | 'uploading' | 'processing' | 'done' | 'failed'; polls?: number; message?: string }
 
 const MAX_AUTO_RETRIES = 3;
+const active = new Set<string>();
+export const isUploading = (runId: string) => active.has(runId);
 
 export async function uploadRun(run: Run, onProgress: (p: UploadProgress) => void, signal?: { cancelled: boolean }): Promise<Run> {
   if (!run.fileUri) throw new Error('recording file is gone');
-  const file = new File(run.fileUri);
+  if (active.has(run.runId)) throw new Error('this recording is already uploading in the background');
+  active.add(run.runId);
+  try {
+    return await uploadRunInner(run, onProgress, signal);
+  } finally {
+    active.delete(run.runId);
+  }
+}
+
+async function uploadRunInner(run: Run, onProgress: (p: UploadProgress) => void, signal?: { cancelled: boolean }): Promise<Run> {
+  const file = new File(run.fileUri!);
   if (!file.exists) throw new Error('recording file missing on disk');
   const totalBytes = file.size ?? 0;
   const firstAttempt = run.uploadAttempts + 1;

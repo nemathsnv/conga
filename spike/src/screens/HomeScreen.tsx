@@ -6,10 +6,13 @@ import { deviceInfo, networkInfo } from '../env';
 import { clearLog, exportLog, loadRuns, log, readLogText, saveRuns } from '../log';
 import type { NetworkInfo, Run } from '../types';
 import { Button, Mono, Row, s } from '../ui';
+import { BITRATES, bitrateLabel, settings } from '../settings';
+import { isUploading } from '../upload';
 
 export function HomeScreen({ onRecord, onRetry, onPlay, onSequence }: { onRecord: () => void; onRetry: (run: Run) => void; onPlay: (run: Run) => void; onSequence: (runs: Run[]) => void }) {
   const [runs, setRuns] = useState<Run[]>([]);
   const [net, setNet] = useState<NetworkInfo | null>(null);
+  const [, bump] = useState(0);
   const cfgError = assertConfig();
   const refresh = () => setRuns(loadRuns());
 
@@ -36,7 +39,11 @@ export function HomeScreen({ onRecord, onRetry, onPlay, onSequence }: { onRecord
         <Button small title="Log size" onPress={() => Alert.alert('Log', `${readLogText().split('\n').filter(Boolean).length} lines`)} />
         <Button small danger title="Clear all" onPress={() => Alert.alert('Clear log and runs?', 'Local recordings are deleted too.', [{ text: 'Cancel' }, { text: 'Clear', style: 'destructive', onPress: () => { runs.forEach((r) => { try { if (r.fileUri) new File(r.fileUri).delete(); } catch {} }); saveRuns([]); clearLog(); refresh(); } }])} />
       </Row>
-      <Button small title="Refresh" onPress={refresh} />
+      <Row>
+        <Button small title={`Encoder: ${bitrateLabel(settings.videoBitrate)}`} onPress={() => { settings.videoBitrate = BITRATES[(BITRATES.indexOf(settings.videoBitrate) + 1) % BITRATES.length]; bump((n) => n + 1); }} />
+        <Button small title={`Fast start: ${settings.fastStart ? 'on' : 'off'}`} onPress={() => { settings.fastStart = !settings.fastStart; bump((n) => n + 1); }} />
+        <Button small title="Refresh" onPress={refresh} />
+      </Row>
 
       {pending.length ? <Text style={[s.text, { color: '#fc6', marginTop: 8 }]}>Your response didn't post. It's saved on this phone. Check your connection.</Text> : null}
       {pending.map((r) => (
@@ -45,7 +52,7 @@ export function HomeScreen({ onRecord, onRetry, onPlay, onSequence }: { onRecord
           <Mono>{r.runId} · {r.fileBytes ? (r.fileBytes / 1e6).toFixed(2) : '?'} MB · {r.fileUri && new File(r.fileUri).exists ? 'file on disk' : 'FILE MISSING'}</Mono>
           {r.uploadError ? <Mono>{r.uploadError}</Mono> : null}
           <Row>
-            <Button small title="Retry" onPress={() => onRetry(r)} disabled={!r.fileUri} />
+            <Button small title={isUploading(r.runId) ? 'Uploading…' : 'Retry'} onPress={() => onRetry(r)} disabled={!r.fileUri || isUploading(r.runId)} />
             <Button small danger title="Delete" onPress={() => { try { if (r.fileUri) new File(r.fileUri).delete(); } catch {} saveRuns(runs.filter((x) => x.runId !== r.runId)); log('discarded', { from: 'home' }, r.runId); refresh(); }} />
           </Row>
         </View>

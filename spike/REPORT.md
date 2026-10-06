@@ -1,6 +1,6 @@
 # Phase 1 video spike: report
 
-**Status: in progress.** iPhone runs pending. Android real-device validation pending (no Android phone available on 6 Oct 2026).
+**Status: in progress.** iPhone round 1 done (7 runs, front camera only). Round 2 pending: back camera, light, zoom, encoder bitrate, fast-start playback, failure cases. Android real-device validation pending (no Android phone available on 6 Oct 2026).
 
 **Question:** can `expo-camera` + Mux direct upload + Mux HLS playback satisfy Shortcut's recording, upload and playback requirements (SPEC.md Sections 2, 6, 19) on a real iPhone and a mid-range Android over normal mobile data?
 
@@ -26,11 +26,35 @@ Not built, by the escalation rules: `react-native-vision-camera`, Cloudflare Str
 
 ## Measurements
 
-_Pending: fill from `logs/*.jsonl` with `npm run summarize -- logs/<file>.jsonl`._
+Built from `logs/*.jsonl` with `npm run summarize -- logs/<file>.jsonl`. First frame is measured from player creation to the first `timeUpdate` with a non-zero position, so it includes manifest, playlist, init segment and first media segment fetches plus decoder start. Stalls under 250 ms at the loop boundary are AVPlayer status flickers, not visible rebuffering, and are counted separately.
 
-### iPhone 17 Pro, iOS 27.0, mobile data
+### iPhone 17 Pro, iOS 27.0, mobile data (Bali, Telkomsel-class 4G/5G as reported by iOS)
 
-_Pending._
+**Round 1, 6 Oct 2026.** Front camera, 1080p, library default encoder, Wi-Fi off. Log: `logs/spike-export-2026-10-06T06-20-28-973Z.jsonl`.
+
+| # | Camera | Dur s | Res | File MB | Recorded kbps | Net | Upload s | Upload Mbps | Attempts | Mux ready s | First frame ms | Stalls ≥250 ms | Loops |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | front | 4.1 | 1080x1920 | 3.67 | 7213 | 5G | 16.0 | 1.8 | 1 | 1.6 | 5441 | 1 (19.0 s) | 1 |
+| 2 | front | 3.7 | 1080x1920 | 3.40 | 7362 | 5G | 9.5 | 2.9 | 1 | 1.6 | 2789 | 0 | 3 |
+| 3 | front | 29.9 | 1080x1920 | 29.14 | 7796 | 5G | 30.6 | 7.6 | 1 | 1.6 | 3803 | 0 | 1 |
+| 4 | front | 5.0 | 1080x1920 | 4.65 | 7482 | 5G | 9.9 | 3.7 | 1 | 1.7 | 3670 | 0 | 0 |
+| 5 | front | 3.2 | 1080x1920 | 3.03 | 7658 | 5G | 6.0 | 4.1 | 1 | 1.7 | 2809 | 0 | 0 |
+| 6 | front | 7.1 | 1080x1920 | 6.88 | 7753 | 4G | 26.5 | 2.1 | 1 | 1.6 | 4626 | 0 | 0 |
+| 7 | front, zoom 0.1 | 6.0 | 1080x1920 | 6.02 | 8027 | 4G→5G | 13.8 | 3.5 | 3 (see note) | 1.7 | 3482, 3642 | 0 | 2 |
+
+Medians: upload 13.8 s, upload throughput 3.7 Mbps, Mux upload-finished to playable 1.6 s, first frame 3.7 s. Upload failures: 0. Loop-boundary flickers: 6, none visible.
+
+**What round 1 says**
+
+- **Recording.** expo-camera records true vertical 1080x1920 at 30 fps, H.264, sound on. The 30 s ceiling (`maxDuration`) stops the recording itself at 29.9 s. The under-2 s floor worked: a 1.1 s clip was discarded with the message. The front lens list was reported (Front, TrueDepth, Ultra Wide). The back camera could not be tested in round 1 because of a spike bug: the Record button waited for a ready callback that expo-camera only fires on first mount. Fixed for round 2; the back lens list was logged, so the camera itself switched.
+- **Encoder bitrate is the real upload problem.** The library default is about 7.5 Mbps at 1080p, so a full 30 s response is 29 MB. On this phone's 5G that took 30.6 s; on the 4G run the throughput was 2.1 Mbps, which puts a 30 s clip at about 2 minutes. Mux re-encodes everything anyway, and its own top rendition for these clips was 2.9 to 3.5 Mbps, so uploading 7.5 Mbps is wasted bytes. Round 2 tests `videoBitrate` at 4 and 2 Mbps and 720p.
+- **Upload path goes to the USA.** Every direct-upload URL pointed at `direct-uploads-oci-us-phoenix-1` or `us-ashburn-1`. Mux does not offer a regional upload endpoint. Throughput of 1.8 to 7.6 Mbps from Bali is consistent with a single TCP connection over about 200 ms of latency. The first mint call took 7.7 s (Edge Function cold start plus Mux API); later mints took 1.3 to 1.9 s.
+- **Mux processing is not a problem.** Upload-finished to playable was 1.6 to 1.7 s on every run with the free `basic` quality level.
+- **Playback starts slowly.** First frame was 2.8 to 5.4 s on both 4G and 5G, and an immediate replay of run 7 (segments already at the CDN edge) was no faster (3.5 then 3.6 s). The player also always started on the lowest rendition (270x480) and stepped up. That points at AVPlayer's default start-up behaviour (`waitsToMinimizeStalling`) rather than the network. Round 2 compares the default against a fast-start buffer setting. Either way the product will preload the next clip, which this spike does not do.
+- **One real stall.** Run 1 stalled for 19 s at its first loop boundary, right after the player switched up to the 1080p rendition. That was the first ever playback of a just-ready asset; the higher renditions may not have been fully available yet. No other run stalled.
+- **Manifests are served from Fastly** (`manifest-oci-us-*.fastly.mux.com`), so repeat views by other people hit the CDN edge.
+- **Run 7 note.** Three upload attempts appear for one file with no failure between them. The run was killed mid-upload (checklist step 15), reopened, and Retry was tapped while a previous attempt was still running in the background, so two uploads of the same file ran at once and both succeeded. That is a spike UI gap, now guarded, not a Mux or network failure.
+- **Not yet exercised in round 1:** the airplane-mode failure path, Re-record from preview, light on either camera, 720p.
 
 ### Mid-range Android, Bali 4G
 

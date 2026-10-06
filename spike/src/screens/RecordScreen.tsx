@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { MAX_DURATION_S, MIN_DURATION_S } from '../config';
 import { log, newRunId, recordingsDir } from '../log';
+import { bitrateLabel, settings } from '../settings';
 import type { Facing, Run } from '../types';
 import { Button, Row, s } from '../ui';
 
@@ -33,6 +34,12 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
 
   useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
 
+  useEffect(() => {
+    if (ready) return;
+    const t = setTimeout(() => { log('note', { kind: 'camera_ready_timeout', facing }); setReady(true); }, 3000);
+    return () => clearTimeout(t);
+  }, [ready, facing]);
+
   async function start() {
     if (!cam.current || !ready) return;
     setMsg(null);
@@ -45,7 +52,7 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
     const runId = newRunId();
     try {
       // maxDuration enforces the 30 s ceiling natively; the 2 s floor is enforced below.
-      const result = await cam.current.recordAsync({ maxDuration: MAX_DURATION_S });
+      const result = await cam.current.recordAsync({ maxDuration: MAX_DURATION_S, ...(settings.videoBitrate ? { codec: 'avc1' as const } : {}) });
       const stoppedAt = Date.now();
       if (timer.current) clearInterval(timer.current);
       setRecording(false);
@@ -64,7 +71,7 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
       src.moveSync(dest);
       const run: Run = {
         runId,
-        label: `${facing} ${quality} z${zoom}${torch ? ' torch' : ''}`,
+        label: `${facing} ${quality} ${bitrateLabel(settings.videoBitrate)} z${zoom}${torch ? ' torch' : ''}`,
         createdAt: startedAt.current,
         fileUri: dest.uri,
         fileBytes: bytes,
@@ -74,7 +81,7 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
         assetId: null, playbackId: null, assetReadyAt: null, processingMs: null, muxMaxResolution: null, muxResolutionTier: null,
         status: 'recorded',
       };
-      log('recorded', { wallMs, bytes, facing, torch, zoom, quality, codec: run.recording.codec, lenses, uri: dest.uri }, runId);
+      log('recorded', { wallMs, bytes, facing, torch, zoom, quality, requestedBitrate: settings.videoBitrate, codec: run.recording.codec, lenses, uri: dest.uri }, runId);
       onRecorded(run);
     } catch (e) {
       if (timer.current) clearInterval(timer.current);
@@ -107,21 +114,22 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
         facing={facing}
         mode="video"
         videoQuality={QUALITIES[qualityIdx]}
+        videoBitrate={settings.videoBitrate || undefined}
         zoom={ZOOMS[zoomIdx]}
         enableTorch={torch}
         mute={false}
         onCameraReady={() => setReady(true)}
-        onAvailableLensesChanged={({ lenses: l }) => { setLenses(l); log('camera_capability', { facing, lenses: l }); }}
+        onAvailableLensesChanged={({ lenses: l }) => { setLenses(l); setReady(true); log('camera_capability', { facing, lenses: l }); }}
         onMountError={(e) => setMsg(`Mount error: ${e.message}`)}
       />
       <View style={s.overlayTop}>
-        <Text style={s.pill}>{facing} · {QUALITIES[qualityIdx]} · zoom {ZOOMS[zoomIdx]} · torch {torch ? 'on' : 'off'} · lenses: {lenses.join(', ') || '?'}</Text>
+        <Text style={s.pill}>{facing} · {QUALITIES[qualityIdx]} · {bitrateLabel(settings.videoBitrate)} · zoom {ZOOMS[zoomIdx]} · torch {torch ? 'on' : 'off'} · lenses: {lenses.join(', ') || '?'}</Text>
         <Text style={[s.pill, { color: recording ? '#f55' : '#fff', fontSize: 20, fontWeight: '700' }]}>{recording ? `● ${elapsed.toFixed(1)}s / ${MAX_DURATION_S}s` : `Responding · ${MIN_DURATION_S}–${MAX_DURATION_S} seconds`}</Text>
         {msg ? <Text style={[s.pill, { color: '#fc6' }]}>{msg}</Text> : null}
       </View>
       <View style={s.overlayBottom}>
         <Row>
-          <Button small title="Flip" disabled={recording} onPress={() => { setReady(false); setFacing((f) => (f === 'front' ? 'back' : 'front')); }} />
+          <Button small title="Flip" disabled={recording} onPress={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))} />
           <Button small title={`Light ${torch ? 'off' : 'on'}`} onPress={() => setTorch((t) => !t)} />
           <Button small title={`Zoom ${ZOOMS[(zoomIdx + 1) % ZOOMS.length]}`} onPress={() => setZoomIdx((i) => (i + 1) % ZOOMS.length)} />
           <Button small title={QUALITIES[(qualityIdx + 1) % QUALITIES.length]} disabled={recording} onPress={() => setQualityIdx((i) => (i + 1) % QUALITIES.length)} />
