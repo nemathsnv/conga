@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { getOnboardingState } from './api';
+import { loadPendingInvite, savePendingInvite, type PendingInvite } from './pendingInvite';
 import { type OnboardingState, type OnboardingStep, resolveStep } from './onboarding';
 import { supabase } from './supabase';
 
@@ -15,6 +16,9 @@ type SessionContextValue = {
   step: OnboardingStep;
   photoStepPending: boolean;
   setPhotoStepPending: (pending: boolean) => void;
+  /** An invite link opened before sign-in (W-Link); cleared once redeemed. */
+  pendingInvite: PendingInvite | null;
+  setPendingInvite: (value: PendingInvite | null) => void;
   refresh: () => Promise<OnboardingState | null>;
   signOut: () => Promise<void>;
 };
@@ -27,7 +31,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [stateLoadedFor, setStateLoadedFor] = useState<string | null>(null);
   const [photoStepPending, setPhotoStepPending] = useState(false);
+  const [pendingInvite, setPendingInviteState] = useState<PendingInvite | null>(null);
   const latestUser = useRef<string | null>(null);
+
+  useEffect(() => {
+    void loadPendingInvite().then((value) => {
+      if (value) setPendingInviteState((current) => current ?? value);
+    });
+  }, []);
+
+  const setPendingInvite = useCallback((value: PendingInvite | null) => {
+    setPendingInviteState(value);
+    void savePendingInvite(value);
+  }, []);
 
   const load = useCallback(async (userId: string) => {
     try {
@@ -90,8 +106,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const step = resolveStep(signedIn, state, photoStepPending);
 
   const value = useMemo<SessionContextValue>(
-    () => ({ ready, session, state, step, photoStepPending, setPhotoStepPending, refresh, signOut }),
-    [ready, session, state, step, photoStepPending, refresh, signOut],
+    () => ({ ready, session, state, step, photoStepPending, setPhotoStepPending, pendingInvite, setPendingInvite, refresh, signOut }),
+    [ready, session, state, step, photoStepPending, pendingInvite, setPendingInvite, refresh, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

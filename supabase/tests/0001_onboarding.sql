@@ -1,6 +1,6 @@
 -- pgTAP tests for the phase 2 schema: RLS and the onboarding functions.
 begin;
-select plan(46);
+select plan(50);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: three auth users (the trigger creates their accounts).
@@ -29,6 +29,16 @@ update public.invites set expires_at = now() - interval '1 hour' where code = 'O
 select is(public.signin_providers_for_email('Putu@Example.com'), array['apple'], 'signin_providers_for_email finds the Apple identity case-insensitively');
 select is(public.signin_providers_for_email('nobody@example.com'), '{}'::text[], 'signin_providers_for_email returns an empty array for unknown emails');
 
+-- One sign-in method per account: a second provider on the same account is refused.
+select throws_ok(
+  $$ insert into auth.identities (id, user_id, provider_id, provider, identity_data, created_at, updated_at, last_sign_in_at)
+     values (gen_random_uuid(), '22222222-2222-2222-2222-222222222222', 'google-putu', 'google', '{"sub":"google-putu","email":"putu@example.com"}', now(), now(), now()) $$,
+  'P0001', 'signin_method_conflict:apple', 'a second sign-in method is refused server-side');
+select lives_ok(
+  $$ insert into auth.identities (id, user_id, provider_id, provider, identity_data, created_at, updated_at, last_sign_in_at)
+     values (gen_random_uuid(), '33333333-3333-3333-3333-333333333333', '33333333-3333-3333-3333-333333333333', 'email', '{"sub":"33333333-3333-3333-3333-333333333333","email":"maya@example.com"}', now(), now(), now()) $$,
+  'the first identity of an account is accepted');
+
 -- ---------------------------------------------------------------------------
 -- Anonymous: nothing is readable or callable.
 -- ---------------------------------------------------------------------------
@@ -40,6 +50,8 @@ select is((select count(*)::int from public.app_config), 0, 'anon reads no confi
 select throws_ok($$ select public.get_onboarding_state() $$, '42501', null, 'anon cannot call get_onboarding_state');
 select throws_ok($$ select public.team_create_invite('X-1') $$, '42501', null, 'anon cannot create invites');
 select throws_ok($$ select public.signin_providers_for_email('a@b.co') $$, '42501', null, 'anon cannot look up sign-in providers');
+select is(public.invite_preview('PUTU-7K2'), '{"status":"valid","inviter_name":"Putu Ayu","inviter_photo_path":null,"cohort_name":"Canggu"}'::jsonb, 'anon can preview a valid invite link (W-Link)');
+select is(public.invite_preview('NOPE-000'), '{"status":"not_found"}'::jsonb, 'an unknown link previews as not_found');
 reset role;
 
 -- ---------------------------------------------------------------------------

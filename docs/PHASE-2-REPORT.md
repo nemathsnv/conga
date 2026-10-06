@@ -53,7 +53,9 @@ Edge Function `auth-signin-method`: tells the app which method an email already 
 | `O-Photo` | `(onboarding)/photo` |
 | Tab bar from `Main` and `R-Discover` | `(tabs)/_layout` + `src/ui/TabBar.tsx` |
 
-Not built: `W-Link` (invite links need the universal-link domain, SPEC.md Section 22 "Links"), `S-Invites` (Settings, later phase). The data model supports both (an invite is a code with an inviter and a cohort).
+| `W-Link` | `i/[code]` route (`shortcut://i/<code>`) + Welcome card; the code is kept and redeemed automatically at the invite step |
+
+Not built: `S-Invites` (Settings, later phase). The universal-link domain (`shortcut.app/i/<code>`, SPEC.md Section 22 "Links") is still to be wired; the route is the same.
 
 ## 5. Tests and builds
 
@@ -91,16 +93,15 @@ Everything. No Android device was available and no emulator is installed. The An
 
 None of these change the spec; each needs Nemat's yes or no.
 
-1. **W-Invalid copy for not-found and expired codes.** The board only draws the "already used" line. Implemented, following its pattern: expired → "This invite has expired. Ask {first name} for another one, or join the waitlist."; not found → "That code didn't match an invite. Check it, or join the waitlist."; team codes with no inviter → "Ask for another one". `src/lib/inviteCopy.ts`.
-2. **E-Linked for Google.** The board shows the Apple variant; the Google variant substitutes the provider name in the same sentence and button.
-3. **Reverse of E-Linked.** If someone with an email-code account later taps Continue with Apple or Google using the same address, Supabase links the new identity to the existing account automatically. The spec says one method per account, but no screen exists for this direction, so it is left as Supabase's default. Decide: allow (current), or block with a new state.
-4. **Welcome collage and the faces on O-Invite / W-Waitlist** use the boards' placeholder photos, bundled in `app/assets/placeholders/`. Decide what the production source is.
-5. **W-Waitlist "Done"** goes to Welcome with the session kept (the board links to O-Welcome); the next launch lands on W-Waitlist again. "Sign out" on the same screen signs out.
-6. **Back on A-Age and O-Invite** signs out and returns to Welcome, since the boards link back to O-Welcome and a signed-in Welcome has no meaning.
-7. **Photo step on relaunch.** If the app is killed on O-Photo, the next launch goes to Home; the photo can be added in Edit profile (phase 3). The server does not track "photo step seen".
-8. **Resend countdown** is 60 s, Supabase's minimum interval between emails to one address. The board's "0:24" is a moment in that countdown.
-9. **Splash screen** is plain black (no board exists). App icon is the Expo template icon until phase 7.
-10. **Session storage** uses AsyncStorage (Supabase's documented React Native default), not the keychain.
+1. **W-Invalid copy.** One approved line for every failed code (not found, expired, used), as the canvas note says ("same inline error"). When no inviter name is known (a team code, or a code that does not exist) the "Ask {name} for another one" clause has no name to fill, so the line is "This invite has already been used. Join the waitlist." That shortened line is not on a board.
+2. **E-Linked is symmetric.** The server refuses a second sign-in method on any account (trigger on `auth.identities`, migration `…000400`), so Supabase cannot auto-link. Whichever button is tapped, the app shows E-Linked naming the method that already exists: "signs in with Apple / Google / email" and "Continue with Apple / Google / email". The Google and email variants substitute the method name in the approved sentence and button.
+3. **Welcome collage and the faces on O-Invite / W-Waitlist** are the boards' placeholder photos, now in `app/assets/dev-placeholders/` with a README and a single `src/ui/devPlaceholders.ts` module marked development-only. They must not ship; the production source is still Nemat's decision.
+4. **W-Waitlist "Done"** goes to Welcome with the session kept (the board links to O-Welcome); the next launch lands on W-Waitlist again. "Sign out" on the same screen signs out.
+5. **Back on A-Age and O-Invite** signs out and returns to Welcome, since the boards link back to O-Welcome and a signed-in Welcome has no meaning.
+6. **Photo step on relaunch.** If the app is killed on O-Photo, the next launch goes to Home; the photo can be added in Edit profile (phase 3). The server does not track "photo step seen".
+7. **Resend countdown** is 60 s, Supabase's minimum interval between emails to one address. The board's "0:24" is a moment in that countdown.
+8. **Splash screen** is plain black (no board exists). App icon is the Expo template icon until phase 7.
+9. **Session storage** uses AsyncStorage (Supabase's documented React Native default), not the keychain.
 
 ## 10. Remaining blockers for Gate 2
 
@@ -124,6 +125,10 @@ Branch `phase-2-foundations`. Commits:
 
 See `git log --oneline bcc9055..HEAD` on branch `phase-2-foundations`; the final SHA is in the session summary.
 
-## 12. Gate 2 readiness
+## 12. Cleanup after review (6 Oct, later)
+
+- W-Invalid reduced to the approved line; E-Linked made symmetric with a server-side guard against a second sign-in method (pgTAP 50/50); W-Link implemented on the `shortcut://` scheme and seen on the simulator (card on Welcome); placeholder images moved to a development-only folder; the three Expo template files removed. The link's automatic redemption after sign-in is covered by the same server function as the code step but was not walked through on the simulator (its text entry became unreliable); it is pending the device run.
+
+## 13. Gate 2 readiness
 
 Not ready to mark passed. The iOS sign-up flow works end to end against a local backend (simulator) and the app builds for the device; the hosted backend needs the four commands above and the Apple/Google credentials before Nemat can sign up with Apple or Google, and Android has not been run on a device.

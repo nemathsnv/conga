@@ -6,23 +6,20 @@ import { useState } from 'react';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SignInCancelled, SignInNotConfigured, signInWithApple, signInWithGoogle } from '@/lib/auth';
+import { SignInCancelled, SignInMethodConflict, SignInNotConfigured, signInWithApple, signInWithGoogle } from '@/lib/auth';
+import { avatarUrl } from '@/lib/api';
 import { useSession } from '@/lib/session';
-import { Button, Glass } from '@/ui/components';
+import { Avatar, Button, Glass } from '@/ui/components';
 import { PromptBubbleIcon } from '@/ui/Icons';
+import { DEV_WELCOME_COLLAGE } from '@/ui/devPlaceholders';
 import { colors, fontFamily, type } from '@/ui/theme';
 
-// The board's collage. People and photos in the boards are placeholders (design/BOARDS.md).
-const COLUMNS: { offset: number; images: number[] }[] = [
-  { offset: 0, images: [require('../../../assets/placeholders/maya_t1.jpg'), require('../../../assets/placeholders/putu_t.jpg'), require('../../../assets/placeholders/theo_t.jpg')] },
-  { offset: 64, images: [require('../../../assets/placeholders/adam_t.jpg'), require('../../../assets/placeholders/hatwoman_t.jpg'), require('../../../assets/placeholders/maya_t2.jpg')] },
-  { offset: 22, images: [require('../../../assets/placeholders/sofia_t.jpg'), require('../../../assets/placeholders/wayan_t.jpg'), require('../../../assets/placeholders/maya_t3.jpg')] },
-];
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useSession();
+  const { session, pendingInvite } = useSession();
+  const invite = pendingInvite?.preview.status === 'valid' ? pendingInvite.preview : null;
   const [busy, setBusy] = useState<'apple' | 'google' | null>(null);
 
   const run = async (method: 'apple' | 'google') => {
@@ -35,6 +32,10 @@ export default function WelcomeScreen() {
       router.replace('/(onboarding)');
     } catch (e) {
       if (e instanceof SignInCancelled) return;
+      if (e instanceof SignInMethodConflict) {
+        router.push({ pathname: '/(onboarding)/linked', params: { provider: e.existingProvider, email: e.email ?? '' } });
+        return;
+      }
       if (e instanceof SignInNotConfigured) {
         console.error(`${method} sign-in is not configured for this build`);
         return;
@@ -56,7 +57,7 @@ export default function WelcomeScreen() {
     <View style={s.root}>
       <StatusBar style="light" />
       <View style={s.collage} pointerEvents="none">
-        {COLUMNS.map((col, i) => (
+        {DEV_WELCOME_COLLAGE.map((col, i) => (
           <View key={i} style={[s.column, { marginTop: col.offset }]}>
             {col.images.map((src, j) => (
               <Image key={j} source={src} style={s.thumb} />
@@ -71,7 +72,21 @@ export default function WelcomeScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <Glass style={s.promptCard}>
+      {invite ? (
+        // Board W-Link: the inviter's card and the cohort line in place of the prompt card.
+        <Glass style={s.inviteCard} radius={18}>
+          <View style={s.inviteRow}>
+            <Avatar uri={avatarUrl(invite.inviter_photo_path)} size={46} borderWidth={1.5} borderColor="rgba(255,255,255,0.6)" />
+            <View style={{ flexShrink: 1 }}>
+              <Text style={s.inviteTitle}>{invite.inviter_name ?? 'The Shortcut team'} invited you</Text>
+              <Text style={s.inviteSub}>
+                You&apos;ll start with prompts from {invite.cohort_name ?? 'your place'} as well as global ones. Change it anytime.
+              </Text>
+            </View>
+          </View>
+        </Glass>
+      ) : (
+        <Glass style={s.promptCard}>
         <View style={s.promptRow}>
           <View style={{ marginTop: 2 }}>
             <PromptBubbleIcon />
@@ -81,7 +96,8 @@ export default function WelcomeScreen() {
             <Text style={s.promptCount}>19 responses</Text>
           </View>
         </View>
-      </Glass>
+        </Glass>
+      )}
 
       <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View style={s.textBlock}>
@@ -105,6 +121,10 @@ const s = StyleSheet.create({
   column: { width: 124, gap: 6 },
   thumb: { width: 124, height: 166, borderRadius: 12 },
   promptCard: { position: 'absolute', left: 22, top: 236, maxWidth: 250, paddingTop: 9, paddingBottom: 10, paddingLeft: 12, paddingRight: 14 },
+  inviteCard: { position: 'absolute', left: 20, right: 20, top: 300, padding: 14 },
+  inviteRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  inviteTitle: { ...type.button16, color: colors.white, fontFamily, letterSpacing: 0 },
+  inviteSub: { ...type.caption13, color: colors.white78, marginTop: 2, fontFamily },
   promptRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   promptText: { ...type.semi14, lineHeight: 18, color: colors.white, fontFamily },
   promptCount: { ...type.caption12, lineHeight: 15, marginTop: 2, color: colors.white72, fontFamily },

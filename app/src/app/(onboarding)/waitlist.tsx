@@ -6,9 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/lib/session';
 import { Button, Header, IconCircle, Lead, Title } from '@/ui/components';
 import { CheckIcon } from '@/ui/Icons';
+import { DEV_WAITLIST_FACES } from '@/ui/devPlaceholders';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
-
-const FACES = [require('../../../assets/placeholders/putu_a.jpg'), require('../../../assets/placeholders/sofia_a.jpg')];
 
 export default function WaitlistScreen() {
   const router = useRouter();
@@ -35,7 +34,7 @@ export default function WaitlistScreen() {
 
       <View style={s.card}>
         <View style={s.cardFaces}>
-          {FACES.map((src, i) => (
+          {DEV_WAITLIST_FACES.map((src, i) => (
             <Image key={i} source={src} style={[s.cardFace, i > 0 && { marginLeft: -10 }]} />
           ))}
         </View>

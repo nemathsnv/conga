@@ -10,25 +10,20 @@ import { useSession } from '@/lib/session';
 import { useAdvance } from '@/lib/useStepNavigation';
 import { inviteCodeComplete, normaliseInviteCode } from '@/lib/validation';
 import { Avatar, Button, Header, Lead, Pill, Title } from '@/ui/components';
+import { DEV_INVITE_FACES } from '@/ui/devPlaceholders';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
 
-// The board's row of faces. People and photos in the boards are placeholders.
-const FACES = [
-  require('../../../assets/placeholders/putu_a.jpg'),
-  require('../../../assets/placeholders/maya_a.jpg'),
-  require('../../../assets/placeholders/wayan_a.jpg'),
-  require('../../../assets/placeholders/sofia_a.jpg'),
-];
 
 export default function InviteScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { state, signOut } = useSession();
+  const { state, signOut, pendingInvite, setPendingInvite } = useSession();
   const advance = useAdvance();
   const [code, setCode] = useState('');
   const [check, setCheck] = useState<InviteCheck | null>(null);
   const [busy, setBusy] = useState(false);
   const latest = useRef('');
+  const autoRedeemed = useRef(false);
 
   // Live check once the code has the full shape (O-Invite shows "Invited by Putu Ayu").
   const onCodeChange = (value: string) => {
@@ -51,6 +46,23 @@ export default function InviteScreen() {
     return () => clearTimeout(t);
   }, [code]);
 
+  // An invite link skips the code step: redeem its code as soon as this step is reached.
+  useEffect(() => {
+    if (!pendingInvite || autoRedeemed.current) return;
+    autoRedeemed.current = true;
+    const linkCode = pendingInvite.code;
+    setCode(linkCode);
+    setBusy(true);
+    void redeemInvite(linkCode)
+      .then(async (result) => {
+        setPendingInvite(null);
+        if (result.status === 'valid' || result.status === 'already_in') await advance();
+        else setCheck(result);
+      })
+      .catch((e) => console.error('redeem_invite (link) failed', e))
+      .finally(() => setBusy(false));
+  }, [pendingInvite, setPendingInvite, advance]);
+
   const valid = check?.status === 'valid';
   const error = check && !valid ? inviteErrorCopy(check.status, check.inviter_first_name) : null;
 
@@ -60,6 +72,7 @@ export default function InviteScreen() {
     try {
       const result = await redeemInvite(code);
       if (result.status === 'valid' || result.status === 'already_in') {
+        setPendingInvite(null);
         await advance();
       } else {
         setCheck(result);
@@ -96,7 +109,7 @@ export default function InviteScreen() {
       <Header onBack={() => void leave()} />
       <View style={s.body}>
         <View style={s.faces}>
-          {FACES.map((src, i) => (
+          {DEV_INVITE_FACES.map((src, i) => (
             <Image key={i} source={src} style={[s.face, i > 0 && { marginLeft: -10 }]} />
           ))}
         </View>

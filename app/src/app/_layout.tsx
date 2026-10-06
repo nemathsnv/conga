@@ -32,6 +32,7 @@ function RootNavigator() {
     <>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        <Stack.Screen name="i/[code]" options={{ animation: 'none' }} />
         <Stack.Protected guard={inApp}>
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         </Stack.Protected>

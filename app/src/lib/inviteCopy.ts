@@ -1,20 +1,16 @@
 import type { InviteStatus } from './api';
 
 /**
- * Inline message under the code field (W-Invalid). The board only draws the
- * "already used" case; the not-found and expired lines follow its pattern and
- * are flagged for approval in the phase 2 report.
+ * Inline message under the code field (W-Invalid). The board draws one line and the canvas
+ * note says a code that is not found, expired or already used gets the "same inline error",
+ * so the approved sentence is used for all three. When the code has no known inviter (a team
+ * code, or a code that does not exist) the "Ask … for another one" clause has no name to fill
+ * and is left out; that shortened line is not on a board and is flagged in the phase report.
  */
 export function inviteErrorCopy(status: InviteStatus, inviterFirstName: string | null | undefined): string | null {
-  const ask = inviterFirstName ? `Ask ${inviterFirstName} for another one` : 'Ask for another one';
-  switch (status) {
-    case 'used':
-      return `This invite has already been used. ${ask}, or join the waitlist.`;
-    case 'expired':
-      return `This invite has expired. ${ask}, or join the waitlist.`;
-    case 'not_found':
-      return "That code didn't match an invite. Check it, or join the waitlist.";
-    default:
-      return null;
+  if (status === 'valid' || status === 'already_in') return null;
+  if (inviterFirstName) {
+    return `This invite has already been used. Ask ${inviterFirstName} for another one, or join the waitlist.`;
   }
+  return 'This invite has already been used. Join the waitlist.';
 }

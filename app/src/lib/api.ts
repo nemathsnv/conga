@@ -43,6 +43,18 @@ export async function checkInvite(code: string): Promise<InviteCheck> {
   return unwrap(await supabase.rpc('check_invite', { p_code: code })) as InviteCheck;
 }
 
+export type InvitePreview = {
+  status: InviteStatus;
+  inviter_name?: string | null;
+  inviter_photo_path?: string | null;
+  cohort_name?: string | null;
+};
+
+/** What an invite link shows before sign-in (W-Link). Works without a session. */
+export async function invitePreview(code: string): Promise<InvitePreview> {
+  return unwrap(await supabase.rpc('invite_preview', { p_code: code })) as InvitePreview;
+}
+
 export async function redeemInvite(code: string): Promise<InviteCheck> {
   return unwrap(await supabase.rpc('redeem_invite', { p_code: code })) as InviteCheck;
 }
