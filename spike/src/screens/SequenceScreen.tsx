@@ -6,7 +6,7 @@ import { log } from '../log';
 import { hlsUrl } from '../mux';
 import type { Run } from '../types';
 import { Button, Row, s } from '../ui';
-import { applyBufferOptions } from '../settings';
+import { applyBufferOptions, startPlayback } from '../settings';
 import { StatsPill } from './PlayerScreen';
 
 /** Response Player: several clips, each plays once, auto-advance, swipe replaced by Next/Prev buttons. */
@@ -25,11 +25,12 @@ export function SequenceScreen({ runs, onBack }: { runs: Run[]; onBack: () => vo
   useEffect(() => {
     if (!current?.playbackId) return;
     let cancelled = false;
+    let cleanup = () => {};
     (async () => {
       await player.replaceAsync({ uri: hlsUrl(current.playbackId!) });
-      if (!cancelled) player.play();
+      if (!cancelled) cleanup = startPlayback(player);
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; cleanup(); };
   }, [index]);
 
   useEffect(() => {

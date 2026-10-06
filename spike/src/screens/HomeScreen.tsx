@@ -7,7 +7,7 @@ import { deviceInfo, networkInfo } from '../env';
 import { clearLog, exportLog, loadRuns, log, readLogText, saveRuns } from '../log';
 import type { NetworkInfo, Run } from '../types';
 import { Button, Mono, Row, s } from '../ui';
-import { BITRATES, bitrateLabel, settings } from '../settings';
+import { BITRATES, FAST_MODES, bitrateLabel, settings } from '../settings';
 import { isUploading } from '../upload';
 
 export function HomeScreen({ onRecord, onRetry, onPlay, onSequence }: { onRecord: () => void; onRetry: (run: Run) => void; onPlay: (run: Run) => void; onSequence: (runs: Run[]) => void }) {
@@ -42,7 +42,7 @@ export function HomeScreen({ onRecord, onRetry, onPlay, onSequence }: { onRecord
       </Row>
       <Row>
         <Button small title={`Encoder: ${bitrateLabel(settings.videoBitrate)}`} onPress={() => { settings.videoBitrate = BITRATES[(BITRATES.indexOf(settings.videoBitrate) + 1) % BITRATES.length]; bump((n) => n + 1); }} />
-        <Button small title={`Fast start: ${settings.fastStart ? 'on' : 'off'}`} onPress={() => { settings.fastStart = !settings.fastStart; bump((n) => n + 1); }} />
+        <Button small title={`Fast start: ${settings.fastStart}`} onPress={() => { settings.fastStart = FAST_MODES[(FAST_MODES.indexOf(settings.fastStart) + 1) % FAST_MODES.length]; bump((n) => n + 1); }} />
         <Button small title="Refresh" onPress={refresh} />
       </Row>
       <Button small danger title={`Free Mux slots (delete ${ready.length} ready assets on Mux, keep the log)`} disabled={!ready.length} onPress={() => Alert.alert('Delete all assets on Mux?', 'Measurements stay in the log. The clips can no longer be played.', [{ text: 'Cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { try { const r = await deleteAssets(); log('note', { kind: 'mux_assets_deleted', count: r.deleted }); saveRuns(runs.map((x) => (x.status === 'ready' ? { ...x, status: 'errored' as const, uploadError: 'deleted on Mux to free a slot' } : x))); refresh(); Alert.alert('Deleted', `${r.deleted} assets removed on Mux.`); } catch (e) { Alert.alert('Delete failed', String(e)); } } }])} />

@@ -1,6 +1,6 @@
 # Phase 1 video spike: report
 
-**Status: in progress.** iPhone round 1 done (7 runs, front camera only). Round 2 pending: back camera, light, zoom, encoder bitrate, fast-start playback, failure cases. Android real-device validation pending (no Android phone available on 6 Oct 2026).
+**Status: in progress.** iPhone rounds 1 and 2 done (15 recordings, 14 uploads). Round 3 pending: playback fast-start variants, local-preview baseline, airplane-mode failure. Android real-device validation pending (no Android phone available on 6 Oct 2026).
 
 **Question:** can `expo-camera` + Mux direct upload + Mux HLS playback satisfy Shortcut's recording, upload and playback requirements (SPEC.md Sections 2, 6, 19) on a real iPhone and a mid-range Android over normal mobile data?
 
@@ -55,6 +55,33 @@ Medians: upload 13.8 s, upload throughput 3.7 Mbps, Mux upload-finished to playa
 - **Manifests are served from Fastly** (`manifest-oci-us-*.fastly.mux.com`), so repeat views by other people hit the CDN edge.
 - **Run 7 note.** Three upload attempts appear for one file with no failure between them. The run was killed mid-upload (checklist step 15), reopened, and Retry was tapped while a previous attempt was still running in the background, so two uploads of the same file ran at once and both succeeded. That is a spike UI gap, now guarded, not a Mux or network failure.
 - **Not yet exercised in round 1:** the airplane-mode failure path, Re-record from preview, light on either camera, 720p.
+
+**Round 2, 6 Oct 2026.** Back camera, light, zoom, encoder bitrate, failure cases. Log: `logs/spike-export-2026-10-06T06-41-21-167Z.jsonl` (contains round 1 as well). Runs 8 to 15 below.
+
+| # | Camera | Encoder | Dur s | File MB | Recorded kbps | Net | Upload s | Upload Mbps | Attempts | Mux ready s | First frame ms | Stalls ≥250 ms |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | front | default | 3.4 | 3.38 | 8035 | 5G | 6.5 | 4.1 | 1 | 1.6 | 4513 | 0 |
+| 9 | back | default | 8.9 | 8.52 | 7631 | 5G | 8.0 | 8.5 | 1 | 1.6 | 4841 | 0 |
+| 10 | back | default | 20.5 | 19.84 | 7742 | 5G | 16.7 | 9.5 | 1 after 3 failures (Mux asset cap) | 1.6 | 4412 | 0 |
+| 11 | front | default | 2.7 | 2.64 | 7729 | – | re-recorded, never posted | – | – | – | – | – |
+| 12 | front | default | 1.5 | 1.52 | 7918 | 4G | 7.9 | 1.5 | 1 | 1.7 | 3007 | 0 |
+| 13 | back, zoom 0.1 | default | 29.9 | 28.53 | 7634 | 5G | 17.3 | 13.2 | 1 | 4.8 | 5187 | 0 |
+| 14 | front | 4 Mbps | 30.0 | 15.52 | 4137 | 5G | 14.2 | 8.8 | 1 | 4.8 | not played (asset cap hit) | – |
+| 15 | front | 2 Mbps | 30.0 | 8.01 | 2135 | 5G | 22.6 | 2.8 | 1 | 1.6 | 4584 | 0 |
+
+Two more clips were rejected as too short (1.1 s and 0.9 s) with the message, and one was discarded with Re-record.
+
+**What round 2 adds**
+
+- **Back camera records.** After the Flip fix the back camera recorded three clips including a full 30 s one. The file is encoded 1920x1080 with a rotation flag; Mux normalises it to a 1080x1920 portrait asset, so playback is correct.
+- **Encoder bitrate works and matters.** `videoBitrate` with the `avc1` codec is honoured: 30 s clips came out at 7.6 Mbps (default, 28.5 MB), 4.1 Mbps (15.5 MB) and 2.1 Mbps (8.0 MB). Nemat saw no visible quality loss in the 2 Mbps preview. Mux's own top rendition for these clips is about 3 Mbps, so an encoder setting around 2 to 3 Mbps cuts upload size by 3 to 4× with nothing lost after transcoding. This is the main lever for Bali 4G.
+- **Upload throughput varied from 1.5 to 13 Mbps on the same phone within 30 minutes.** The 4G runs sat at 1.5 to 2.1 Mbps. At 2 Mbps a 2 Mbps-encoded 30 s clip uploads in about 30 s; a default-encoded one takes about 2 minutes.
+- **Light.** Front: the torch toggle does nothing, as expected; the iPhone front camera has no torch. The product's front "light" has to be a screen fill, which is UI work, not a camera-library question. Back: the torch was not tested in round 2 because the asset cap interrupted the sequence; retest in round 3.
+- **Zoom.** expo-camera maps `zoom` exponentially: `videoZoomFactor = maxZoom ^ zoom` on the selected device, where zoom 0 is factor 1.0. The default back device is the wide camera, so zoom 0 is the native 1× and 0.1 and 0.25 are roughly 1.3× and 2×. Nemat described 0 as the widest view, 0.1 as "normal" and 0.25 as "about 2×", which matches. For the spec's fixed 1× the product sets `zoom={0}` and pins `selectedLens` to the wide camera, which round 3 does explicitly.
+- **Failure path worked as designed.** When Mux refused new uploads (free plan, 10-asset cap) the app made 3 automatic attempts with 2, 4 and 8 s backoff, kept the recording, showed the SPEC 19 banner, and a manual Retry later posted the same file. Re-record deleted the clip and its run. The airplane-mode case still has to be run.
+- **Playback first frame is still 3 to 5 s** on every run (median 4.4 s over 14 playbacks) regardless of network and regardless of whether the segments were already cached. A first fast-start attempt (`waitsToMinimizeStalling=false` with `play()` called immediately) produced no picture at all within 8 to 10 s on two clips; that combination is known to stall AVPlayer when play is called before the item is ready. Round 3 tests two safer variants and also measures first frame on the local preview file, which separates player start-up from network cost.
+- **Mux processing** stayed at 1.6 s for short clips and 4.8 s for the two 30 s clips.
+- **Controls during recording.** Flip and quality are disabled while recording in the spike by design. SPEC.md Section 6 lists flip as a control but does not say it must work mid-recording. Nemat to decide; it is possible with expo-camera but restarts the capture session.
 
 ### Mid-range Android, Bali 4G
 

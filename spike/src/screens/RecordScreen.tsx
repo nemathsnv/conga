@@ -81,7 +81,7 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
         assetId: null, playbackId: null, assetReadyAt: null, processingMs: null, muxMaxResolution: null, muxResolutionTier: null,
         status: 'recorded',
       };
-      log('recorded', { wallMs, bytes, facing, torch, zoom, quality, requestedBitrate: settings.videoBitrate, codec: run.recording.codec, lenses, uri: dest.uri }, runId);
+      log('recorded', { wallMs, bytes, facing, torch, zoom, quality, selectedLens: facing === 'back' ? 'Back Camera' : 'Front Camera', requestedBitrate: settings.videoBitrate, codec: run.recording.codec, lenses, uri: dest.uri }, runId);
       onRecorded(run);
     } catch (e) {
       if (timer.current) clearInterval(timer.current);
@@ -115,6 +115,7 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
         mode="video"
         videoQuality={QUALITIES[qualityIdx]}
         videoBitrate={settings.videoBitrate || undefined}
+        selectedLens={facing === 'back' ? 'Back Camera' : 'Front Camera'}
         zoom={ZOOMS[zoomIdx]}
         enableTorch={torch}
         mute={false}

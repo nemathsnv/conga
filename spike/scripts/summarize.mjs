@@ -25,8 +25,8 @@ for (const l of lines) {
     case 'upload_failed': r.uploadFailures += 1; r.lastUploadError = d.error; break;
     case 'upload_finished': r.uploadMs = d.uploadMs; r.throughputMbps = d.throughputMbps; r.attempts = d.attempt; break;
     case 'asset_ready': r.processingMs = d.processingMs; r.maxResolution = d.maxResolution; break;
-    case 'playback_start': r.lastFast = !!d.fastStart; break;
-    case 'playback_first_frame': r.playback.push({ label: d.label, firstFrameMs: d.firstFrameMs, net: l.network?.type, track: d.track, fast: r.lastFast }); break;
+    case 'playback_start': r.lastFast = d.fastStart && d.fastStart !== 'off' ? String(d.fastStart) : null; break;
+    case 'playback_first_frame': if (String(d.label).startsWith('preview')) r.localFirstFrame = d.firstFrameMs; else r.playback.push({ label: d.label, firstFrameMs: d.firstFrameMs, net: l.network?.type, track: d.track, fast: r.lastFast }); break;
     case 'playback_stall': r.pendingStall = d; break;
     case 'playback_stall_end': { const ms = d.stallMs ?? 0; if (ms < 250) r.loopFlickers += 1; else { r.stalls += 1; r.stallMs += ms; } break; }
     case 'playback_loop': r.loops = Math.max(r.loops, d.loops ?? 0); break;
@@ -36,14 +36,15 @@ for (const l of lines) {
 
 const rows = [...runs.values()].filter((r) => r.facing || r.fileBytes).sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
 const f = (v, dp = 1) => (v == null || Number.isNaN(v) ? '–' : typeof v === 'number' ? v.toFixed(dp) : String(v));
-const ff = (r, fast) => r.playback.filter((p) => fast == null || !!p.fast === fast).map((p) => p.firstFrameMs).filter((x) => x != null);
+const ff = (r, fast) => r.playback.filter((p) => fast == null || (fast === false ? !p.fast : !!p.fast)).map((p) => p.firstFrameMs).filter((x) => x != null);
+const ffModes = (r) => [...new Set(r.playback.filter((p) => p.fast).map((p) => p.fast))].map((m) => `${m}: ${r.playback.filter((p) => p.fast === m).map((p) => p.firstFrameMs).join('/')}`).join('; ') || '–';
 const med = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 
 console.log(`Device: ${device ? `${device.model} (${device.platform})` : '?'}\n`);
-console.log('| # | Camera | Quality | Encoder | Dur s | Res | File MB | kbps | Net | Upload s | Mbps | Attempts | Mux proc s | First frame ms default (n) | First frame ms fast-start (n) | Stalls ≥250 ms | Loops |');
-console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+console.log('| # | Camera | Quality | Encoder | Dur s | Res | File MB | kbps | Net | Upload s | Mbps | Attempts | Mux proc s | Local first frame ms | First frame ms default (n) | First frame ms fast-start | Stalls ≥250 ms | Loops |');
+console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 rows.forEach((r, i) => {
-  console.log(`| ${i + 1} | ${r.facing ?? '?'}${r.torch ? '+light' : ''} z${r.zoom ?? 0} | ${r.quality ?? '?'} | ${r.requestedBitrate ? `${r.requestedBitrate / 1e6} Mbps` : 'default'} | ${f(r.durationS)} | ${r.width ?? '?'}x${r.height ?? '?'} | ${f((r.fileBytes ?? 0) / 1e6, 2)} | ${r.bitrateBps ? Math.round(r.bitrateBps / 1000) : '–'} | ${r.uploadNet ? `${r.uploadNet.type} ${r.uploadNet.cellular ?? ''}`.trim() : '–'} | ${f((r.uploadMs ?? NaN) / 1000)} | ${f(r.throughputMbps)} | ${r.attempts ?? r.uploadFailures ?? '–'}${r.uploadFailures ? ` (${r.uploadFailures} fail)` : ''} | ${f((r.processingMs ?? NaN) / 1000)} | ${f(med(ff(r, false)), 0)} (${ff(r, false).length}) | ${f(med(ff(r, true)), 0)} (${ff(r, true).length}) | ${r.stalls} (${r.stallMs} ms) | ${r.loops} |`);
+  console.log(`| ${i + 1} | ${r.facing ?? '?'}${r.torch ? '+light' : ''} z${r.zoom ?? 0} | ${r.quality ?? '?'} | ${r.requestedBitrate ? `${r.requestedBitrate / 1e6} Mbps` : 'default'} | ${f(r.durationS)} | ${r.width ?? '?'}x${r.height ?? '?'} | ${f((r.fileBytes ?? 0) / 1e6, 2)} | ${r.bitrateBps ? Math.round(r.bitrateBps / 1000) : '–'} | ${r.uploadNet ? `${r.uploadNet.type} ${r.uploadNet.cellular ?? ''}`.trim() : '–'} | ${f((r.uploadMs ?? NaN) / 1000)} | ${f(r.throughputMbps)} | ${r.attempts ?? r.uploadFailures ?? '–'}${r.uploadFailures ? ` (${r.uploadFailures} fail)` : ''} | ${f((r.processingMs ?? NaN) / 1000)} | ${f(r.localFirstFrame, 0)} | ${f(med(ff(r, false)), 0)} (${ff(r, false).length}) | ${ffModes(r)} | ${r.stalls} (${r.stallMs} ms) | ${r.loops} |`);
 });
 
 const all = rows.filter((r) => r.uploadMs);

@@ -3,6 +3,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { loadRuns, log, saveRuns, upsertRun } from '../log';
+import { attachPlaybackMetrics } from '../playback';
 import type { Run } from '../types';
 import { Button, Row, s } from '../ui';
 
@@ -10,6 +11,11 @@ export function PreviewScreen({ run, onPost, onDiscard }: { run: Run; onPost: (r
   const [meta, setMeta] = useState<string>('reading…');
   const [measured, setMeasured] = useState<Run>(run);
   const player = useVideoPlayer(run.fileUri, (p) => { p.loop = true; p.muted = false; p.play(); });
+
+  useEffect(() => {
+    const m = attachPlaybackMetrics(player, run.runId, 'preview-local', () => {});
+    return () => m.detach();
+  }, [player]);
 
   useEffect(() => {
     const sub = player.addListener('statusChange', ({ status }) => {

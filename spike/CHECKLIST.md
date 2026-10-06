@@ -4,7 +4,22 @@ Do this alone, on **mobile data with Wi-Fi off**. Each line is one tap unless it
 
 ## Round 1 (done 6 Oct 2026): 7 front-camera 1080p runs, default encoder. See REPORT.md.
 
-## Round 2
+## Round 2 (done 6 Oct 2026). See REPORT.md.
+
+## Round 3
+
+New build. **Fast start** now cycles off / nowait / smallbuffer. Home has **Free Mux slots** to delete all assets on Mux when the 10-asset cap hits; measurements stay in the log.
+
+1. Tap **Free Mux slots** first so you start with 10 free.
+2. **Light, back**: Record, Flip to back, **Light on**, record 5 s. The torch must be on. Post it. Say in chat whether it was.
+3. **Zoom 0 check**: back camera, zoom 0. Compare with the iPhone Camera app at 1×. Say in chat whether it is the same framing.
+4. **Encoder 2Mbps**, front, record 15 s, Post. Then from Home open it with **Fast start: off**, watch 8 s, Back. Set **Fast start: nowait**, open it again, watch 8 s, Back. Set **Fast start: smallbuffer**, open it again, 8 s, Back. Say in chat if any mode showed no picture.
+5. Repeat step 4's playback part on two more ready clips (3 modes each).
+6. **Play all ready** once with Fast start: off and once with smallbuffer.
+7. **Offline upload**: Airplane mode on, record 5 s, Post. Let it fail. Airplane mode off, Retry.
+8. **Export log** → AirDrop into `spike/logs/`. Tell Claude the file name.
+
+## Round 2 steps (for reference)
 
 Home has two new toggles: **Encoder** (default / 4Mbps / 2Mbps) and **Fast start** (off / on). Both are shown in every run's label and log line.
 

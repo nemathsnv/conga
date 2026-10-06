@@ -6,12 +6,12 @@ import { hlsUrl } from '../mux';
 import { attachPlaybackMetrics, type PlaybackStats } from '../playback';
 import type { Run } from '../types';
 import { Button, s } from '../ui';
-import { applyBufferOptions } from '../settings';
+import { applyBufferOptions, startPlayback } from '../settings';
 
 /** Shortcut Home: one clip, full-screen vertical, looping, sound on. */
 export function PlayerScreen({ run, onBack }: { run: Run; onBack: () => void }) {
   useKeepAwake();
-  const player = useVideoPlayer({ uri: hlsUrl(run.playbackId!) }, (p) => { applyBufferOptions(p); p.loop = true; p.muted = false; p.timeUpdateEventInterval = 0.25; p.play(); });
+  const player = useVideoPlayer({ uri: hlsUrl(run.playbackId!) }, (p) => { applyBufferOptions(p); p.loop = true; p.muted = false; p.timeUpdateEventInterval = 0.25; startPlayback(p); });
   return (
     <View style={s.screen}>
       <VideoView player={player} style={{ flex: 1 }} contentFit="cover" nativeControls={false} />

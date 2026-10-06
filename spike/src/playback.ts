@@ -23,7 +23,7 @@ export function attachPlaybackMetrics(player: VideoPlayer, runId: string | undef
   let firstFrameSeen = false;
   const emit = () => onStats({ ...stats });
 
-  networkInfo().then((network) => log('playback_start', { label, source: 'hls', fastStart: settings.fastStart, bufferOptions: player.bufferOptions }, runId, network));
+  networkInfo().then((network) => log('playback_start', { label, source: label.startsWith('preview') ? 'local' : 'hls', fastStart: settings.fastStart, bufferOptions: player.bufferOptions }, runId, network));
 
   const subs = [
     player.addListener('statusChange', ({ status, oldStatus, error }) => {
