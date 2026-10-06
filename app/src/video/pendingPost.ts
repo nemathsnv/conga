@@ -3,11 +3,11 @@
 // the Upload failed banner shows the recording that is waiting.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-
-const KEY = 'shortcut.pendingPost';
+import type { PendingPost } from './pendingPostState';
 
 export type { PendingPost } from './pendingPostState';
-import type { PendingPost } from './pendingPostState';
+
+const KEY = 'shortcut.pendingPost';
 
 export async function loadPendingPost(): Promise<PendingPost | null> {
   try {

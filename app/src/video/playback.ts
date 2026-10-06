@@ -23,3 +23,11 @@ export function applyPlaybackSettings(player: VideoPlayer): void {
   }
   player.timeUpdateEventInterval = 0.25;
 }
+
+export function rewind(player: VideoPlayer): void {
+  try {
+    player.currentTime = 0;
+  } catch {
+    // The player may already be released.
+  }
+}
