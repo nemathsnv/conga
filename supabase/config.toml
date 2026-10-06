@@ -392,6 +392,10 @@ allow_dynamic_registration = false
 [functions.auth-signin-method]
 verify_jwt = false
 
+# Mux calls this; it carries a Mux signature instead of a user JWT.
+[functions.mux-webhook]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
