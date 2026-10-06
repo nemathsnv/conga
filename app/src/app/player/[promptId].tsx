@@ -4,34 +4,38 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
-import { followUser, promptResponses, unfollowUser, type PromptCard, type ResponseCard } from '@/lib/content';
-import { timeAgo } from '@/lib/format';
+import { followUser, homeFeed, promptResponses, unfollowUser, type Conversation, type PromptCard, type ResponseCard } from '@/lib/content';
+import { responsesLabel, timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
-import { CheckIcon, ChevronLeft, ChevronRightIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
-import { Spinner } from '@/ui/HomeStates';
+import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
+import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { thumbnailUrl } from '@/video/playback';
 
-type Page = { kind: 'response'; response: ResponseCard } | { kind: 'end' } | { kind: 'unavailable' };
+type Page = { kind: 'response'; response: ResponseCard } | { kind: 'end' } | { kind: 'empty' } | { kind: 'unavailable' };
 
 export default function PlayerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const { promptId, entry } = useLocalSearchParams<{ promptId: string; entry?: string }>();
+  // `visited`: prompts already passed through in this chain of end cards, so the next conversation
+  // never loops back to one of them.
+  const { promptId, entry, visited } = useLocalSearchParams<{ promptId: string; entry?: string; visited?: string }>();
   const [prompt, setPrompt] = useState<PromptCard | null>(null);
   const [pages, setPages] = useState<Page[] | null>(null);
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [nextConversation, setNextConversation] = useState<Conversation | null>(null);
   const list = useRef<FlatList<Page>>(null);
   const seen = useRef<string[]>([]);
+  const left = useRef(false);
 
   const load = useCallback(async () => {
     if (!promptId) return;
@@ -40,7 +44,8 @@ export default function PlayerScreen() {
       setPrompt(data.prompt);
       const next: Page[] = data.responses.map((r) => ({ kind: 'response', response: r }));
       if (entry && data.entry_status && data.entry_status !== 'live') next.unshift({ kind: 'unavailable' });
-      next.push({ kind: 'end' });
+      // A prompt with no live responses is Z-Empty, not an end card (SPEC.md Section 20).
+      next.push(next.length === 0 ? { kind: 'empty' } : { kind: 'end' });
       setPages(next);
     } catch (e) {
       console.error('prompt_responses failed', e);
@@ -51,6 +56,28 @@ export default function PlayerScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The end card leads to the next conversation (SPEC.md Section 6): the next Home conversation
+  // after this prompt. Loaded once so the card is drawn by the time the person reaches the end.
+  useEffect(() => {
+    if (!promptId) return;
+    homeFeed([promptId, ...(visited ? visited.split(',') : [])], 1)
+      .then((cards) => setNextConversation(cards[0] ?? null))
+      .catch((e) => console.error('home_feed (next conversation) failed', e));
+  }, [promptId, visited]);
+
+  const openNextConversation = useCallback(() => {
+    if (!nextConversation || left.current) return;
+    left.current = true;
+    router.replace({
+      pathname: '/player/[promptId]',
+      params: {
+        promptId: nextConversation.prompt.id,
+        visited: [...(visited ? visited.split(',') : []), promptId].join(','),
+        ...(nextConversation.response ? { entry: nextConversation.response.id } : {}),
+      },
+    });
+  }, [nextConversation, router, visited, promptId]);
 
   const responses = (pages ?? []).filter((p): p is Extract<Page, { kind: 'response' }> => p.kind === 'response');
   const total = prompt?.response_count ?? responses.length;
@@ -77,6 +104,7 @@ export default function PlayerScreen() {
         <ChevronLeft color={colors.white} />
       </Pressable>
       <Text style={s.headerPrompt} numberOfLines={2}>{prompt?.text ?? ''}</Text>
+      {current?.kind === 'empty' ? null : (
       <Glass style={s.counter} radius={14}>
         {current?.kind === 'end' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -90,6 +118,7 @@ export default function PlayerScreen() {
           </Text>
         )}
       </Glass>
+      )}
     </View>
   );
 
@@ -143,8 +172,20 @@ export default function PlayerScreen() {
                   onEnd={advance}
                   onNext={advance}
                 />
+              ) : item.kind === 'empty' ? (
+                <SwipeUpToNext enabled={!!nextConversation} onNext={openNextConversation}>
+                  {prompt ? <EmptyPrompt item={{ prompt, response: null }} next={nextConversation} topInset={insets.top} bottomSpace={Math.max(insets.bottom, 10)} /> : null}
+                </SwipeUpToNext>
               ) : item.kind === 'end' ? (
-                <EndCard prompt={prompt} total={total} faces={responses.slice(-5).map((r) => r.response.author)} onWatchAgain={() => goTo(0)} />
+                <EndCard
+                  prompt={prompt}
+                  total={total}
+                  faces={responses.slice(-5).map((r) => r.response.author)}
+                  background={responses.length ? responses[responses.length - 1].response.playback_id : null}
+                  next={nextConversation}
+                  onWatchAgain={() => goTo(0)}
+                  onNextConversation={openNextConversation}
+                />
               ) : (
                 <Unavailable onNext={advance} onRetry={() => void load()} />
               )}
@@ -159,7 +200,7 @@ export default function PlayerScreen() {
         />
       )}
       {header}
-      {pages ? strip : null}
+      {pages && current?.kind !== 'empty' ? strip : null}
     </View>
   );
 }
@@ -238,10 +279,23 @@ function ResponsePage({ response, prompt, active, next, onProgress, onEnd, onNex
   );
 }
 
-function EndCard({ prompt, total, faces, onWatchAgain }: { prompt: PromptCard | null; total: number; faces: { id: string; photo_path: string | null }[]; onWatchAgain: () => void }) {
+function EndCard({ prompt, total, faces, background, next, onWatchAgain, onNextConversation }: { prompt: PromptCard | null; total: number; faces: { id: string; photo_path: string | null }[]; background: string | null; next: Conversation | null; onWatchAgain: () => void; onNextConversation: () => void }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const lift = Math.max(insets.bottom - 34, 0);
+  const nextThumb = next?.response?.playback_id ? thumbnailUrl(next.response.playback_id, { width: 80, height: 96 }) : null;
   return (
-    <View style={[s.root, { backgroundColor: '#0E0E10' }]}>
+    <SwipeUpToNext enabled={!!next} onNext={onNextConversation}>
+      {/* The last video, blurred, behind the card (board: blur 28, saturate 1.1, opacity 0.55). */}
+      {background ? (
+        <Image
+          source={{ uri: thumbnailUrl(background, { width: 540, height: 1080 }) }}
+          style={[StyleSheet.absoluteFill, { left: -40, top: -40, right: -40, bottom: -40, opacity: 0.55 }]}
+          contentFit="cover"
+          blurRadius={28}
+          transition={200}
+        />
+      ) : null}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,12,0.55)' }]} />
       <View style={s.endBlock}>
         <View style={{ flexDirection: 'row' }}>
@@ -259,8 +313,46 @@ function EndCard({ prompt, total, faces, onWatchAgain }: { prompt: PromptCard | 
           <Text style={s.watchAgainText}>Watch again</Text>
         </Pressable>
       </View>
-      {/* "Next conversation" card and "Swipe up for the next conversation" need the next
-          Home conversation; the player closes back to Home where swiping continues. */}
+      {next ? (
+        <>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Next conversation: ${next.prompt.text}`} onPress={onNextConversation} style={({ pressed }) => [{ position: 'absolute', left: 16, right: 16, bottom: 844 - 702 - 64 + lift }, pressed && { opacity: 0.8 }]}>
+            <Glass style={s.nextCard} radius={16}>
+              <View style={s.nextThumb}>{nextThumb ? <Image source={{ uri: nextThumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}</View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.nextCardSub}>Next conversation · {responsesLabel(next.prompt.response_count)}</Text>
+                <Text style={s.nextCardTitle} numberOfLines={1}>
+                  {next.prompt.text}
+                </Text>
+              </View>
+              <ChevronUpIcon />
+            </Glass>
+          </Pressable>
+          <Text style={[s.swipeHint, { bottom: 844 - 778 - 15 + lift }]}>Swipe up for the next conversation</Text>
+        </>
+      ) : null}
+    </SwipeUpToNext>
+  );
+}
+
+/**
+ * Swipe up on the last page = the next conversation. The list has no page after it, so the
+ * gesture is read from the raw touch on the page itself (on iOS the list only bounces; on
+ * Android it does not move at all).
+ */
+function SwipeUpToNext({ enabled, onNext, children }: { enabled: boolean; onNext: () => void; children: ReactNode }) {
+  const startY = useRef<number | null>(null);
+  return (
+    <View
+      style={[s.root, { backgroundColor: '#0E0E10' }]}
+      onTouchStart={(e) => {
+        startY.current = e.nativeEvent.pageY;
+      }}
+      onTouchEnd={(e) => {
+        if (enabled && startY.current !== null && startY.current - e.nativeEvent.pageY > 50) onNext();
+        startY.current = null;
+      }}
+    >
+      {children}
     </View>
   );
 }
@@ -324,6 +416,11 @@ const s = StyleSheet.create({
   endButtonText: { ...type.button16, letterSpacing: 0, color: colors.black, fontFamily },
   watchAgain: { marginTop: 10, height: 44, justifyContent: 'center' },
   watchAgainText: { ...type.medium15, color: 'rgba(255,255,255,0.82)', fontFamily },
+  nextCard: { height: 64, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 8, paddingRight: 14 },
+  nextThumb: { width: 40, height: 48, borderRadius: 8, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.14)' },
+  nextCardSub: { ...type.caption12, color: 'rgba(255,255,255,0.7)', fontFamily },
+  nextCardTitle: { ...type.semi15, color: colors.white, fontFamily },
+  swipeHint: { position: 'absolute', left: 0, right: 0, textAlign: 'center', ...type.caption12, color: colors.white62, fontFamily },
   unavailableTitle: { marginTop: 18, fontSize: 22, lineHeight: 27, fontWeight: '600', letterSpacing: -0.4, color: colors.white, textAlign: 'center', fontFamily },
   unavailableText: { marginTop: 8, ...type.label15, lineHeight: 21, color: 'rgba(255,255,255,0.75)', textAlign: 'center', fontFamily },
   tryAgain: { position: 'absolute', left: 32, right: 32, top: 640, textAlign: 'center', ...type.caption13, color: colors.white62, fontFamily },

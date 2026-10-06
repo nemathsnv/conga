@@ -126,8 +126,10 @@ export default function RecordScreen() {
       ) : (
         <View />
       )}
-      {/* Flip while recording needs segment stitching (not in this phase): inactive during a take. */}
-      <GlassTool label="Flip camera" disabled={recording} onPress={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))}>
+      {/* Flip during a take is a locked requirement (SPEC.md Section 6; Nemat, 6 Oct). It needs
+          segment stitching, tracked as docs/BLOCKERS.md B-1. Until it lands the control is
+          disabled while recording, dimmed and announced as unavailable, so nothing pretends. */}
+      <GlassTool label={recording ? 'Flip camera, unavailable while recording' : 'Flip camera'} disabled={recording} onPress={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))}>
         <FlipIcon />
       </GlassTool>
     </View>

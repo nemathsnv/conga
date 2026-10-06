@@ -9,6 +9,11 @@ function googleSignInPlugin(iosUrlScheme: string): [string, Record<string, unkno
   return ['@react-native-google-signin/google-signin', { iosUrlScheme }];
 }
 
+// iOS shows one string per capability however many plugins set it, so the camera string
+// covers both uses (recording and the profile photo). Android has no usage strings.
+const CAMERA_USAGE = 'Shortcut uses the camera to record your video responses and video replies, and to take your profile photo.';
+const MICROPHONE_USAGE = 'Shortcut uses the microphone to record the sound of your video responses and video replies.';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Shortcut',
@@ -46,15 +51,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-image-picker',
       {
         photosPermission: 'Shortcut uses your photo library when you choose a profile photo.',
-        cameraPermission: 'Shortcut uses the camera when you take a profile photo.',
+        cameraPermission: CAMERA_USAGE,
       },
     ],
     // No splash board exists: plain black with a transparent image (Android needs a drawable).
     [
       'expo-camera',
       {
-        cameraPermission: 'Shortcut records your responses and video replies on camera.',
-        microphonePermission: 'Shortcut records your responses and video replies with sound.',
+        cameraPermission: CAMERA_USAGE,
+        microphonePermission: MICROPHONE_USAGE,
         recordAudioAndroid: true,
       },
     ],

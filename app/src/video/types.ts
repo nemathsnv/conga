@@ -6,9 +6,9 @@ export type CameraFacing = 'front' | 'back';
 
 /**
  * One continuous take from one camera. A recording is a list of segments so a camera flip
- * while recording can be added later by recording a new segment and stitching the list
- * (docs/DECISIONS.md, 6 Oct). Stitching is not in phase 3; a recording with more than one
- * segment cannot be posted yet.
+ * while recording records a new segment and the list is stitched into one clip before upload
+ * (spike/REPORT.md Section 9; Nemat, 6 Oct). Stitching is tracked as docs/BLOCKERS.md B-1; until
+ * it lands the recorder never produces more than one segment and upload refuses a longer list.
  */
 export type RecordingSegment = {
   uri: string;

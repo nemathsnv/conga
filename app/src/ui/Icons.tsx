@@ -175,6 +175,14 @@ export function ChevronRightIcon({ size = 14, color = '#FFFFFF', strokeWidth = 2
   );
 }
 
+export function ChevronUpIcon({ size = 16, color = '#FFFFFF', strokeWidth = 2.4 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="m6 15 6-6 6 6" />
+    </Svg>
+  );
+}
+
 export function SearchIcon({ size = 21, color = '#FFFFFF' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round">

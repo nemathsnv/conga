@@ -14,7 +14,7 @@ export async function mintUpload(): Promise<UploadTicket> {
   return { uploadId: String(data.uploadId), uploadUrl: String(data.uploadUrl) };
 }
 
-/** The file that is uploaded. Single-segment only until stitching lands. */
+/** The file that is uploaded. One segment only until stitching lands (docs/BLOCKERS.md B-1). */
 export function uploadableFile(recording: Recording): File {
   if (recording.segments.length !== 1) throw new Error('stitching_required');
   const file = new File(recording.segments[0].uri);

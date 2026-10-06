@@ -99,13 +99,20 @@ Nothing. Same blockers as phase 2 (paid Apple team for signing; no Android devic
 
 ## 8. Deviations and open questions
 
-1. **Mid-recording flip** is inactive during a take (segment stitching deferred, per instruction).
-   The decision from 6 Oct stays recorded; stitching is the next recording task.
+1. **Mid-recording flip** is a tracked blocker, `docs/BLOCKERS.md` B-1: the segment model and the
+   upload guard are in place, the stitcher is not. While recording the flip control is disabled, dimmed
+   and announced as unavailable. The requirement stays active and the blocker names what closes it.
 2. **Front-camera light** is a white screen-fill overlay at 88 % opacity; the preview stays faintly
    visible underneath. Treatment choice, not on a board.
-3. **End card background**: the board shows the last video blurred behind the card; the app shows a
-   dark background. Visual gap to close.
-4. **`R-Player-End` "Next conversation" card** is not drawn (see section 4).
+3. **End card** (completion pass, 7 Oct): the last watched response is drawn blurred behind the card
+   as on the board, the "Next conversation" card shows the next Home conversation (`home_feed`
+   excluding the current prompt) with its count and thumbnail, and a tap on the card or a swipe up on
+   the end card opens that conversation's player in place of this one (a chain of end cards never
+   loops back to a prompt it passed). A prompt with no live responses shows `Z-Empty` in the player
+   instead of an end card.
+4. **Camera and microphone usage strings** (completion pass, 7 Oct) now say that Shortcut uses the
+   camera to record video responses and video replies (and the profile photo) and the microphone for
+   their sound. Confirmed in the prebuilt `Info.plist`.
 5. **Caption, rail counts** draw as on the boards with counts hidden while zero (likes, comments
    and replies arrive in phase 4).
 6. **Processing responses** are only visible to their author (Processing tile); nobody else sees the
