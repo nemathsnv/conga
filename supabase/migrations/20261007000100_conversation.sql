@@ -534,6 +534,7 @@ begin
   return jsonb_build_object(
     'count', public.comment_count(r.id),
     'response', public.response_card(r, v_uid),
+    'prompt_text', (select text from public.prompts where id = r.prompt_id),
     'video_replies', jsonb_build_object(
       'count', public.reply_count(r.id),
       'faces', (select coalesce(jsonb_agg(public.profile_card(x.author_id)), '[]'::jsonb)
@@ -746,7 +747,7 @@ returns jsonb language sql stable security definer set search_path = '' as $$
     'actor', public.profile_card(a.actor_id),
     'following_actor', exists (select 1 from public.follows f where f.follower_id = p_viewer and f.followee_id = a.actor_id),
     'video', (select jsonb_build_object('id', r.id, 'kind', r.kind, 'playback_id', r.mux_playback_id, 'caption', r.caption, 'status', r.status,
-                                        'root_response_id', r.root_response_id, 'prompt_text', (select text from public.prompts where id = r.prompt_id))
+                                        'root_response_id', r.root_response_id, 'prompt_id', r.prompt_id, 'prompt_text', (select text from public.prompts where id = r.prompt_id))
                 from public.responses r where r.id = a.video_id),
     'comment', (select jsonb_build_object('id', c.id, 'body', c.body, 'deleted', c.deleted_at is not null) from public.comments c where c.id = a.comment_id),
     'prompt', (select jsonb_build_object('id', p.id, 'text', p.text) from public.prompts p where p.id = a.prompt_id),
@@ -781,7 +782,7 @@ begin
     'unread_count', (select count(*) from public.activity where recipient_id = v_uid and read_at is null),
     'tonight', (select public.prompt_card(p) from public.prompts p where p.status = 'live' and p.place_id is null and p.featured_on = (now() at time zone 'utc')::date limit 1),
     'rows', coalesce((
-      select jsonb_agg(g.row order by g.ts desc)
+      select jsonb_agg(g.row order by (g.row->>'section' = 'new') desc, (g.row->>'kind' = 'video_reply') desc, g.ts desc)
       from (
         -- grouped comments: one row per (section, video)
         select max(a.updated_at) as ts,

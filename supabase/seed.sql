@@ -18,7 +18,9 @@ insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, ra
   ('d0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dev-adam@example.com', '{}', '{}', now(), now()),
   ('d0000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dev-sofia@example.com', '{}', '{}', now(), now()),
   ('d0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dev-putu@example.com', '{}', '{}', now(), now());
-update public.accounts set age_confirmed_at = now(), public_disclosure_ack_at = now() where id::text like 'd0000000-%';
+update public.accounts set age_confirmed_at = now(), public_disclosure_ack_at = now(), beta_cohort = 'canggu' where id::text like 'd0000000-%';
+-- Admitted from the waitlist, so has_beta_access() is true for them.
+insert into public.waitlist (account_id, email, admitted_at, admitted_cohort) select a.id, u.email, now(), 'canggu' from public.accounts a join auth.users u on u.id = a.id where a.id::text like 'd0000000-%' on conflict do nothing;
 insert into public.profiles (id, name, username, bio) values
   ('d0000000-0000-0000-0000-000000000001', 'Maya Lindqvist', 'mayalind', 'Ceramics studio in Berawa. Strong opinions on coffee and traffic.'),
   ('d0000000-0000-0000-0000-000000000002', 'Adam Novak', 'adamnovak', null),
@@ -44,7 +46,7 @@ insert into public.follows (follower_id, followee_id) values
 -- likes. Activity rows come from the triggers. The dev session user (whoever signs in locally)
 -- sees these on other people's videos.
 insert into public.responses (kind, prompt_id, root_response_id, reply_to_id, author_id, caption, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at)
-select 'reply', root.prompt_id, root.id, root.id, x.author, x.caption, x.ms, 'live', 'dev-reply-' || x.n, 'dev-reply-asset-' || x.n, x.pb, now() - (x.n * 20 || ' minutes')::interval
+select 'reply', root.prompt_id, root.id, root.id, x.author, x.caption, x.ms, 'processing', 'dev-reply-' || x.n, 'dev-reply-asset-' || x.n, x.pb, now() - (x.n * 20 || ' minutes')::interval
   from public.responses root
   join (values
     (1, 'd0000000-0000-0000-0000-000000000003'::uuid, '7am is my whole personality now.', 5000, 'KzVFN00qaTnMZ6AKekYhpNO00fwhdq53hV6Ng7Mb00StrA'),
@@ -56,6 +58,8 @@ insert into public.responses (kind, prompt_id, root_response_id, reply_to_id, au
 select 'reply', root.prompt_id, root.id, sofia.id, 'd0000000-0000-0000-0000-000000000001', 'Respectfully, 7am is when I go to sleep.', 3600, 'live', 'dev-reply-3', 'dev-reply-asset-3', '25Vygqw8O8RgkH6nYYN7wFiX002mo01keZAL5EAj7eHfE', now() - interval '10 minutes'
   from public.responses root join public.responses sofia on sofia.mux_upload_id = 'dev-reply-1'
  where root.mux_upload_id = 'dev-2';
+-- Go live through the status change so the Activity triggers fire (as Mux would).
+update public.responses set status = 'live' where kind = 'reply' and mux_upload_id like 'dev-reply-%';
 insert into public.comments (response_id, author_id, body, created_at)
 select id, 'd0000000-0000-0000-0000-000000000004', 'Pererenan at sunrise, yes. Nobody believes me until they go.', now() - interval '1 hour' from public.responses where mux_upload_id = 'dev-2';
 insert into public.comments (response_id, author_id, parent_id, body, created_at)
