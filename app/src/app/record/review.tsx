@@ -1,5 +1,6 @@
 // Boards PR-Review (watch, caption, Re-record, Post), PR-Caption (typing), PR-Discard
 // (Discard this recording?) and A-Disclosure (first public video). SPEC.md Sections 6, 16.
+// PR-Reply: the same review for a video reply, with the context card and "Post reply".
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
@@ -10,6 +11,7 @@ import { acknowledgeDisclosure, disclosureAcknowledged } from '@/lib/content';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool, ProgressLine, VideoGradients } from '@/ui/dark';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
+import { ReplyCard } from '@/ui/ReplyCard';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { usePosting } from '@/video/posting';
@@ -44,7 +46,8 @@ export default function ReviewScreen() {
     if (!current) router.replace('/(tabs)');
   }, [current, router]);
   if (!current) return null;
-  const { recording, prompt } = current;
+  const { recording, prompt, replyTo } = current;
+  const rootName = replyTo?.context.kind === 'reply' ? replyTo.context.root?.author.name ?? null : null;
 
   const discard = () => {
     deleteRecordingFiles(recording);
@@ -56,14 +59,14 @@ export default function ReviewScreen() {
   const rerecord = () => {
     deleteRecordingFiles(recording);
     setCurrentRecording(null);
-    router.replace({ pathname: '/record/[promptId]', params: { promptId: prompt.id } });
+    router.replace({ pathname: '/record/[promptId]', params: { promptId: prompt.id, ...(replyTo ? { replyTo: replyTo.id } : {}) } });
   };
 
   const submit = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      await posting.post({ recording, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, ticket: ticket.current });
+      await posting.post({ recording, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, ticket: ticket.current, replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined });
       setCurrentRecording(null);
       router.dismissTo('/(tabs)');
     } catch (e) {
@@ -109,11 +112,27 @@ export default function ReviewScreen() {
         <GlassTool label="Discard" onPress={() => setDiscardAsk(true)}>
           <CloseIcon />
         </GlassTool>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={s.yourResponseTo}>Your response to</Text>
-          <Text style={s.promptText} numberOfLines={2}>{prompt.text}</Text>
-        </View>
+        {replyTo ? (
+          <View style={{ flex: 1 }} />
+        ) : (
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={s.yourResponseTo}>Your response to</Text>
+            <Text style={s.promptText} numberOfLines={2}>{prompt.text}</Text>
+          </View>
+        )}
       </View>
+      {replyTo ? (
+        <ReplyCard
+          kicker="Your reply to"
+          name={replyTo.author.name}
+          caption={replyTo.caption}
+          captionLines={1}
+          captionBold
+          sub={rootName ? `In replies to ${rootName}` : null}
+          playbackId={replyTo.playback_id}
+          style={{ position: 'absolute', left: 16, right: 16, top: insets.top + 59, paddingRight: 14 }}
+        />
+      ) : null}
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.bottomArea} pointerEvents="box-none">
         <View style={{ paddingBottom: Math.max(insets.bottom, 10) + 10 }}>
@@ -140,7 +159,7 @@ export default function ReviewScreen() {
                 <RecordDotIcon />
                 <Text style={s.rerecordText}>Re-record</Text>
               </Pressable>
-              <Button title="Post" variant="white" onPress={() => void onPost()} disabled={busy} style={{ flex: 1 }} />
+              <Button title={replyTo ? 'Post reply' : 'Post'} variant="white" onPress={() => void onPost()} disabled={busy} style={{ flex: 1 }} />
             </View>
           ) : null}
         </View>

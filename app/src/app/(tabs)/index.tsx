@@ -1,12 +1,13 @@
 // Board Main: Home, one conversation at a time, swipe up for the next prompt (For you) or
 // the next response from someone you follow (Following). SPEC.md Section 4.
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInfo } from '@/ui/safeArea';
 
-import { followSuggestions, followUser, followingFeed, homeFeed, type Conversation, type FollowSuggestion } from '@/lib/content';
+import { followSuggestions, followUser, followingFeed, getNotificationState, homeFeed, type Conversation, type FollowSuggestion } from '@/lib/content';
+import { shouldAsk } from '@/lib/notificationAsk';
 import { ConversationView } from '@/ui/ConversationView';
 import { FeedHeader } from '@/ui/dark';
 import { EmptyPrompt, FollowingEmpty, HomeLoading, PostingBanner } from '@/ui/HomeStates';
@@ -18,6 +19,7 @@ export default function HomeTab() {
   const { height } = useWindowDimensions();
   const { top, bottomSpace } = useSafeAreaInfo();
   const posting = usePosting();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>('foryou');
   const [items, setItems] = useState<Conversation[] | null>(null);
   const [index, setIndex] = useState(0);
@@ -65,8 +67,14 @@ export default function HomeTab() {
       posting.dismiss();
       seen.current = [];
       void load(tab, true);
+      // N-Prime: right after the person's first public video posts (SPEC.md Section 15).
+      getNotificationState()
+        .then(({ ask }) => {
+          if (shouldAsk(ask, 'first_post')) router.push('/notifications/prime');
+        })
+        .catch(() => undefined);
     }
-  }, [posting.state.kind, posting, load, tab]);
+  }, [posting.state.kind, posting, load, tab, router]);
 
   useFocusEffect(
     useCallback(() => {

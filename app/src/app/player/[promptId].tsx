@@ -9,12 +9,13 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimen
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
-import { followUser, homeFeed, promptResponses, unfollowUser, type Conversation, type PromptCard, type ResponseCard } from '@/lib/content';
+import { followUser, homeFeed, likeVideo, promptResponses, unfollowUser, unlikeVideo, type Conversation, type PromptCard, type ResponseCard } from '@/lib/content';
 import { responsesLabel, timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
+import { useOverlay } from '@/ui/playerOverlay';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { thumbnailUrl } from '@/video/playback';
@@ -27,7 +28,9 @@ export default function PlayerScreen() {
   const { height } = useWindowDimensions();
   // `visited`: prompts already passed through in this chain of end cards, so the next conversation
   // never loops back to one of them.
-  const { promptId, entry, visited } = useLocalSearchParams<{ promptId: string; entry?: string; visited?: string }>();
+  const { promptId, entry, visited, openComments, openReplies } = useLocalSearchParams<{ promptId: string; entry?: string; visited?: string; openComments?: string; openReplies?: string }>();
+  const overlay = useOverlay();
+  const openedSheet = useRef(false);
   const [prompt, setPrompt] = useState<PromptCard | null>(null);
   const [pages, setPages] = useState<Page[] | null>(null);
   const [index, setIndex] = useState(0);
@@ -56,6 +59,18 @@ export default function PlayerScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Opened from Activity or a rail icon on Home: go straight to the sheet over the entry.
+  useEffect(() => {
+    if (!pages || openedSheet.current || !entry) return;
+    if (openComments === '1') {
+      openedSheet.current = true;
+      router.push({ pathname: '/comments/[responseId]', params: { responseId: entry } });
+    } else if (openReplies === '1') {
+      openedSheet.current = true;
+      router.push({ pathname: '/replies/[rootId]', params: { rootId: entry } });
+    }
+  }, [pages, entry, openComments, openReplies, router]);
 
   // The end card leads to the next conversation (SPEC.md Section 6): the next Home conversation
   // after this prompt. Loaded once so the card is drawn by the time the person reaches the end.
@@ -166,7 +181,8 @@ export default function PlayerScreen() {
                 <ResponsePage
                   response={item.response}
                   prompt={prompt}
-                  active={i === index}
+                  active={i === index && overlay !== 'replies'}
+                  chrome={overlay !== 'comments'}
                   next={pages[i + 1]?.kind === 'response' ? (pages[i + 1] as Extract<Page, { kind: 'response' }>).response : null}
                   onProgress={setProgress}
                   onEnd={advance}
@@ -199,17 +215,31 @@ export default function PlayerScreen() {
           getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
         />
       )}
-      {header}
-      {pages && current?.kind !== 'empty' ? strip : null}
+      {overlay === 'comments' ? null : header}
+      {pages && current?.kind !== 'empty' && overlay !== 'comments' ? strip : null}
+      {overlay === 'replies' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} /> : null}
     </View>
   );
 }
 
-function ResponsePage({ response, prompt, active, next, onProgress, onEnd, onNext }: { response: ResponseCard; prompt: PromptCard | null; active: boolean; next: ResponseCard | null; onProgress: (f: number) => void; onEnd: () => void; onNext: () => void }) {
+function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEnd, onNext }: { response: ResponseCard; prompt: PromptCard | null; active: boolean; chrome: boolean; next: ResponseCard | null; onProgress: (f: number) => void; onEnd: () => void; onNext: () => void }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [following, setFollowing] = useState(response.following_author);
+  const [liked, setLiked] = useState(response.liked);
+  const [likes, setLikes] = useState(response.like_count);
   const [progress, setProgress] = useState(0);
+  const toggleLike = async () => {
+    const nextValue = !liked;
+    setLiked(nextValue);
+    setLikes((n) => Math.max(0, n + (nextValue ? 1 : -1)));
+    try {
+      setLikes(nextValue ? await likeVideo(response.id) : await unlikeVideo(response.id));
+    } catch {
+      setLiked(!nextValue);
+      setLikes((n) => Math.max(0, n + (nextValue ? -1 : 1)));
+    }
+  };
   const report = (f: number) => {
     setProgress(f);
     if (active) onProgress(f);
@@ -228,11 +258,14 @@ function ResponsePage({ response, prompt, active, next, onProgress, onEnd, onNex
   return (
     <View style={s.root}>
       <VideoSurface playbackId={response.playback_id} active={active} loop={false} onProgress={report} onEnd={onEnd} />
+      {!chrome ? null : (
+      <>
       <VideoGradients top={220} bottom={440} topAlpha={0.6} bottomAlpha={0.72} />
       <View style={[s.rail, { top: 392 }]}>
-        <RailAction icon={<HeartIcon />} count={response.like_count} label="Like" />
-        <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" />
-        <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" />
+        <RailAction icon={<HeartIcon filled={liked} color={liked ? '#FF375F' : colors.white} />} count={likes} label={liked ? `Liked, ${likes}` : `Like, ${likes}`} onPress={() => void toggleLike()} />
+        <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" onPress={() => router.push({ pathname: '/comments/[responseId]', params: { responseId: response.id } })} />
+        <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" onPress={() => router.push({ pathname: '/replies/[rootId]', params: { rootId: response.id } })} />
+        {/* More (Delete) and Share (share sheet) arrive in phase 5; drawn as on the board, inactive. */}
         {response.is_own ? <RailAction icon={<MoreIcon />} label="More" /> : <RailAction icon={<ShareIcon />} label="Share" />}
       </View>
       <View style={[s.author, { bottom: 844 - 536 - 90 + Math.max(insets.bottom - 34, 0) }]}>
@@ -255,8 +288,7 @@ function ResponsePage({ response, prompt, active, next, onProgress, onEnd, onNex
         {response.caption ? <Text style={s.caption}>{response.caption}</Text> : null}
       </View>
       <View style={[s.buttons, { bottom: 844 - 680 - 36 + Math.max(insets.bottom - 34, 0) }]}>
-        {/* "Reply to …" records a video reply (phase 4); drawn as on the board, inactive until then. */}
-        <GlassPillButton label={`Reply to ${firstName}`}>
+        <GlassPillButton label={`Reply to ${firstName}`} onPress={() => prompt && router.push({ pathname: '/record/[promptId]', params: { promptId: prompt.id, replyTo: response.id } })}>
           <VideoReplyIcon size={17} />
           <Text style={pillText}>Reply to {firstName}</Text>
         </GlassPillButton>
@@ -275,6 +307,8 @@ function ResponsePage({ response, prompt, active, next, onProgress, onEnd, onNex
           </Text>
         </Pressable>
       ) : null}
+      </>
+      )}
     </View>
   );
 }

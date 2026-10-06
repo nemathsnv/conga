@@ -3,9 +3,12 @@
 import { BlurView } from 'expo-blur';
 import type { Tabs } from 'expo-router/js-tabs';
 import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useEffect } from 'react';
+
+import { refreshUnread, useUnread } from './activityStore';
 import { ActivityTabIcon, DiscoverTabIcon, HomeTabIcon, MeTabIcon, PlusIcon } from './Icons';
 import { colors, fontFamily, type } from './theme';
 
@@ -22,6 +25,15 @@ const TABS: { name: string; label: string }[] = [
 export function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name ?? 'index';
+  // "Filled bell when active" (SPEC.md Section 4): unread activity.
+  const unread = useUnread();
+  useEffect(() => {
+    void refreshUnread();
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void refreshUnread();
+    });
+    return () => sub.remove();
+  }, [current]);
   const dark = current === 'index';
   const onColor = dark ? colors.white : colors.text;
   const offColor = dark ? colors.white62 : colors.textTertiary;
@@ -52,7 +64,7 @@ export function TabBar({ state, navigation }: TabBarProps) {
           <Pressable key={tab.name} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={tab.label} onPress={press} style={s.tab}>
             {tab.name === 'index' && <HomeTabIcon color={color} on={on} />}
             {tab.name === 'discover' && <DiscoverTabIcon color={color} on={on} />}
-            {tab.name === 'activity' && <ActivityTabIcon color={color} on={on} />}
+            {tab.name === 'activity' && <ActivityTabIcon color={color} on={on || unread > 0} />}
             {tab.name === 'me' && <MeTabIcon color={color} on={on} />}
             <Text style={[s.label, { color }]}>{tab.label}</Text>
           </Pressable>

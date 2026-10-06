@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { avatarUrl } from '@/lib/api';
-import { followUser, getProfile, profileResponses, unfollowUser, type Profile, type ProfileResponse } from '@/lib/content';
+import { followUser, getProfile, profileReplies, profileResponses, unfollowUser, type Profile, type ProfileReply, type ProfileResponse } from '@/lib/content';
 import { followedByLabel, formatCount } from '@/lib/format';
 import { Avatar, Separator } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
@@ -41,6 +41,13 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
   const { width } = useWindowDimensions();
   const [following, setFollowing] = useState(profile.is_following);
   const [tab, setTab] = useState<'responses' | 'replies'>('responses');
+  const [replies, setReplies] = useState<ProfileReply[] | null>(null);
+  useEffect(() => {
+    if (tab !== 'replies' || replies !== null) return;
+    profileReplies(profile.id)
+      .then(setReplies)
+      .catch((e) => console.error('profile_replies failed', e));
+  }, [tab, replies, profile.id]);
   const empty = own && profile.response_count === 0 && (responses?.length ?? 0) === 0;
   const cell = (width - 4) / 3;
   const followedBy = followedByLabel(profile.followed_by.map((f) => f.name), profile.followed_by_count);
@@ -124,7 +131,38 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
       </View>
       <Separator inset={0} />
 
-      {tab === 'replies' ? null : empty ? (
+      {tab === 'replies' ? (
+        replies === null ? (
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <Spinner light={false} />
+          </View>
+        ) : (
+          <View style={s.grid}>
+            {replies.map((r) => (
+              <Pressable
+                key={r.id}
+                accessibilityRole="button"
+                accessibilityLabel={r.reply_to_name ? `Reply to ${r.reply_to_name}` : 'Video reply'}
+                disabled={r.status !== 'live'}
+                onPress={() => router.push({ pathname: '/reply/[id]', params: { id: r.id } })}
+                style={[s.cell, { width: cell, height: 206 }]}
+              >
+                {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+                {r.status === 'processing' ? (
+                  <View style={s.processing}>
+                    <Spinner size={22} />
+                    <Text style={s.processingText}>Processing</Text>
+                  </View>
+                ) : (
+                  <View style={s.cap}>
+                    <Text style={s.capText} numberOfLines={2}>{r.reply_to_name ? `Replying to ${r.reply_to_name.split(' ')[0]}` : r.prompt_text}</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        )
+      ) : empty ? (
         // Board X-Me-Empty
         <View style={s.emptyBlock}>
           <View style={s.emptySlot}>

@@ -39,7 +39,10 @@ describe('recorder limits', () => {
 
 describe('pending post resume', () => {
   const base: PendingPost = {
-    responseId: 'r', promptId: 'p', promptText: 't', caption: null, uploadId: 'u', uploadUrl: 'https://x', uploadUrlExpiresAt: 0,
+    responseId: 'r',
+    kind: 'response',
+    replyToId: null,
+    replyToName: null, promptId: 'p', promptText: 't', caption: null, uploadId: 'u', uploadUrl: 'https://x', uploadUrlExpiresAt: 0,
     playbackId: null, state: 'uploading', attempts: 1, failedReason: null,
     recording: { id: 'rec', promptId: 'p', segments: [], durationMs: 5000, createdAt: 0 },
   };

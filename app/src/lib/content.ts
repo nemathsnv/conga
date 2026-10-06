@@ -1,4 +1,5 @@
-// Server calls and types for the core loop (phase 3). Shapes mirror the SQL card functions.
+// Server calls and types for the core loop (phase 3) and the conversation (phase 4).
+// Shapes mirror the SQL card functions.
 import { ServerError } from './api';
 import { supabase } from './supabase';
 
@@ -27,9 +28,94 @@ export type ResponseCard = {
   is_own: boolean;
   following_author: boolean;
   like_count: number;
+  liked: boolean;
   comment_count: number;
   reply_count: number;
+  /** Phase 4: a video reply lives in the responses table with kind 'reply'. */
+  kind: 'response' | 'reply';
+  root_response_id: string | null;
+  reply_to_id: string | null;
 };
+
+/** What a video replies to (Reply-Watch, Reply-Watch-2, Record-Reply, PR-Reply, A-Orphan). */
+export type VideoContext =
+  | { kind: 'response' }
+  | {
+      kind: 'reply';
+      root: ResponseCard | null;
+      root_deleted: boolean;
+      reply_to: ResponseCard | null;
+      reply_to_deleted: boolean;
+      reply_to_is_root: boolean;
+      prompt_text: string;
+    };
+
+export type Video = ResponseCard & { prompt: PromptCard; context: VideoContext };
+
+export type RoomReply = ResponseCard & { reply_to_name: string | null; reply_to_deleted: boolean };
+
+export type ReplyRoom = { root: ResponseCard | null; root_deleted: boolean; prompt: PromptCard; count: number; replies: RoomReply[] };
+
+export type CommentCard = {
+  id: string;
+  response_id: string;
+  parent_id: string | null;
+  thread_id: string | null;
+  body: string;
+  created_at: string;
+  author: ProfileCard;
+  is_author: boolean;
+  is_own: boolean;
+  liked: boolean;
+};
+
+export type CommentThread = CommentCard & { replies: CommentCard[] };
+
+export type CommentsSheet = {
+  count: number;
+  response: ResponseCard;
+  prompt_text: string;
+  video_replies: { count: number; faces: ProfileCard[]; thumbnails: string[] };
+  comments: CommentThread[];
+};
+
+export type ActivityKind = 'video_reply' | 'comment' | 'comment_reply' | 'follow' | 'like' | 'followed_responded';
+
+export type ActivityRow = {
+  id: string;
+  kind: ActivityKind;
+  created_at: string;
+  updated_at: string;
+  read: boolean;
+  section: 'new' | 'week';
+  actor: ProfileCard | null;
+  actors: ProfileCard[];
+  actor_count: number;
+  count: number;
+  following_actor: boolean;
+  video: { id: string; kind: 'response' | 'reply'; playback_id: string | null; caption: string | null; status: string; root_response_id: string | null; prompt_id: string; prompt_text: string } | null;
+  comment: { id: string; body: string; deleted: boolean } | null;
+  prompt: { id: string; text: string } | null;
+  like_count: number | null;
+};
+
+export type ActivityList = { unread_count: number; tonight: PromptCard | null; rows: ActivityRow[] };
+
+export type NotificationPrefs = {
+  pause_all: boolean;
+  video_replies: boolean;
+  comments: boolean;
+  comment_replies: boolean;
+  new_followers: boolean;
+  followed_respond: boolean;
+  tonight_prompt: boolean;
+  place_prompts: boolean;
+  likes: boolean;
+};
+
+export type NotificationAsk = 'never' | 'declined_once' | 'declined_twice' | 'accepted';
+
+export type NotificationState = { ask: NotificationAsk; prefs: NotificationPrefs };
 
 export type Conversation = { prompt: PromptCard; response: ResponseCard | null };
 
@@ -48,6 +134,8 @@ export type Profile = ProfileCard & {
 };
 
 export type ProfileResponse = ResponseCard & { prompt_text: string; pinned: boolean };
+
+export type ProfileReply = ResponseCard & { prompt_text: string; reply_to_name: string | null };
 
 export type FollowRow = ProfileCard & { is_following: boolean; follows_you: boolean; is_self: boolean };
 
@@ -134,4 +222,84 @@ export async function disclosureAcknowledged(): Promise<boolean> {
   const { data, error } = await supabase.from('accounts').select('public_disclosure_ack_at').maybeSingle();
   if (error) throw new ServerError(error.message);
   return !!data?.public_disclosure_ack_at;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: video replies, comments, likes, Activity, notifications
+// ---------------------------------------------------------------------------
+
+export async function profileReplies(profileId: string): Promise<ProfileReply[]> {
+  return (unwrap(await supabase.rpc('profile_replies', { p_profile: profileId })) ?? []) as ProfileReply[];
+}
+
+export async function replyRoom(rootId: string): Promise<ReplyRoom> {
+  return unwrap(await supabase.rpc('reply_room', { p_root: rootId })) as ReplyRoom;
+}
+
+export async function getVideo(id: string): Promise<Video | { status: 'unavailable' }> {
+  return unwrap(await supabase.rpc('get_video', { p_id: id })) as never;
+}
+
+export async function postReply(replyToId: string, uploadId: string, caption: string | null, durationMs: number): Promise<ResponseCard> {
+  return unwrap(await supabase.rpc('post_reply', { p_reply_to: replyToId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs })) as ResponseCard;
+}
+
+export async function commentsList(responseId: string): Promise<CommentsSheet> {
+  return unwrap(await supabase.rpc('comments_list', { p_response: responseId })) as CommentsSheet;
+}
+
+export async function postComment(responseId: string, body: string, parentId: string | null): Promise<CommentThread> {
+  return unwrap(await supabase.rpc('post_comment', { p_response: responseId, p_body: body, p_parent: parentId })) as CommentThread;
+}
+
+export async function deleteComment(id: string): Promise<void> {
+  unwrap(await supabase.rpc('delete_comment', { p_id: id }));
+}
+
+export async function likeVideo(id: string): Promise<number> {
+  return unwrap(await supabase.rpc('like_video', { p_video: id })) as number;
+}
+
+export async function unlikeVideo(id: string): Promise<number> {
+  return unwrap(await supabase.rpc('unlike_video', { p_video: id })) as number;
+}
+
+export async function likeComment(id: string): Promise<void> {
+  unwrap(await supabase.rpc('like_comment', { p_comment: id }));
+}
+
+export async function unlikeComment(id: string): Promise<void> {
+  unwrap(await supabase.rpc('unlike_comment', { p_comment: id }));
+}
+
+export async function activityList(): Promise<ActivityList> {
+  return unwrap(await supabase.rpc('activity_list')) as ActivityList;
+}
+
+export async function markActivityRead(): Promise<void> {
+  unwrap(await supabase.rpc('mark_activity_read'));
+}
+
+export async function activityUnreadCount(): Promise<number> {
+  return (unwrap(await supabase.rpc('activity_unread_count')) ?? 0) as number;
+}
+
+export async function getNotificationState(): Promise<NotificationState> {
+  return unwrap(await supabase.rpc('get_notification_state')) as NotificationState;
+}
+
+export async function updateNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<NotificationState> {
+  return unwrap(await supabase.rpc('update_notification_prefs', { p_prefs: prefs })) as NotificationState;
+}
+
+export async function setNotificationAsk(state: 'accepted' | 'declined'): Promise<void> {
+  unwrap(await supabase.rpc('set_notification_ask', { p_state: state }));
+}
+
+export async function registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void> {
+  unwrap(await supabase.rpc('register_push_token', { p_token: token, p_platform: platform }));
+}
+
+export async function setTimezone(timezone: string): Promise<void> {
+  unwrap(await supabase.rpc('set_timezone', { p_timezone: timezone }));
 }

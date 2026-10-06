@@ -3,7 +3,7 @@
 // (PR-Posting, X-Upload-Failed). Survives app restarts through pendingPost storage.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { abandonResponse, postResponse, retryResponseUpload } from '@/lib/content';
+import { abandonResponse, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { loadPendingPost, savePendingPost } from './pendingPost';
 import { resumeState, uploadUrlUsable, type PendingPost } from './pendingPostState';
 import type { Recording } from './types';
@@ -18,8 +18,8 @@ export type PostingState =
 
 type PostingContextValue = {
   state: PostingState;
-  /** Post is tapped: record the response, then upload. Resolves once the row exists. */
-  post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; ticket: UploadTicket | null }) => Promise<void>;
+  /** Post is tapped: create the row (a response, or a video reply when replyTo is set), then upload. Resolves once the row exists. */
+  post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; ticket: UploadTicket | null; replyTo?: { id: string; name: string } }) => Promise<void>;
   retry: () => Promise<void>;
   /** Give up on a failed post: the recording is deleted from the phone. */
   discardFailed: () => Promise<void>;
@@ -81,11 +81,14 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     });
   }, [run]);
 
-  const post = useCallback<PostingContextValue['post']>(async ({ recording, promptId, promptText, caption, ticket }) => {
+  const post = useCallback<PostingContextValue['post']>(async ({ recording, promptId, promptText, caption, ticket, replyTo }) => {
     const t = ticket ?? (await mintUpload());
-    const row = await postResponse(promptId, t.uploadId, caption, recording.durationMs);
+    const row = replyTo ? await postReply(replyTo.id, t.uploadId, caption, recording.durationMs) : await postResponse(promptId, t.uploadId, caption, recording.durationMs);
     const pending: PendingPost = {
       responseId: row.id,
+      kind: replyTo ? 'reply' : 'response',
+      replyToId: replyTo?.id ?? null,
+      replyToName: replyTo?.name ?? null,
       promptId,
       promptText,
       recording,

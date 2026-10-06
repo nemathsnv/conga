@@ -7,7 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
-import { followUser, unfollowUser, type Conversation } from '@/lib/content';
+import { followUser, likeVideo, unfollowUser, unlikeVideo, type Conversation } from '@/lib/content';
 import { moreResponsesLabel, responsesLabel, timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, PromptLabel, RailAction, VideoGradients } from '@/ui/dark';
@@ -20,6 +20,8 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
   const insets = useSafeAreaInsets();
   const [progress, setProgress] = useState(0);
   const [following, setFollowing] = useState(item.response?.following_author ?? false);
+  const [liked, setLiked] = useState(item.response?.liked ?? false);
+  const [likes, setLikes] = useState(item.response?.like_count ?? 0);
   const response = item.response!;
   const prompt = item.prompt;
   const isFirstOwn = response.is_own && prompt.response_count === 1;
@@ -28,6 +30,20 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
   const openPlayer = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id } });
   const openProfile = () => router.push({ pathname: '/profile/[id]', params: { id: response.author.id } });
   const respond = () => router.push({ pathname: '/record/[promptId]', params: { promptId: prompt.id } });
+  const openComments = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id, openComments: '1' } });
+  const openReplies = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id, openReplies: '1' } });
+
+  const toggleLike = useCallback(async () => {
+    const next = !liked;
+    setLiked(next);
+    setLikes((n) => Math.max(0, n + (next ? 1 : -1)));
+    try {
+      setLikes(next ? await likeVideo(response.id) : await unlikeVideo(response.id));
+    } catch {
+      setLiked(!next);
+      setLikes((n) => Math.max(0, n + (next ? -1 : 1)));
+    }
+  }, [liked, response.id]);
 
   const toggleFollow = useCallback(async () => {
     const next = !following;
@@ -56,9 +72,10 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
       />
 
       <View style={[s.rail, { top: isFirstOwn ? 432 : 404 }]}>
-        <RailAction icon={<HeartIcon />} count={response.like_count} label="Like" />
-        <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" />
-        <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" />
+        <RailAction icon={<HeartIcon filled={liked} color={liked ? '#FF375F' : colors.white} />} count={likes} label={liked ? `Liked, ${likes}` : `Like, ${likes}`} onPress={() => void toggleLike()} />
+        <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" onPress={openComments} />
+        <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" onPress={openReplies} />
+        {/* More (Delete) and Share (share sheet) arrive in phase 5; drawn as on the board, inactive. */}
         {response.is_own ? <RailAction icon={<MoreIcon />} label="More" /> : <RailAction icon={<ShareIcon />} label="Share" />}
       </View>
 

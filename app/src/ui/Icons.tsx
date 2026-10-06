@@ -89,14 +89,14 @@ export function PlusIcon({ color }: { color: string }) {
   );
 }
 
-export function ActivityTabIcon({ color, on }: { color: string; on: boolean }) {
+export function ActivityTabIcon({ color, on, size = 25 }: { color: string; on: boolean; size?: number }) {
   return on ? (
-    <Svg width={25} height={25} viewBox="0 0 24 24" fill={color}>
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <Path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2h-14z" />
       <Path d="M10 20.5a2 2 0 0 0 4 0z" />
     </Svg>
   ) : (
-    <Svg width={25} height={25} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round">
       <Path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2h-14z" />
       <Path d="M10 20.5a2 2 0 0 0 4 0" />
     </Svg>

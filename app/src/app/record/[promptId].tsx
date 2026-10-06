@@ -1,5 +1,6 @@
 // Board R-Record (recording a response), with A-Camera (camera access off), A-Mic
 // (microphone access off) and PR-Short (under 2 seconds). SPEC.md Section 6.
+// With ?replyTo=<video id>: board Record-Reply (recording a video reply), SPEC.md Section 7.
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -8,7 +9,8 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-import { getPrompt, type PromptCard } from '@/lib/content';
+import { getPrompt, getVideo, type PromptCard, type Video } from '@/lib/content';
+import { ReplyCard } from '@/ui/ReplyCard';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool } from '@/ui/dark';
 import { CloseIcon, FlipIcon, LightIcon } from '@/ui/Icons';
@@ -24,8 +26,9 @@ const RING_STROKE = 3.5;
 export default function RecordScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { promptId } = useLocalSearchParams<{ promptId: string }>();
+  const { promptId, replyTo } = useLocalSearchParams<{ promptId: string; replyTo?: string }>();
   const [prompt, setPrompt] = useState<PromptCard | null>(null);
+  const [target, setTarget] = useState<Video | null>(null);
   const [camera, requestCamera] = useCameraPermissions();
   const [mic, requestMic] = useMicrophonePermissions();
   const [facing, setFacing] = useState<CameraFacing>('front');
@@ -45,6 +48,15 @@ export default function RecordScreen() {
   useEffect(() => {
     if (promptId) void getPrompt(promptId).then(setPrompt).catch((e) => console.error('get_prompt failed', e));
   }, [promptId]);
+  useEffect(() => {
+    if (!replyTo) return;
+    getVideo(replyTo)
+      .then((v) => {
+        if ('status' in v && v.status === 'unavailable') router.back();
+        else setTarget(v as Video);
+      })
+      .catch((e) => console.error('get_video failed', e));
+  }, [replyTo, router]);
 
   useEffect(() => {
     if (camera && !camera.granted && camera.canAskAgain) void requestCamera();
@@ -59,7 +71,7 @@ export default function RecordScreen() {
   };
 
   const start = useCallback(async () => {
-    if (!cam.current || !ready || recording || !prompt) return;
+    if (!cam.current || !ready || recording || !prompt || (replyTo && !target)) return;
     setRecording(true);
     startedAt.current = Date.now();
     setElapsedMs(0);
@@ -83,14 +95,14 @@ export default function RecordScreen() {
         return;
       }
       const segment = keepSegment(result.uri, facing, durationMs);
-      setCurrentRecording({ recording: makeRecording(prompt.id, [segment]), prompt });
+      setCurrentRecording({ recording: makeRecording(prompt.id, [segment]), prompt, replyTo: target ?? undefined });
       router.replace('/record/review');
     } catch (e) {
       stopTimer();
       setRecording(false);
       console.error('recordAsync failed', e);
     }
-  }, [ready, recording, prompt, light, facing, router]);
+  }, [ready, recording, prompt, light, facing, router, replyTo, target]);
 
   const stop = () => {
     cam.current?.stopRecording();
@@ -106,7 +118,20 @@ export default function RecordScreen() {
   const progress = elapsedMs / MAX_DURATION_MS;
   const circumference = Math.PI * (RING - RING_STROKE);
 
-  const promptCard = (
+  const rootName = target?.context.kind === 'reply' ? target.context.root?.author.name ?? null : null;
+  const promptCard = replyTo ? (
+    // Board Record-Reply: who you reply to, their caption, the room, the limit.
+    <ReplyCard
+      kicker="Replying to"
+      name={target?.author.name ?? null}
+      caption={target?.caption ?? null}
+      captionLines={1}
+      captionBold
+      sub={`${rootName ? `In replies to ${rootName} · ` : ''}up to 30 seconds`}
+      playbackId={target?.playback_id ?? null}
+      style={{ position: 'absolute', alignSelf: 'center', width: 316, top: insets.top + 61, paddingRight: 14 }}
+    />
+  ) : (
     <Glass style={[s.promptCard, { top: insets.top + 61 }]}>
       <Text style={s.promptText}>{prompt?.text ?? ''}</Text>
       <Text style={s.promptSub}>Responding · up to 30 seconds</Text>

@@ -157,14 +157,17 @@ export function Avatar({
   borderColor,
   borderWidth = 0,
   style,
+  radius: radiusProp,
 }: {
   uri: string | number | null | undefined;
   size: number;
   borderColor?: string;
   borderWidth?: number;
   style?: StyleProp<ImageStyle>;
+  /** Square-ish avatars (the N-Prime example notification); round by default. */
+  radius?: number;
 }) {
-  const radius = size / 2;
+  const radius = radiusProp ?? size / 2;
   if (uri) {
     return (
       <Image
