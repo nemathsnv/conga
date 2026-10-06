@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { File } from 'expo-file-system';
 import { assertConfig } from '../config';
+import { deleteAssets } from '../mux';
 import { deviceInfo, networkInfo } from '../env';
 import { clearLog, exportLog, loadRuns, log, readLogText, saveRuns } from '../log';
 import type { NetworkInfo, Run } from '../types';
@@ -44,6 +45,7 @@ export function HomeScreen({ onRecord, onRetry, onPlay, onSequence }: { onRecord
         <Button small title={`Fast start: ${settings.fastStart ? 'on' : 'off'}`} onPress={() => { settings.fastStart = !settings.fastStart; bump((n) => n + 1); }} />
         <Button small title="Refresh" onPress={refresh} />
       </Row>
+      <Button small danger title={`Free Mux slots (delete ${ready.length} ready assets on Mux, keep the log)`} disabled={!ready.length} onPress={() => Alert.alert('Delete all assets on Mux?', 'Measurements stay in the log. The clips can no longer be played.', [{ text: 'Cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { try { const r = await deleteAssets(); log('note', { kind: 'mux_assets_deleted', count: r.deleted }); saveRuns(runs.map((x) => (x.status === 'ready' ? { ...x, status: 'errored' as const, uploadError: 'deleted on Mux to free a slot' } : x))); refresh(); Alert.alert('Deleted', `${r.deleted} assets removed on Mux.`); } catch (e) { Alert.alert('Delete failed', String(e)); } } }])} />
 
       {pending.length ? <Text style={[s.text, { color: '#fc6', marginTop: 8 }]}>Your response didn't post. It's saved on this phone. Check your connection.</Text> : null}
       {pending.map((r) => (

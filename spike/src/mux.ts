@@ -65,3 +65,11 @@ export async function waitUntilPlayable(uploadId: string, onTick?: (s: UploadSta
     await new Promise((r) => setTimeout(r, intervalMs));
   }
 }
+
+/** Deletes assets on Mux (all when ids is empty). Spike-only, to stay under the free-plan asset cap. */
+export async function deleteAssets(assetIds: string[] = []): Promise<{ deleted: number }> {
+  const res = await withTimeout(fetch(`${SUPABASE_URL}/functions/v1/mux-delete-assets`, { method: 'POST', headers, body: JSON.stringify({ assetIds }) }), 60000, 'mux-delete-assets');
+  const body = await res.json();
+  if (!res.ok || body.error) throw new Error(`delete assets: ${res.status} ${body.error ?? ''}`);
+  return body;
+}

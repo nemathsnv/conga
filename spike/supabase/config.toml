@@ -419,3 +419,6 @@ enabled = true
 verify_jwt = false
 [functions.mux-upload-status]
 verify_jwt = false
+
+[functions.mux-delete-assets]
+verify_jwt = false
