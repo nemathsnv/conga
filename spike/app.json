@@ -10,7 +10,7 @@
     "ios": {
       "bundleIdentifier": "app.shortcut.spike",
       "supportsTablet": false,
-      "appleTeamId": "7D66TF323B",
+      "appleTeamId": "BP7TM32HCQ",
       "infoPlist": {
         "NSCameraUsageDescription": "The spike records test videos.",
         "NSMicrophoneUsageDescription": "The spike records test videos with sound.",
@@ -46,7 +46,8 @@
       "expo-video",
       "expo-file-system",
       "expo-cellular",
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withSceneLifecycle.js"
     ]
   }
 }
