@@ -136,7 +136,7 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
         <Row>
           <Button small title="Flip" onPress={() => { if (recording) log('note', { kind: 'flip_while_recording', from: facing, elapsedMs: Date.now() - startedAt.current }, currentRunId.current ?? undefined); setFacing((f) => (f === 'front' ? 'back' : 'front')); }} />
           <Button small title={`Light ${torch ? 'off' : 'on'}`} onPress={() => setTorch((t) => !t)} />
-          <Button small title={`Zoom ${ZOOMS[(zoomIdx + 1) % ZOOMS.length]}`} onPress={() => setZoomIdx((i) => (i + 1) % ZOOMS.length)} />
+          <Button small title={`Zoom: ${ZOOMS[zoomIdx]}`} onPress={() => setZoomIdx((i) => (i + 1) % ZOOMS.length)} />
           <Button small title={`Quality: ${QUALITIES[qualityIdx]}`} disabled={recording} onPress={() => setQualityIdx((i) => (i + 1) % QUALITIES.length)} />
         </Row>
         {recording ? <Button danger title="Stop" onPress={stop} /> : <Button title={ready ? 'Record' : 'Camera starting…'} disabled={!ready} onPress={start} />}

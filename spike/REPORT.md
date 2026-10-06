@@ -1,148 +1,162 @@
 # Phase 1 video spike: report
 
-**Status: in progress.** iPhone rounds 1 to 3 done (20 recordings, 19 uploads, 28 playbacks). Round 4 pending: camera flip during recording, torch persistence, zoom-0 framing. Android real-device validation pending (no Android phone available on 6 Oct 2026).
+**Status, 6 Oct 2026.** iPhone testing complete: 4 rounds, 22 recordings, 21 uploads, 31 playbacks, all on a real iPhone 17 Pro (iOS 27.0) over mobile data unless noted. **Android real-device validation is pending**: no Android phone was available. The phase 1 cross-platform gate is **not** passed until a real mid-range Android has been tested over Bali 4G. The app is Android-buildable but has never been built or run on Android, and no emulator was used because it would not give real camera, encoder or network numbers.
 
 **Question:** can `expo-camera` + Mux direct upload + Mux HLS playback satisfy Shortcut's recording, upload and playback requirements (SPEC.md Sections 2, 6, 19) on a real iPhone and a mid-range Android over normal mobile data?
 
-## What was built
+**Short answer for iPhone:** yes for upload, processing and playback, with three product-side conditions (encoder bitrate, pre-warming, a small playback buffer). Recording meets the spec as written. It does not meet the mid-recording camera flip that Nemat added on 6 Oct, and neither camera library does that on both platforms without segment stitching. Details and the recommendation at the end.
 
-Throwaway Expo SDK 57 app in `spike/` (React Native 0.86, new architecture, release-configuration build with the JS bundle embedded, so the phone runs standalone on mobile data).
+## 1. What was built
+
+Throwaway Expo SDK 57 app in `spike/` (React Native 0.86, new architecture, release-configuration build with the JS bundle embedded so the phone runs standalone with Wi-Fi off). Source of truth for every number below: `logs/*.jsonl`, summarised with `npm run summarize -- logs/<file>.jsonl`. Later log files contain the earlier ones.
 
 | Requirement | Implementation | Where |
 |---|---|---|
-| Record front/back vertical video | `expo-camera` `CameraView`, `mode="video"`, portrait only | `src/screens/RecordScreen.tsx` |
-| 2–30 s | `recordAsync({ maxDuration: 30 })` native ceiling; clips under 2 s are discarded with a message | same |
-| Light, zoom | `enableTorch` toggle; `zoom` 0 / 0.1 / 0.25; available lenses logged | same |
+| Record front/back vertical video | `expo-camera` `CameraView`, `mode="video"`, portrait only, lens pinned to the wide camera | `src/screens/RecordScreen.tsx` |
+| 2–30 s | `recordAsync({ maxDuration: 30 })`; clips under 2 s are discarded with the message | same |
+| Light, zoom | `enableTorch`, re-applied 0.7 s after record start; `zoom` 0 / 0.1 / 0.25 | same |
 | Preview, discard, re-record | Local `expo-video` loop with sound; Re-record deletes the file and the run | `src/screens/PreviewScreen.tsx` |
-| Server-minted upload URL | Supabase Edge Function `mux-create-upload` calls Mux with the token from Edge Function secrets. The app only holds the public anon key. | `supabase/functions/` |
-| Foreground upload with real progress | `expo-file-system` `File.createUploadTask` PUT to the Mux direct-upload URL with `onProgress` byte counts | `src/upload.ts` |
-| Keep the recording if posting fails | Recording moved to the document directory at record time; run index persisted; Home shows the SPEC 19 banner with Retry; 3 automatic retries with backoff | `src/upload.ts`, `src/screens/HomeScreen.tsx` |
-| Detect playable | Poll `mux-upload-status` every 1.5 s until asset `ready` with a public playback id | `src/mux.ts` |
+| Server-minted upload URL | Supabase Edge Function `mux-create-upload` calls Mux with a token held in Edge Function secrets; the app only has the public anon key | `supabase/functions/` |
+| Foreground upload with real progress | `expo-file-system` `File.createUploadTask` PUT to the Mux direct-upload URL with byte progress | `src/upload.ts` |
+| Keep the recording if posting fails | File moved to the document directory at record time; run index persisted; SPEC 19 banner with Retry; 3 automatic retries with 2/4/8 s backoff | `src/upload.ts`, `src/screens/HomeScreen.tsx` |
+| Detect playable | Poll `mux-upload-status` every 1.5 s until the asset is `ready` with a public playback id | `src/mux.ts` |
 | Vertical playback with sound, loop | `expo-video` HLS `stream.mux.com/<id>.m3u8`, `contentFit="cover"`, `loop`, unmuted | `src/screens/PlayerScreen.tsx` |
 | Sequential clips | One player, `replaceAsync` on `playToEnd`, Next/Prev | `src/screens/SequenceScreen.tsx` |
-| Measurements | JSON lines in the document directory, exported with the share sheet; summarised by `scripts/summarize.mjs` | `src/log.ts`, `src/playback.ts` |
+| Measurements | JSON lines, exported with the share sheet; first frame, stalls, loops, rendition switches, upload bytes and times, Mux processing, device and network | `src/log.ts`, `src/playback.ts` |
+
+Extras added during testing: an encoder bitrate toggle (`videoBitrate` + `avc1`), three playback start modes, a `mux-delete-assets` function to stay under the Mux free plan's 10-asset cap, and a local config plugin that adopts the iOS 27 scene lifecycle (without it every iOS 27 build crashes at launch; Expo's SDK 57 template does not do this yet).
 
 Not built, by the escalation rules: `react-native-vision-camera`, Cloudflare Stream, Supabase Storage + own transcoding.
 
-## Measurements
+## 2. Results: iPhone 17 Pro, iOS 27.0
 
-Built from `logs/*.jsonl` with `npm run summarize -- logs/<file>.jsonl`. First frame is measured from player creation to the first `timeUpdate` with a non-zero position, so it includes manifest, playlist, init segment and first media segment fetches plus decoder start. Stalls under 250 ms at the loop boundary are AVPlayer status flickers, not visible rebuffering, and are counted separately.
+Mobile data, Wi-Fi off, iOS reported 4G or 5G per run (it switched during the session). Carrier as reported by iOS is in the log. Upload throughput = file bits / upload wall time, single connection, including the Edge Function call that mints the URL.
 
-### iPhone 17 Pro, iOS 27.0, mobile data (Bali, Telkomsel-class 4G/5G as reported by iOS)
+### 2.1 Recording and upload, all runs
 
-**Round 1, 6 Oct 2026.** Front camera, 1080p, library default encoder, Wi-Fi off. Log: `logs/spike-export-2026-10-06T06-20-28-973Z.jsonl`.
+| # | Camera | Quality | Encoder | Dur s | File MB | Recorded kbps | Net | Upload s | Upload Mbps | Attempts | Mux ready s |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | front | 1080p | default | 4.1 | 3.67 | 7213 | 5G | 16.0 | 1.8 | 1 | 1.6 |
+| 2 | front | 1080p | default | 3.7 | 3.40 | 7362 | 5G | 9.5 | 2.9 | 1 | 1.6 |
+| 3 | front | 1080p | default | 29.9 | 29.14 | 7796 | 5G | 30.6 | 7.6 | 1 | 1.6 |
+| 4 | front | 1080p | default | 5.0 | 4.65 | 7482 | 5G | 9.9 | 3.7 | 1 | 1.7 |
+| 5 | front | 1080p | default | 3.2 | 3.03 | 7658 | 5G | 6.0 | 4.1 | 1 | 1.7 |
+| 6 | front | 1080p | default | 7.1 | 6.88 | 7753 | 4G | 26.5 | 2.1 | 1 | 1.6 |
+| 7 | front, zoom 0.1 | 1080p | default | 6.0 | 6.02 | 8027 | 4G/5G | 13.8 | 3.5 | 2 concurrent (spike bug) | 1.7 |
+| 8 | front | 1080p | default | 3.4 | 3.38 | 8035 | 5G | 6.5 | 4.1 | 1 | 1.6 |
+| 9 | back | 1080p | default | 8.9 | 8.52 | 7631 | 5G | 8.0 | 8.5 | 1 | 1.6 |
+| 10 | back | 1080p | default | 20.5 | 19.84 | 7742 | 5G | 16.7 | 9.5 | 1 after 3 refusals (Mux asset cap) | 1.6 |
+| 11 | front | 1080p | default | 2.7 | 2.64 | 7729 | – | re-recorded, never posted | – | – | – |
+| 12 | front | 1080p | default | 1.5 | 1.52 | 7918 | 4G | 7.9 | 1.5 | 1 | 1.7 |
+| 13 | back, zoom 0.1 | 1080p | default | 29.9 | 28.53 | 7634 | 5G | 17.3 | 13.2 | 1 | 4.8 |
+| 14 | front | 1080p | 4 Mbps | 30.0 | 15.52 | 4137 | 5G | 14.2 | 8.8 | 1 | 4.8 |
+| 15 | front | 1080p | 2 Mbps | 30.0 | 8.01 | 2135 | 5G | 22.6 | 2.8 | 1 | 1.6 |
+| 16 | back, torch | 1080p | default | 5.0 | 4.98 | 8021 | 5G | 5.0 | 8.0 | 1 | 1.6 |
+| 17 | back, zoom 0.25 | 1080p | default | 6.1 | 6.12 | 8070 | 5G | 13.0 | 3.8 | 1 | 1.7 |
+| 18 | front | 720p | 2 Mbps | 16.1 | 3.99 | 1988 | 5G | 9.6 | 3.3 | 1 | 1.7 |
+| 19 | front | 1080p | 2 Mbps | 5.5 | 1.39 | 2031 | airplane → Wi-Fi | 4.5 | 2.5 | 1 after 3 offline failures | 1.6 |
+| 20 | front | 1080p | 2 Mbps | 5.0 | 1.29 | 2078 | Wi-Fi | 4.1 | 2.5 | 1 | 1.6 |
+| 21 | front, flipped mid-record | 1080p | default | 4.2 | 4.09 | 7725 | 5G | 6.5 | 5.0 | 1 | 4.8 |
+| 22 | back, torch | 1080p | default | 3.5 | 3.23 | 7308 | 5G | 5.6 | 4.6 | 1 | 1.7 |
 
-| # | Camera | Dur s | Res | File MB | Recorded kbps | Net | Upload s | Upload Mbps | Attempts | Mux ready s | First frame ms | Stalls ≥250 ms | Loops |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | front | 4.1 | 1080x1920 | 3.67 | 7213 | 5G | 16.0 | 1.8 | 1 | 1.6 | 5441 | 1 (19.0 s) | 1 |
-| 2 | front | 3.7 | 1080x1920 | 3.40 | 7362 | 5G | 9.5 | 2.9 | 1 | 1.6 | 2789 | 0 | 3 |
-| 3 | front | 29.9 | 1080x1920 | 29.14 | 7796 | 5G | 30.6 | 7.6 | 1 | 1.6 | 3803 | 0 | 1 |
-| 4 | front | 5.0 | 1080x1920 | 4.65 | 7482 | 5G | 9.9 | 3.7 | 1 | 1.7 | 3670 | 0 | 0 |
-| 5 | front | 3.2 | 1080x1920 | 3.03 | 7658 | 5G | 6.0 | 4.1 | 1 | 1.7 | 2809 | 0 | 0 |
-| 6 | front | 7.1 | 1080x1920 | 6.88 | 7753 | 4G | 26.5 | 2.1 | 1 | 1.6 | 4626 | 0 | 0 |
-| 7 | front, zoom 0.1 | 6.0 | 1080x1920 | 6.02 | 8027 | 4G→5G | 13.8 | 3.5 | 3 (see note) | 1.7 | 3482, 3642 | 0 | 2 |
+Also: three clips under 2 s were rejected with the message, one clip was discarded with Re-record, and two clips were re-recorded.
 
-Medians: upload 13.8 s, upload throughput 3.7 Mbps, Mux upload-finished to playable 1.6 s, first frame 3.7 s. Upload failures: 0. Loop-boundary flickers: 6, none visible.
+Medians over the 19 mobile-data uploads: upload 9.9 s, throughput 4.1 Mbps (range 1.5 to 13.2), Mux upload-finished-to-playable 1.6 s (4.8 s for three of the 30 s clips). Upload failures caused by the network: 3, all in airplane mode, all immediate. Upload failures mid-transfer: 0 in 21 uploads.
 
-**What round 1 says**
+### 2.2 Playback, all 31 playbacks
 
-- **Recording.** expo-camera records true vertical 1080x1920 at 30 fps, H.264, sound on. The 30 s ceiling (`maxDuration`) stops the recording itself at 29.9 s. The under-2 s floor worked: a 1.1 s clip was discarded with the message. The front lens list was reported (Front, TrueDepth, Ultra Wide). The back camera could not be tested in round 1 because of a spike bug: the Record button waited for a ready callback that expo-camera only fires on first mount. Fixed for round 2; the back lens list was logged, so the camera itself switched.
-- **Encoder bitrate is the real upload problem.** The library default is about 7.5 Mbps at 1080p, so a full 30 s response is 29 MB. On this phone's 5G that took 30.6 s; on the 4G run the throughput was 2.1 Mbps, which puts a 30 s clip at about 2 minutes. Mux re-encodes everything anyway, and its own top rendition for these clips was 2.9 to 3.5 Mbps, so uploading 7.5 Mbps is wasted bytes. Round 2 tests `videoBitrate` at 4 and 2 Mbps and 720p.
-- **Upload path goes to the USA.** Every direct-upload URL pointed at `direct-uploads-oci-us-phoenix-1` or `us-ashburn-1`. Mux does not offer a regional upload endpoint. Throughput of 1.8 to 7.6 Mbps from Bali is consistent with a single TCP connection over about 200 ms of latency. The first mint call took 7.7 s (Edge Function cold start plus Mux API); later mints took 1.3 to 1.9 s.
-- **Mux processing is not a problem.** Upload-finished to playable was 1.6 to 1.7 s on every run with the free `basic` quality level.
-- **Playback starts slowly.** First frame was 2.8 to 5.4 s on both 4G and 5G, and an immediate replay of run 7 (segments already at the CDN edge) was no faster (3.5 then 3.6 s). The player also always started on the lowest rendition (270x480) and stepped up. That points at AVPlayer's default start-up behaviour (`waitsToMinimizeStalling`) rather than the network. Round 2 compares the default against a fast-start buffer setting. Either way the product will preload the next clip, which this spike does not do.
-- **One real stall.** Run 1 stalled for 19 s at its first loop boundary, right after the player switched up to the 1080p rendition. That was the first ever playback of a just-ready asset; the higher renditions may not have been fully available yet. No other run stalled.
-- **Manifests are served from Fastly** (`manifest-oci-us-*.fastly.mux.com`), so repeat views by other people hit the CDN edge.
-- **Run 7 note.** Three upload attempts appear for one file with no failure between them. The run was killed mid-upload (checklist step 15), reopened, and Retry was tapped while a previous attempt was still running in the background, so two uploads of the same file ran at once and both succeeded. That is a spike UI gap, now guarded, not a Mux or network failure.
-- **Not yet exercised in round 1:** the airplane-mode failure path, Re-record from preview, light on either camera, 720p.
+First frame = player created to first timed frame with a non-zero position. "Cold" = first ever play of that asset. "Warm" = any later play.
 
-**Round 2, 6 Oct 2026.** Back camera, light, zoom, encoder bitrate, failure cases. Log: `logs/spike-export-2026-10-06T06-41-21-167Z.jsonl` (contains round 1 as well). Runs 8 to 15 below.
+| Condition | n | First frame ms, median | Range |
+|---|---|---|---|
+| Cold, default player | 18 | 4,500 | 2,789 to 5,827 |
+| Warm, default player | 3 | 1,365 | 1,365 to 3,642 |
+| Warm, `nowait` (waitsToMinimizeStalling off, play on ready) | 3 | 1,799 | 1,436 to 3,199 |
+| Warm, `smallbuffer` (preferredForwardBufferDuration 1 s) | 4 | 1,594 | 1,205 to 1,705 |
 
-| # | Camera | Encoder | Dur s | File MB | Recorded kbps | Net | Upload s | Upload Mbps | Attempts | Mux ready s | First frame ms | Stalls ≥250 ms |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 8 | front | default | 3.4 | 3.38 | 8035 | 5G | 6.5 | 4.1 | 1 | 1.6 | 4513 | 0 |
-| 9 | back | default | 8.9 | 8.52 | 7631 | 5G | 8.0 | 8.5 | 1 | 1.6 | 4841 | 0 |
-| 10 | back | default | 20.5 | 19.84 | 7742 | 5G | 16.7 | 9.5 | 1 after 3 failures (Mux asset cap) | 1.6 | 4412 | 0 |
-| 11 | front | default | 2.7 | 2.64 | 7729 | – | re-recorded, never posted | – | – | – | – | – |
-| 12 | front | default | 1.5 | 1.52 | 7918 | 4G | 7.9 | 1.5 | 1 | 1.7 | 3007 | 0 |
-| 13 | back, zoom 0.1 | default | 29.9 | 28.53 | 7634 | 5G | 17.3 | 13.2 | 1 | 4.8 | 5187 | 0 |
-| 14 | front | 4 Mbps | 30.0 | 15.52 | 4137 | 5G | 14.2 | 8.8 | 1 | 4.8 | not played (asset cap hit) | – |
-| 15 | front | 2 Mbps | 30.0 | 8.01 | 2135 | 5G | 22.6 | 2.8 | 1 | 1.6 | 4584 | 0 |
+Stalls of 250 ms or longer: 1 in 31 playbacks (19 s, run 1, at the first loop boundary of a just-ready asset, right after the player switched up to the 1080p rendition). Loop-boundary status flickers of 3 to 10 ms: 15, none visible. Playback errors: 0. Cold plays always started on the 270x480 rendition and stepped up; warm plays started at 480p or 720p.
 
-Two more clips were rejected as too short (1.1 s and 0.9 s) with the message, and one was discarded with Re-record.
+## 3. Findings
 
-**What round 2 adds**
+**Recording with expo-camera**
 
-- **Back camera records.** After the Flip fix the back camera recorded three clips including a full 30 s one. The file is encoded 1920x1080 with a rotation flag; Mux normalises it to a 1080x1920 portrait asset, so playback is correct.
-- **Encoder bitrate works and matters.** `videoBitrate` with the `avc1` codec is honoured: 30 s clips came out at 7.6 Mbps (default, 28.5 MB), 4.1 Mbps (15.5 MB) and 2.1 Mbps (8.0 MB). Nemat saw no visible quality loss in the 2 Mbps preview. Mux's own top rendition for these clips is about 3 Mbps, so an encoder setting around 2 to 3 Mbps cuts upload size by 3 to 4× with nothing lost after transcoding. This is the main lever for Bali 4G.
-- **Upload throughput varied from 1.5 to 13 Mbps on the same phone within 30 minutes.** The 4G runs sat at 1.5 to 2.1 Mbps. At 2 Mbps a 2 Mbps-encoded 30 s clip uploads in about 30 s; a default-encoded one takes about 2 minutes.
-- **Light.** Front: the torch toggle does nothing, as expected; the iPhone front camera has no torch. The product's front "light" has to be a screen fill, which is UI work, not a camera-library question. Back: the torch was not tested in round 2 because the asset cap interrupted the sequence; retest in round 3.
-- **Zoom.** expo-camera maps `zoom` exponentially: `videoZoomFactor = maxZoom ^ zoom` on the selected device, where zoom 0 is factor 1.0. The default back device is the wide camera, so zoom 0 is the native 1× and 0.1 and 0.25 are roughly 1.3× and 2×. Nemat described 0 as the widest view, 0.1 as "normal" and 0.25 as "about 2×", which matches. For the spec's fixed 1× the product sets `zoom={0}` and pins `selectedLens` to the wide camera, which round 3 does explicitly.
-- **Failure path worked as designed.** When Mux refused new uploads (free plan, 10-asset cap) the app made 3 automatic attempts with 2, 4 and 8 s backoff, kept the recording, showed the SPEC 19 banner, and a manual Retry later posted the same file. Re-record deleted the clip and its run. The airplane-mode case still has to be run.
-- **Playback first frame is still 3 to 5 s** on every run (median 4.4 s over 14 playbacks) regardless of network and regardless of whether the segments were already cached. A first fast-start attempt (`waitsToMinimizeStalling=false` with `play()` called immediately) produced no picture at all within 8 to 10 s on two clips; that combination is known to stall AVPlayer when play is called before the item is ready. Round 3 tests two safer variants and also measures first frame on the local preview file, which separates player start-up from network cost.
-- **Mux processing** stayed at 1.6 s for short clips and 4.8 s for the two 30 s clips.
-- **Controls during recording.** Flip and quality were disabled while recording in rounds 1 to 3. Nemat decided on 6 Oct that flipping the camera must work during recording. Round 4 tests what expo-camera does when `facing` changes mid-recording.
+- Output is true vertical 1080x1920 at 30 fps with sound. The back camera encodes 1920x1080 with a rotation flag; Mux normalises both to a 1080x1920 asset.
+- The library default on this iPhone is **HEVC (`hvc1`) at about 7.5 Mbps**. Setting `videoBitrate` requires a codec and the spike used `avc1`; 4 Mbps and 2 Mbps were honoured within 5 %. H.264 is the safer choice for Android and the web player anyway.
+- The 30 s ceiling stops the recording itself at 29.9 s; the 2 s floor is enforced in the app.
+- **Light:** back torch works, but expo-camera drops it when recording starts; re-applying it 0.7 s after start keeps it on (confirmed by Nemat, run 22). The front camera has no torch on any iPhone, so the spec's front "light" has to be a screen fill in the product. That is UI, not a camera-library matter.
+- **Zoom:** `zoom` is exponential (`videoZoomFactor = maxZoom ^ zoom`) on the selected device. With the lens pinned to the wide camera, zoom 0 is the native 1×. Nemat's "zoom 0 looks like 4×" was the spike's button showing the next value while the camera sat at 0.25; the screenshot confirms it. For the spec's fixed 1×, use `zoom={0}` and `selectedLens` on the wide camera.
+- **Camera flip during recording** (added by Nemat on 6 Oct, `docs/DECISIONS.md`): changing `facing` ends the recording. In run 21 the flip at 4.9 s resolved `recordAsync` 0.5 s later with a 4.2 s front-only clip. expo-camera fails this requirement.
+- Flip before recording works after the spike's own ready-state bug was fixed; the camera switches in under a second.
 
-**Round 3, 6 Oct 2026.** Playback start strategies, torch, zoom, airplane mode. Log: `logs/spike-export-2026-10-06T07-03-27-726Z.jsonl` (contains rounds 1 and 2 as well). Runs 16 to 20.
+**Upload to Mux**
 
-| # | Camera | Encoder | Dur s | File MB | Recorded kbps | Net | Upload s | Attempts | Mux ready s | First frame ms by mode |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 16 | back, torch on | default | 5.0 | 4.98 | 8021 | 5G | 5.0 | 1 | 1.6 | default 5827 (first play) |
-| 17 | back, zoom 0.25 | default | 6.1 | 6.12 | 8070 | 5G | 13.0 | 1 | 1.7 | default 4642 (first play); nowait 1799; smallbuffer 1594 |
-| 18 | front, 720p | 2 Mbps | 16.1 | 3.99 | 1988 | 5G | 9.6 | 1 | 1.7 | smallbuffer 1705 (first play); default 1365; nowait 1436; smallbuffer 1205 |
-| 19 | front | 2 Mbps | 5.5 | 1.39 | 2031 | airplane, then Wi-Fi | 4.5 | 1 after 3 offline failures | 1.6 | default 4796 (first play) |
-| 20 | front | 2 Mbps | 5.0 | 1.29 | 2078 | Wi-Fi | 4.1 | 1 | 1.6 | default 3688 (first play) |
+- Direct-upload URLs always pointed at a US endpoint (`direct-uploads-oci-us-phoenix-1` or `us-ashburn-1`); Mux has no regional ingest. Single-connection throughput from Bali was 1.5 to 13 Mbps, 4G runs at 1.5 to 2.1 Mbps.
+- **Encoder bitrate is the lever.** At the default 7.5 Mbps a 30 s response is 29 MB (30 s on good 5G, about 2 minutes at 2 Mbps). At 2 Mbps it is 8 MB; Nemat saw no visible loss in the preview, and Mux's own top rendition for these clips is about 3 Mbps, so nothing survives transcoding anyway.
+- Minting the URL costs 1.2 to 2.4 s per upload (Edge Function in Singapore calling Mux in the US), 7.7 s on the first cold start. The product should mint the URL while the person is still on the post-review screen.
+- No mid-transfer failure in 21 uploads. All failure paths exercised worked as SPEC 19 describes: airplane mode (3 immediate failures, banner, Retry succeeded), app killed at 30 % (reopened, banner, Retry re-uploaded the whole file), Mux refusing uploads (3 retries with backoff, banner, later Retry succeeded). A killed upload restarts from zero; resumable upload was not needed on this evidence.
+- **Mux processing** is 1.6 s to playable for clips up to 20 s and 4.8 s for three of the 30 s clips, with the free `basic` quality level.
 
-Runs 19 and 20 uploaded over Wi-Fi: turning airplane mode off re-enabled Wi-Fi. Their upload numbers are not mobile-data numbers.
+**Playback with expo-video**
 
-**What round 3 adds**
+- The slow start is the **first view of each asset**, median 4.5 s, starting on the lowest rendition. Later views are 1.2 to 1.8 s whatever the settings. Mux marks the asset ready before its renditions are fully prepared and cached, so the author's own first play after posting and the first viewer of any fresh response pay for it. Mitigation is product-side: fetch the manifest and first segment server-side right after `ready`, or accept that only the first viewer waits.
+- A 1 s forward buffer (`smallbuffer`) was the fastest start in every direct comparison, by 200 to 400 ms. Turning off `waitsToMinimizeStalling` only works if `play()` waits for `readyToPlay`; calling play immediately shows nothing.
+- Looping with sound works; the sequence player with `replaceAsync` works. The spike does not preload the next clip; the product will, which hides most of the warm-start 1.5 s.
+- Manifests and segments are served from Fastly, so views after the first are edge-cached.
 
-- **The slow start is the first play of each asset, not the player.** Every first play of a fresh asset took 3.7 to 5.8 s and began on the lowest rendition. Every later play of the same asset took 1.2 to 1.8 s whatever the mode. The pattern across all 28 playbacks: cold first view, median about 4.4 s; warm view, median about 1.5 s. Mux marks an asset ready after 1.6 s but the first viewer pays for rendition preparation and CDN fill. For Shortcut this means the author's own first play after posting is slow, and the first viewer of any fresh response is slow, while everyone after that gets about 1.5 s. The 19 s stall in run 1 was the same effect at the first loop boundary.
-- **Fast-start modes.** `smallbuffer` (preferredForwardBufferDuration 1 s) was the fastest in every pair, by 200 to 400 ms: 1205 and 1594 ms against 1365 to 1799 ms for the others. `nowait` with play deferred until ready works and is roughly equal to the default. The round-2 variant that called play before ready never showed a picture and is ruled out. Nemat's observation matched: smallbuffer fastest, default "loading so late" on first plays.
-- **Torch.** The back torch was on before recording and went off when recording started (run 16, logged with torch true). expo-camera reconfigures the session at record start and loses the torch. Round 4 re-applies it 0.7 s after start; if that is not enough it is a documented expo-camera failure for the spec's "light" control.
-- **Zoom 0 framing is still disputed.** By expo-camera's code zoom 0 is `videoZoomFactor` 1.0 on the wide camera. Nemat reports zoom 0 looks much tighter than the Camera app at 1×. Two screenshots of the same scene will settle it; pending.
-- **Quality button.** Nemat selected 1080p but run 18 recorded 720p: the button showed the next value rather than the current one. Spike UI only; fixed.
-- **Airplane mode.** Three attempts failed immediately with "The Internet connection appears to be offline", the recording stayed on the phone with the banner, and Retry after reconnecting posted it in 4.5 s. SPEC 19 behaviour holds.
-- **Back during upload.** Leaving the upload screen keeps the upload running and it completes. The spike then showed the failure banner for a run that was still uploading, and Retry on it produced an "already uploading" error. Spike UI only; fixed.
-- **Local preview baseline** was not captured: Post was tapped within 2 s of the preview opening, before the first timed frame. Not worth another round; the warm-play numbers already isolate the network cost.
+## 4. Cost per 1,000 minutes (Mux)
 
-### Mid-range Android, Bali 4G
-
-**Pending. No device available.** The build is Android-compatible (`app.json` has the Android package, permissions and adaptive icon; no iOS-only API is used) but has not been built or run on Android. An emulator would not give real camera, encoder or network numbers, so none was used.
-
-## Cost per 1,000 minutes (Mux)
-
-Source: https://www.mux.com/pricing and https://www.mux.com/docs/guides/use-video-quality-levels, read 6 Oct 2026. First-tier pay-as-you-go rates; the page says rates can change and that committed pricing applies above about $3,000/month.
+Source: https://www.mux.com/pricing and https://www.mux.com/docs/guides/use-video-quality-levels, read 6 Oct 2026. First-tier pay-as-you-go rates; the page says rates can change and that committed pricing applies above about $3,000 a month. No Cloudflare or Supabase pricing was gathered because those escalations did not fire.
 
 | Item | Published rate | Per 1,000 minutes |
 |---|---|---|
-| Encoding, `basic` quality (what the spike uses) | free | $0 |
+| Encoding, `basic` quality (what the spike used) | free | $0 |
 | Encoding, `plus` quality | $0.03125 / min | $31.25 |
-| Storage | $0.00300 / min / month | $3.00 / month |
-| Delivery (watched) | $0.00100 / min after 100,000 free minutes / month | $1.00, and $0 while under the free allowance |
+| Storage | $0.00300 / min / month | $3.00 a month |
+| Delivery (watched) | $0.00100 / min after 100,000 free minutes a month | $1.00, and $0 while under the free allowance |
 
-Notes:
-- Mux bills by minutes, not by file size or renditions, and stores one encoded version per asset.
-- `basic` uses a reduced encoding ladder with a lower target quality; `plus` adds per-title encoding. The spike uploads with `basic`. Whether `basic` looks good enough on a phone is a judgement from the runs below.
-- A pay-as-you-go account gets a $20 monthly usage credit and 100,000 free delivery minutes a month.
-- Estimate for the beta (flagged as an estimate): 500 members × 3 responses a week × 20 s ≈ 500 stored minutes a week, ≈ 2,000 minutes a month, so storage ≈ $6 a month after the first month and delivery inside the free allowance until watched minutes exceed 100,000 a month.
+- Mux bills by minutes, not file size or renditions, and stores one encoded version per asset.
+- The free plan is capped at 10 assets, which the spike hit twice. Pay-as-you-go lifts the cap and includes a $20 monthly usage credit.
+- **Estimate for the beta** (flagged as an estimate): 500 members × 3 responses a week × 20 s ≈ 500 stored minutes a week, about 2,000 minutes a month, so storage grows by about $6 a month per month of content, and delivery stays inside the free allowance until watched minutes exceed 100,000 a month (about 300,000 views of 20 s). On these numbers Mux is not a cost concern for the beta.
 
-## Front-camera quality notes
+## 5. Front-camera quality notes
 
-_Pending._
+- 1080x1920, 30 fps, HEVC by default, H.264 when a bitrate is set. The TrueDepth and ultra-wide front lenses are reported and selectable.
+- Nemat saw no visible difference between the default and 2 Mbps H.264 in the preview; 720p at 2 Mbps was not judged separately.
+- Mux `basic` top rendition came out at 2.9 to 3.5 Mbps for 1080p; cold views start at 270p and step up within a few seconds, which is visible on the first play of a fresh clip.
+- Not measured: low-light front-camera quality, and front-camera quality on Android.
 
-## Upload behaviour on bad networks
+## 6. Upload behaviour on bad networks
 
-_Pending._
+- 4G throughput was 1.5 to 2.1 Mbps on this phone in this location; real Bali 4G on a mid-range Android may be worse. At 2 Mbps a 2 Mbps-encoded 30 s clip takes about 30 s to upload; the default encoder takes about 2 minutes.
+- Offline: fails immediately, recording kept, banner shown, Retry works after reconnecting. Turning airplane mode off re-enables Wi-Fi, so two late runs uploaded over Wi-Fi; they are marked in the table.
+- Killed mid-upload: recording kept, re-uploaded from zero on Retry. No partial resume. If Android shows frequent mid-transfer failures, Mux's resumable upload (`UpChunk`-style chunked PUT to the same URL) is the next step; it was not needed on iPhone.
+- No mid-transfer failures in 21 uploads.
 
-## Escalation rules
+## 7. Escalation rules
 
-| Rule | Fired? | Evidence |
+| Rule | Fired? | Evidence and recommendation |
 |---|---|---|
-| VisionCamera if expo-camera fails a documented requirement | pending | |
-| Cloudflare Stream if Mux fails a requirement or cost is unsuitable | pending | |
-| Supabase Storage + own transcoding if managed hosting is economically unacceptable | pending | |
+| VisionCamera if expo-camera fails a documented requirement | **Yes, for one requirement:** camera flip during recording (Nemat, 6 Oct). expo-camera ends the recording on flip (run 21). | VisionCamera flips mid-recording on iOS but not on Android, where the recording fails (VisionCamera issues 1805 and 1296). So a VisionCamera round would not change the product design: a cross-platform mid-recording flip needs the app to record segments and stitch them (AVFoundation on iOS, MediaMuxer on Android) with either library. Recommendation: do not spend a spike round on VisionCamera for this; decide the stitching approach in phase 3 instead. Nemat's call. Every other recording requirement in the spec passed. |
+| Cloudflare Stream if Mux fails a requirement or cost is unsuitable | No | Mux met upload, processing and playback requirements. Cost is in section 4. |
+| Supabase Storage + own transcoding if managed hosting is economically unacceptable | No | Managed hosting is a few dollars a month at beta scale. |
 
-## Recommendation
+## 8. Android: pending
 
-_Pending until the iPhone runs are in. The cross-platform gate cannot be called passed until a real mid-range Android is tested._
+Not tested on any Android device. The app targets Android (package, permissions, adaptive icon, `expo-camera` and `expo-video` support both platforms) but has not been built for it. When a mid-range Android is available: build with `npm run android:release`, run the same checklist on Bali 4G, and add the results here. The questions that most need Android answers: encoder output and bitrate control on that phone's hardware encoder, torch behaviour, upload throughput and failure rate on 4G, and ExoPlayer first-frame timing. Until then this report supports a provider decision for iPhone only.
+
+## 9. Recommendation
+
+**Provider: Mux.** On iPhone it met every upload, processing and playback requirement with no failures, processing is near-instant, pricing is immaterial at beta scale, and the one weak number (4.5 s cold first view) is a known property of just-in-time rendition preparation that the product can hide by pre-warming assets after `ready`. The honest trade-offs: ingest is US-only, so upload time is bounded by the Bali-to-US path; the author's first play after posting will be slow unless pre-warmed; and the free plan is unusable beyond 10 assets, so the beta needs a card on file.
+
+**Camera library: expo-camera, on the evidence so far.** It records to spec (vertical 1080p with sound, 30 s limit, back torch with a re-apply, native 1× zoom), has bitrate control, and is maintained by Expo. It fails the mid-recording flip, but so would VisionCamera on Android, and the fix (segment stitching) is the same for both. If Nemat wants the VisionCamera round anyway, it is a day's work.
+
+**Conditions the product must carry into phase 3, regardless of the final choice:**
+
+1. Record H.264 at about 2 to 3 Mbps, 1080p. Not the library default.
+2. Mint the Mux upload URL while the person is on the post-review screen, not when they tap Post.
+3. Pre-warm each asset once it is `ready`, and preload the next clip in Home and the response player.
+4. Use a 1 s forward buffer on iOS.
+5. Front "light" is a screen fill; back light is the torch, re-applied after recording starts.
+6. Camera flip during recording means segment recording plus stitching; design it in phase 3.
+
+**Gate 1 status:** the iPhone evidence supports Mux + expo-camera. The gate is not passed until a real mid-range Android has run the same checklist over Bali 4G. Nemat makes the call and records it in `docs/DECISIONS.md`.
