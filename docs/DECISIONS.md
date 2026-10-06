@@ -5,6 +5,7 @@ Gate decisions belong to Nemat. Claude Code records them here once they are made
 | Date | Decision | By | Evidence |
 |---|---|---|---|
 | 2026-10-05 | v1 spec locked (rev 110); A1 Native canvas final (version 26, 86 boards) | Nemat | `SPEC.md`, `design/` |
+| 2026-10-06 | Camera flip must work while recording, not only before it. Clarifies SPEC.md Section 6 "camera flip" control. Needs a spec edit at the next revision. | Nemat | Said during the phase 1 spike; `spike/REPORT.md` |
 
 ## Gates (SPEC.md Section 23)
 

@@ -26,6 +26,7 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
   const [msg, setMsg] = useState<string | null>(null);
   const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const currentRunId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!camPerm?.granted) requestCam();
@@ -50,12 +51,15 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
     const quality = QUALITIES[qualityIdx];
     const zoom = ZOOMS[zoomIdx];
     const runId = newRunId();
+    currentRunId.current = runId;
     try {
       // maxDuration enforces the 30 s ceiling natively; the 2 s floor is enforced below.
+      if (torch) { setTimeout(() => { setTorch(false); setTimeout(() => { setTorch(true); log('note', { kind: 'torch_reapplied' }, runId); }, 150); }, 700); }
       const result = await cam.current.recordAsync({ maxDuration: MAX_DURATION_S, ...(settings.videoBitrate ? { codec: 'avc1' as const } : {}) });
       const stoppedAt = Date.now();
       if (timer.current) clearInterval(timer.current);
       setRecording(false);
+      log('note', { kind: 'record_resolved', wallMs: stoppedAt - startedAt.current, hasUri: !!result?.uri, facingNow: facing }, runId);
       if (!result?.uri) throw new Error('no uri from recordAsync');
       const wallMs = stoppedAt - startedAt.current;
       const src = new File(result.uri);
@@ -130,10 +134,10 @@ export function RecordScreen({ onRecorded, onCancel }: { onRecorded: (run: Run) 
       </View>
       <View style={s.overlayBottom}>
         <Row>
-          <Button small title="Flip" disabled={recording} onPress={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))} />
+          <Button small title="Flip" onPress={() => { if (recording) log('note', { kind: 'flip_while_recording', from: facing, elapsedMs: Date.now() - startedAt.current }, currentRunId.current ?? undefined); setFacing((f) => (f === 'front' ? 'back' : 'front')); }} />
           <Button small title={`Light ${torch ? 'off' : 'on'}`} onPress={() => setTorch((t) => !t)} />
           <Button small title={`Zoom ${ZOOMS[(zoomIdx + 1) % ZOOMS.length]}`} onPress={() => setZoomIdx((i) => (i + 1) % ZOOMS.length)} />
-          <Button small title={QUALITIES[(qualityIdx + 1) % QUALITIES.length]} disabled={recording} onPress={() => setQualityIdx((i) => (i + 1) % QUALITIES.length)} />
+          <Button small title={`Quality: ${QUALITIES[qualityIdx]}`} disabled={recording} onPress={() => setQualityIdx((i) => (i + 1) % QUALITIES.length)} />
         </Row>
         {recording ? <Button danger title="Stop" onPress={stop} /> : <Button title={ready ? 'Record' : 'Camera starting…'} disabled={!ready} onPress={start} />}
         {!recording ? <Button small title="Cancel" onPress={onCancel} /> : null}

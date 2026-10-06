@@ -47,7 +47,8 @@ export function HomeScreen({ onRecord, onRetry, onPlay, onSequence }: { onRecord
       </Row>
       <Button small danger title={`Free Mux slots (delete ${ready.length} ready assets on Mux, keep the log)`} disabled={!ready.length} onPress={() => Alert.alert('Delete all assets on Mux?', 'Measurements stay in the log. The clips can no longer be played.', [{ text: 'Cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { try { const r = await deleteAssets(); log('note', { kind: 'mux_assets_deleted', count: r.deleted }); saveRuns(runs.map((x) => (x.status === 'ready' ? { ...x, status: 'errored' as const, uploadError: 'deleted on Mux to free a slot' } : x))); refresh(); Alert.alert('Deleted', `${r.deleted} assets removed on Mux.`); } catch (e) { Alert.alert('Delete failed', String(e)); } } }])} />
 
-      {pending.length ? <Text style={[s.text, { color: '#fc6', marginTop: 8 }]}>Your response didn't post. It's saved on this phone. Check your connection.</Text> : null}
+      {pending.some((r) => r.status !== 'uploading' || !isUploading(r.runId)) ? <Text style={[s.text, { color: '#fc6', marginTop: 8 }]}>Your response didn't post. It's saved on this phone. Check your connection.</Text> : null}
+      {pending.some((r) => isUploading(r.runId)) ? <Text style={[s.text, { color: '#6cf', marginTop: 8 }]}>Still uploading in the background. Tap Refresh in a moment.</Text> : null}
       {pending.map((r) => (
         <View key={r.runId} style={{ borderColor: '#444', borderWidth: 1, borderRadius: 10, padding: 10, gap: 6 }}>
           <Text style={s.text}>{r.label} · {r.status} · attempts {r.uploadAttempts}</Text>

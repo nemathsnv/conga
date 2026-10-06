@@ -29,7 +29,9 @@ export function UploadScreen({ run: initial, onDone, onBack }: { run: Run; onDon
       onDone(done);
     } catch (e) {
       setBusy(false);
-      setError(e instanceof Error ? e.message : String(e));
+      const m = e instanceof Error ? e.message : String(e);
+      if (m.includes('already uploading')) { setLines((l) => [...l, 'This recording is still uploading in the background. Go Back and Refresh.']); return; }
+      setError(m);
     }
   }
 

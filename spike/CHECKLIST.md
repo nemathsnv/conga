@@ -6,7 +6,18 @@ Do this alone, on **mobile data with Wi-Fi off**. Each line is one tap unless it
 
 ## Round 2 (done 6 Oct 2026). See REPORT.md.
 
-## Round 3
+## Round 3 (done 6 Oct 2026). See REPORT.md.
+
+## Round 4 (short)
+
+New build. Flip is now enabled during recording. The quality button shows the current value.
+
+1. **Flip while recording**: front camera, Record, after 3 s tap **Flip**, keep going 3 s, Stop. Say in chat what happened: did the preview switch, did the recording stop by itself, did the clip in Preview contain both cameras?
+2. **Torch**: back camera, **Light on**, Record 5 s. Say whether the torch stayed on for the whole recording (it is re-applied automatically 0.7 s after start).
+3. **Zoom 0 screenshots**: back camera, zoom 0, take an iPhone screenshot of the spike. Open the Camera app at 1×, same scene, screenshot. AirDrop both to the Mac or describe the difference.
+4. **Export log** → AirDrop into `spike/logs/`. Tell Claude the file name.
+
+## Round 3 steps (for reference)
 
 New build. **Fast start** now cycles off / nowait / smallbuffer. Home has **Free Mux slots** to delete all assets on Mux when the 10-asset cap hits; measurements stay in the log.
 

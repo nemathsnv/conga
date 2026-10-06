@@ -1,6 +1,6 @@
 # Phase 1 video spike: report
 
-**Status: in progress.** iPhone rounds 1 and 2 done (15 recordings, 14 uploads). Round 3 pending: playback fast-start variants, local-preview baseline, airplane-mode failure. Android real-device validation pending (no Android phone available on 6 Oct 2026).
+**Status: in progress.** iPhone rounds 1 to 3 done (20 recordings, 19 uploads, 28 playbacks). Round 4 pending: camera flip during recording, torch persistence, zoom-0 framing. Android real-device validation pending (no Android phone available on 6 Oct 2026).
 
 **Question:** can `expo-camera` + Mux direct upload + Mux HLS playback satisfy Shortcut's recording, upload and playback requirements (SPEC.md Sections 2, 6, 19) on a real iPhone and a mid-range Android over normal mobile data?
 
@@ -81,7 +81,30 @@ Two more clips were rejected as too short (1.1 s and 0.9 s) with the message, an
 - **Failure path worked as designed.** When Mux refused new uploads (free plan, 10-asset cap) the app made 3 automatic attempts with 2, 4 and 8 s backoff, kept the recording, showed the SPEC 19 banner, and a manual Retry later posted the same file. Re-record deleted the clip and its run. The airplane-mode case still has to be run.
 - **Playback first frame is still 3 to 5 s** on every run (median 4.4 s over 14 playbacks) regardless of network and regardless of whether the segments were already cached. A first fast-start attempt (`waitsToMinimizeStalling=false` with `play()` called immediately) produced no picture at all within 8 to 10 s on two clips; that combination is known to stall AVPlayer when play is called before the item is ready. Round 3 tests two safer variants and also measures first frame on the local preview file, which separates player start-up from network cost.
 - **Mux processing** stayed at 1.6 s for short clips and 4.8 s for the two 30 s clips.
-- **Controls during recording.** Flip and quality are disabled while recording in the spike by design. SPEC.md Section 6 lists flip as a control but does not say it must work mid-recording. Nemat to decide; it is possible with expo-camera but restarts the capture session.
+- **Controls during recording.** Flip and quality were disabled while recording in rounds 1 to 3. Nemat decided on 6 Oct that flipping the camera must work during recording. Round 4 tests what expo-camera does when `facing` changes mid-recording.
+
+**Round 3, 6 Oct 2026.** Playback start strategies, torch, zoom, airplane mode. Log: `logs/spike-export-2026-10-06T07-03-27-726Z.jsonl` (contains rounds 1 and 2 as well). Runs 16 to 20.
+
+| # | Camera | Encoder | Dur s | File MB | Recorded kbps | Net | Upload s | Attempts | Mux ready s | First frame ms by mode |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 16 | back, torch on | default | 5.0 | 4.98 | 8021 | 5G | 5.0 | 1 | 1.6 | default 5827 (first play) |
+| 17 | back, zoom 0.25 | default | 6.1 | 6.12 | 8070 | 5G | 13.0 | 1 | 1.7 | default 4642 (first play); nowait 1799; smallbuffer 1594 |
+| 18 | front, 720p | 2 Mbps | 16.1 | 3.99 | 1988 | 5G | 9.6 | 1 | 1.7 | smallbuffer 1705 (first play); default 1365; nowait 1436; smallbuffer 1205 |
+| 19 | front | 2 Mbps | 5.5 | 1.39 | 2031 | airplane, then Wi-Fi | 4.5 | 1 after 3 offline failures | 1.6 | default 4796 (first play) |
+| 20 | front | 2 Mbps | 5.0 | 1.29 | 2078 | Wi-Fi | 4.1 | 1 | 1.6 | default 3688 (first play) |
+
+Runs 19 and 20 uploaded over Wi-Fi: turning airplane mode off re-enabled Wi-Fi. Their upload numbers are not mobile-data numbers.
+
+**What round 3 adds**
+
+- **The slow start is the first play of each asset, not the player.** Every first play of a fresh asset took 3.7 to 5.8 s and began on the lowest rendition. Every later play of the same asset took 1.2 to 1.8 s whatever the mode. The pattern across all 28 playbacks: cold first view, median about 4.4 s; warm view, median about 1.5 s. Mux marks an asset ready after 1.6 s but the first viewer pays for rendition preparation and CDN fill. For Shortcut this means the author's own first play after posting is slow, and the first viewer of any fresh response is slow, while everyone after that gets about 1.5 s. The 19 s stall in run 1 was the same effect at the first loop boundary.
+- **Fast-start modes.** `smallbuffer` (preferredForwardBufferDuration 1 s) was the fastest in every pair, by 200 to 400 ms: 1205 and 1594 ms against 1365 to 1799 ms for the others. `nowait` with play deferred until ready works and is roughly equal to the default. The round-2 variant that called play before ready never showed a picture and is ruled out. Nemat's observation matched: smallbuffer fastest, default "loading so late" on first plays.
+- **Torch.** The back torch was on before recording and went off when recording started (run 16, logged with torch true). expo-camera reconfigures the session at record start and loses the torch. Round 4 re-applies it 0.7 s after start; if that is not enough it is a documented expo-camera failure for the spec's "light" control.
+- **Zoom 0 framing is still disputed.** By expo-camera's code zoom 0 is `videoZoomFactor` 1.0 on the wide camera. Nemat reports zoom 0 looks much tighter than the Camera app at 1×. Two screenshots of the same scene will settle it; pending.
+- **Quality button.** Nemat selected 1080p but run 18 recorded 720p: the button showed the next value rather than the current one. Spike UI only; fixed.
+- **Airplane mode.** Three attempts failed immediately with "The Internet connection appears to be offline", the recording stayed on the phone with the banner, and Retry after reconnecting posted it in 4.5 s. SPEC 19 behaviour holds.
+- **Back during upload.** Leaving the upload screen keeps the upload running and it completes. The spike then showed the failure banner for a run that was still uploading, and Retry on it produced an "already uploading" error. Spike UI only; fixed.
+- **Local preview baseline** was not captured: Post was tapped within 2 s of the preview opening, before the first timed frame. Not worth another round; the warm-play numbers already isolate the network cost.
 
 ### Mid-range Android, Bali 4G
 
