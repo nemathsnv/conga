@@ -39,3 +39,30 @@ insert into public.follows (follower_id, followee_id) values
   ('d0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001'),
   ('d0000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000001'),
   ('d0000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000001');
+
+-- Phase 4 development data: video replies in Adam's room (reusing spike assets), comments,
+-- likes. Activity rows come from the triggers. The dev session user (whoever signs in locally)
+-- sees these on other people's videos.
+insert into public.responses (kind, prompt_id, root_response_id, reply_to_id, author_id, caption, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at)
+select 'reply', root.prompt_id, root.id, root.id, x.author, x.caption, x.ms, 'live', 'dev-reply-' || x.n, 'dev-reply-asset-' || x.n, x.pb, now() - (x.n * 20 || ' minutes')::interval
+  from public.responses root
+  join (values
+    (1, 'd0000000-0000-0000-0000-000000000003'::uuid, '7am is my whole personality now.', 5000, 'KzVFN00qaTnMZ6AKekYhpNO00fwhdq53hV6Ng7Mb00StrA'),
+    (2, 'd0000000-0000-0000-0000-000000000004'::uuid, 'Grew up there. Here''s the path nobody uses.', 5500, '9bGocWUSbCthCSr7y2OfPLejY5gidOWZXYaijkfKic8')
+  ) as x(n, author, caption, ms, pb) on true
+ where root.mux_upload_id = 'dev-2';
+-- Maya replies to Sofia's reply (a reply to a reply, flat in Adam's room).
+insert into public.responses (kind, prompt_id, root_response_id, reply_to_id, author_id, caption, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at)
+select 'reply', root.prompt_id, root.id, sofia.id, 'd0000000-0000-0000-0000-000000000001', 'Respectfully, 7am is when I go to sleep.', 3600, 'live', 'dev-reply-3', 'dev-reply-asset-3', '25Vygqw8O8RgkH6nYYN7wFiX002mo01keZAL5EAj7eHfE', now() - interval '10 minutes'
+  from public.responses root join public.responses sofia on sofia.mux_upload_id = 'dev-reply-1'
+ where root.mux_upload_id = 'dev-2';
+insert into public.comments (response_id, author_id, body, created_at)
+select id, 'd0000000-0000-0000-0000-000000000004', 'Pererenan at sunrise, yes. Nobody believes me until they go.', now() - interval '1 hour' from public.responses where mux_upload_id = 'dev-2';
+insert into public.comments (response_id, author_id, parent_id, body, created_at)
+select c.response_id, 'd0000000-0000-0000-0000-000000000002', c.id, 'Bring a jacket, it''s colder than you think at 6.', now() - interval '48 minutes'
+  from public.comments c where c.body like 'Pererenan%';
+insert into public.comments (response_id, author_id, body, created_at)
+select id, 'd0000000-0000-0000-0000-000000000003', 'The rice fields are disappearing though. Go while you can.', now() - interval '32 minutes' from public.responses where mux_upload_id = 'dev-2';
+insert into public.likes (user_id, target_kind, target_id)
+select u.id, 'video', r.id from public.responses r cross join (values ('d0000000-0000-0000-0000-000000000001'::uuid), ('d0000000-0000-0000-0000-000000000003'::uuid), ('d0000000-0000-0000-0000-000000000004'::uuid)) u(id)
+ where r.mux_upload_id in ('dev-2', 'dev-reply-1') and u.id <> r.author_id;

@@ -41,3 +41,25 @@ label says "unavailable while recording", and nothing else on the screen pretend
 
 **Check.** On a real iPhone and a real Android phone: record, flip twice mid-take, stop, review plays
 one continuous clip with sound across the joins, post, and the live response plays the same clip.
+
+## B-2 · Push delivery credentials (phase 4, open)
+
+**Requirement.** Push notifications for replies, comments, follows and prompts, with the ask timing
+and settings (SPEC.md Section 15).
+
+**Why it is open.** The app asks, registers tokens and the server queues and composes every
+notification (`push_outbox`, `send-push`), but nothing can be delivered until three things exist
+outside this repository: an EAS project id in `app.config.ts` (`extra.eas.projectId`, from
+`eas init`, so the app can mint Expo push tokens), an APNs key on that project (needs the paid Apple
+team, the same blocker as signing) and an FCM service account for Android. Until then
+`registerTokenIfAllowed` logs once and registers nothing, and the outbox rows wait.
+
+**Where in the code.** `app/src/lib/notifications.ts`, `supabase/functions/send-push`,
+`public.run_push_sender` (needs the two Vault secrets from `supabase/README.md`).
+
+**What closes it.** Nemat runs `eas init` and adds the credentials in the Expo dashboard; the
+Vault secrets and `PUSH_SENDER_KEY` are set per environment.
+
+**Check.** On a real iPhone and a real Android phone: after N-Prime, a video reply from another
+account arrives as a notification with the spec's text, tapping it opens the reply; Pause all
+stops it; comments within 10 minutes arrive as one notification.
