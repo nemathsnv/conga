@@ -265,8 +265,17 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
         <RailAction icon={<HeartIcon filled={liked} color={liked ? '#FF375F' : colors.white} />} count={likes} label={liked ? `Liked, ${likes}` : `Like, ${likes}`} onPress={() => void toggleLike()} />
         <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" onPress={() => router.push({ pathname: '/comments/[responseId]', params: { responseId: response.id } })} />
         <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" onPress={() => router.push({ pathname: '/replies/[rootId]', params: { rootId: response.id } })} />
-        {/* More (Delete) and Share (share sheet) arrive in phase 5; drawn as on the board, inactive. */}
-        {response.is_own ? <RailAction icon={<MoreIcon />} label="More" /> : <RailAction icon={<ShareIcon />} label="Share" />}
+        {response.is_own ? (
+          <RailAction icon={<MoreIcon />} label="More" onPress={() => router.push({ pathname: '/safety', params: { flow: 'delete', kind: 'video', id: response.id, title: 'response' } })} />
+        ) : (
+          <RailAction
+            icon={<ShareIcon />}
+            label="Share"
+            onPress={() =>
+              router.push({ pathname: '/safety', params: { flow: 'share', kind: 'video', id: response.id, authorId: response.author.id, authorName: response.author.name, authorUsername: response.author.username, authorPhoto: response.author.photo_path ?? '', title: `${response.author.name} · ${prompt?.text ?? ''}` } })
+            }
+          />
+        )}
       </View>
       <View style={[s.author, { bottom: 844 - 536 - 90 + Math.max(insets.bottom - 34, 0) }]}>
         <View style={s.authorRow}>

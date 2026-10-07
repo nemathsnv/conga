@@ -1,4 +1,4 @@
-// Board R-Profile: someone else's profile. The … menu (Report, Block, Copy link) is phase 5.
+// Board R-Profile: someone else's profile. The … menu opens SF-Menu (Copy link, Share to…, Report, Block).
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -21,9 +21,15 @@ export default function ProfileScreen() {
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={s.headerButton}>
           <ChevronLeft />
         </Pressable>
-        <View style={s.headerButton} accessibilityLabel="More: report, block, copy link">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="More: report, block, copy link"
+          disabled={!profile}
+          onPress={() => profile && router.push({ pathname: '/safety', params: { flow: 'share', kind: 'profile', id: profile.id, authorId: profile.id, authorName: profile.name, authorUsername: profile.username, authorPhoto: profile.photo_path ?? '', title: `${profile.name} · @${profile.username}` } })}
+          style={s.headerButton}
+        >
           <MoreIcon color={colors.text} size={24} />
-        </View>
+        </Pressable>
       </View>
       {profile === undefined ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

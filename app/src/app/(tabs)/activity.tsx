@@ -70,6 +70,12 @@ export default function ActivityTab() {
       case 'followed_responded':
         if (row.prompt) router.push({ pathname: '/player/[promptId]', params: { promptId: row.prompt.id, ...(row.video ? { entry: row.video.id } : {}) } });
         break;
+      case 'removed':
+      case 'restricted':
+      case 'suspended':
+      case 'review_outcome':
+        if (row.moderation_action_id) router.push({ pathname: '/notice/[actionId]', params: { actionId: row.moderation_action_id } });
+        break;
       default:
         break;
     }
@@ -158,6 +164,7 @@ function Row({ row, onOpen, onFollowBack, followedBack }: { row: ActivityRow; on
   }
 
   const tappable = row.kind !== 'like';
+  const notice = row.kind === 'removed' || row.kind === 'restricted' || row.kind === 'suspended' || row.kind === 'review_outcome';
   const leading =
     row.kind === 'comment' && row.actors.length > 1 ? (
       <View style={{ width: 44, height: 44 }}>
@@ -172,6 +179,10 @@ function Row({ row, onOpen, onFollowBack, followedBack }: { row: ActivityRow; on
     ) : row.kind === 'like' ? (
       <View style={s.likeCircle}>
         <HeartIcon size={20} color={colors.textTertiary} />
+      </View>
+    ) : notice ? (
+      <View style={[s.likeCircle, { backgroundColor: colors.text }]}>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.white, fontFamily }}>S</Text>
       </View>
     ) : (
       <Avatar uri={avatarUrl(row.actor?.photo_path ?? null)} size={44} />

@@ -81,7 +81,7 @@ export type CommentsSheet = {
   comments: CommentThread[];
 };
 
-export type ActivityKind = 'video_reply' | 'comment' | 'comment_reply' | 'follow' | 'like' | 'followed_responded';
+export type ActivityKind = 'video_reply' | 'comment' | 'comment_reply' | 'follow' | 'like' | 'followed_responded' | 'removed' | 'restricted' | 'suspended' | 'review_outcome';
 
 export type ActivityRow = {
   id: string;
@@ -99,6 +99,7 @@ export type ActivityRow = {
   comment: { id: string; body: string; deleted: boolean } | null;
   prompt: { id: string; text: string } | null;
   like_count: number | null;
+  moderation_action_id: string | null;
 };
 
 export type ActivityList = { unread_count: number; tonight: PromptCard | null; rows: ActivityRow[] };
@@ -133,6 +134,7 @@ export type Profile = ProfileCard & {
   pinned_response_id: string | null;
   followed_by: ProfileCard[];
   followed_by_count: number;
+  blocked: boolean;
 };
 
 export type ProfileResponse = ResponseCard & { prompt_text: string; pinned: boolean };
@@ -304,4 +306,70 @@ export async function registerPushToken(token: string, platform: 'ios' | 'androi
 
 export async function setTimezone(timezone: string): Promise<void> {
   unwrap(await supabase.rpc('set_timezone', { p_timezone: timezone }));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: report, block, delete, notices, review requests
+// ---------------------------------------------------------------------------
+
+/** SF-Report, in the board's order. */
+export const REPORT_REASONS: { id: ReportReason; label: string }[] = [
+  { id: 'harassment', label: 'Harassment or bullying' },
+  { id: 'hate', label: 'Hate speech or symbols' },
+  { id: 'nudity', label: 'Nudity or sexual content' },
+  { id: 'violence', label: 'Violence or threats' },
+  { id: 'self_harm', label: 'Self-harm or suicide' },
+  { id: 'private_info', label: 'Shares private information' },
+  { id: 'spam', label: 'Spam or scam' },
+  { id: 'under_18', label: 'May be under 18' },
+  { id: 'other', label: 'Something else' },
+];
+export type ReportReason = 'harassment' | 'hate' | 'nudity' | 'violence' | 'self_harm' | 'private_info' | 'spam' | 'under_18' | 'other';
+export type ReportKind = 'video' | 'comment' | 'profile';
+
+export async function reportItem(kind: ReportKind, id: string, reason: ReportReason): Promise<ProfileCard> {
+  return unwrap(await supabase.rpc('report_item', { p_kind: kind, p_id: id, p_reason: reason })) as ProfileCard;
+}
+
+export async function blockUser(id: string): Promise<void> {
+  unwrap(await supabase.rpc('block_user', { p_user: id }));
+}
+
+export async function unblockUser(id: string): Promise<void> {
+  unwrap(await supabase.rpc('unblock_user', { p_user: id }));
+}
+
+export async function blockedList(): Promise<ProfileCard[]> {
+  return (unwrap(await supabase.rpc('blocked_list')) ?? []) as ProfileCard[];
+}
+
+export async function deleteVideo(id: string): Promise<void> {
+  unwrap(await supabase.rpc('delete_video', { p_id: id }));
+}
+
+/** Needs a sign-in no older than ten minutes; otherwise the server says reauth_required. */
+export async function deleteAccount(): Promise<void> {
+  unwrap(await supabase.rpc('delete_account'));
+}
+
+export type Notice = {
+  id: string;
+  kind: 'remove' | 'warn' | 'restrict' | 'suspend' | 'restore' | 'remove_attribution';
+  reason: string;
+  created_at: string;
+  restrict_until: string | null;
+  target_kind: 'video' | 'comment' | 'account' | 'suggestion' | null;
+  video: { id: string; kind: 'response' | 'reply'; playback_id: string | null; caption: string | null; created_at: string; prompt_text: string } | null;
+  comment: { id: string; body: string } | null;
+  removed_action_ids: string[] | null;
+  review_requested: boolean;
+  review_outcome: 'upheld' | 'reversed' | null;
+};
+
+export async function getNotice(actionId: string): Promise<Notice> {
+  return unwrap(await supabase.rpc('get_notice', { p_action: actionId })) as Notice;
+}
+
+export async function requestReview(actionId: string): Promise<void> {
+  unwrap(await supabase.rpc('request_review', { p_action: actionId }));
 }

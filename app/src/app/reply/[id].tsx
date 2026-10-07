@@ -12,7 +12,7 @@ import { timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
 import { Spinner } from '@/ui/HomeStates';
-import { ChevronLeft, HeartIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
+import { ChevronLeft, HeartIcon, MoreIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { OrphanCard, ReplyCard } from '@/ui/ReplyCard';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
@@ -224,8 +224,17 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
       </View>
       <View style={[s.rail, { top: 452 }]}>
         <RailAction icon={<HeartIcon filled={liked} color={liked ? '#FF375F' : colors.white} />} count={likes} label={liked ? `Liked, ${likes}` : `Like, ${likes}`} onPress={() => void toggleLike()} />
-        {/* Share arrives with the share sheet in phase 5; drawn as on the board, inactive. */}
-        <RailAction icon={<ShareIcon />} label="Share" />
+        {reply.is_own ? (
+          <RailAction icon={<MoreIcon />} label="More" onPress={() => router.push({ pathname: '/safety', params: { flow: 'delete', kind: 'video', id: reply.id, title: 'reply' } })} />
+        ) : (
+          <RailAction
+            icon={<ShareIcon />}
+            label="Share"
+            onPress={() =>
+              router.push({ pathname: '/safety', params: { flow: 'share', kind: 'video', id: reply.id, authorId: reply.author.id, authorName: reply.author.name, authorUsername: reply.author.username, authorPhoto: reply.author.photo_path ?? '', title: `${reply.author.name} · ${promptText}` } })
+            }
+          />
+        )}
       </View>
       <View style={[s.author, { top: 560 }]}>
         <View style={s.authorRow}>

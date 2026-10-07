@@ -1,5 +1,6 @@
 // Board Comments (the sheet over a playing response), LV-CommentOwn (delete your own comment)
-// and LV-CommentDeleted (a deleted parent keeps its replies). SPEC.md Section 8. LV-CommentActions (Report, Block) is phase 5, so a long-press
+// and LV-CommentDeleted (a deleted parent keeps its replies). SPEC.md Section 8.
+// A long-press on someone else's comment opens LV-CommentActions (Report, Block) in /safety. LV-CommentActions (Report, Block) is phase 5, so a long-press
 // on someone else's comment does nothing yet.
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -131,7 +132,16 @@ export default function CommentsScreen() {
     }
     const author = c.author;
     return (
-    <Pressable key={c.id} onLongPress={() => (c.is_own ? setOwn(c) : undefined)} delayLongPress={350} style={[s.cm, thread && s.cmReply]}>
+    <Pressable
+      key={c.id}
+      onLongPress={() =>
+        c.is_own
+          ? setOwn(c)
+          : router.push({ pathname: '/safety', params: { flow: 'comment', kind: 'comment', id: c.id, authorId: author.id, authorName: author.name, authorUsername: author.username, authorPhoto: author.photo_path ?? '', body: c.body ?? '' } })
+      }
+      delayLongPress={350}
+      style={[s.cm, thread && s.cmReply]}
+    >
       <Avatar uri={avatarUrl(author.photo_path)} size={thread ? 26 : 34} />
       <View style={{ flex: 1 }}>
         <Text style={s.nameLine}>

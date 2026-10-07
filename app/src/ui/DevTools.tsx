@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,17 +11,12 @@ import { useSession } from '@/lib/session';
 export function DevTools() {
   const insets = useSafeAreaInsets();
   const { session, state, signOut } = useSession();
-  const router = useRouter();
   return (
     <View style={[s.root, { top: insets.top + 8 }]}>
       <Text style={s.text}>dev: {state?.profile?.username ? `@${state.profile.username}` : session?.user.email}</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Pressable onPress={() => void signOut()} style={({ pressed }) => [s.button, pressed && { opacity: 0.6 }]}>
           <Text style={s.buttonText}>dev: sign out</Text>
-        </Pressable>
-        {/* S-Settings arrives in phase 5; until then this opens N-Settings. */}
-        <Pressable onPress={() => router.push('/notifications/settings')} style={({ pressed }) => [s.button, pressed && { opacity: 0.6 }]}>
-          <Text style={s.buttonText}>dev: notifications</Text>
         </Pressable>
       </View>
     </View>

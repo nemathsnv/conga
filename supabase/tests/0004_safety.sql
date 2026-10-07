@@ -3,6 +3,10 @@
 begin;
 select plan(80);
 
+delete from public.reports;
+delete from public.review_requests;
+delete from public.moderation_actions;
+delete from public.blocks;
 delete from public.responses;
 delete from public.prompts;
 

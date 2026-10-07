@@ -34,6 +34,7 @@ describe('resolveStep (SPEC.md Section 13 order)', () => {
     const withProfile = { ...base, age_confirmed: true, has_beta_access: true, has_profile: true };
     expect(resolveStep(true, withProfile, true)).toBe('photo');
     expect(resolveStep(true, withProfile, false)).toBe('home');
+    expect(resolveStep(true, { ...withProfile, suspended: true, suspension: { action_id: 'a', reason: 'r', review_requested: false } }, false)).toBe('suspended');
   });
   it('never asks a member for the invite again', () => {
     const member = { ...base, age_confirmed: true, has_beta_access: true, has_profile: true };
@@ -61,6 +62,9 @@ describe('parseOnboardingState', () => {
       waitlisted: false,
       has_profile: true,
       profile: { name: 'Lena Hart', username: 'lenahart', photo_path: null },
+      suspended: false,
+      suspension: null,
+      restriction: null,
     });
   });
   it('fails closed: a missing invite_required means the beta gate is on', () => {

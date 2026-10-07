@@ -69,6 +69,12 @@ function RootNavigator() {
           <Stack.Screen name="reply/[id]" options={{ animation: 'fade' }} />
           <Stack.Screen name="notifications/prime" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="notifications/settings" />
+          <Stack.Screen name="safety" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+          <Stack.Screen name="settings/index" />
+          <Stack.Screen name="settings/blocked" />
+          <Stack.Screen name="settings/delete-account" />
+          <Stack.Screen name="settings/confirm-email" />
+          <Stack.Screen name="notice/[actionId]" />
         </Stack.Protected>
         <Stack.Protected guard={!inApp}>
           <Stack.Screen name="(onboarding)" options={{ animation: 'fade' }} />

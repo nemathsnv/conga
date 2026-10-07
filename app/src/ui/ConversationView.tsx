@@ -32,6 +32,10 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
   const respond = () => router.push({ pathname: '/record/[promptId]', params: { promptId: prompt.id } });
   const openComments = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id, openComments: '1' } });
   const openReplies = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id, openReplies: '1' } });
+  // SF-Menu for someone else's response; SF-Delete (… → Delete) for your own.
+  const openShare = () =>
+    router.push({ pathname: '/safety', params: { flow: 'share', kind: 'video', id: response.id, authorId: response.author.id, authorName: response.author.name, authorUsername: response.author.username, authorPhoto: response.author.photo_path ?? '', title: `${response.author.name} · ${prompt.text}` } });
+  const openDelete = () => router.push({ pathname: '/safety', params: { flow: 'delete', kind: 'video', id: response.id, title: 'response' } });
 
   const toggleLike = useCallback(async () => {
     const next = !liked;
@@ -75,8 +79,7 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
         <RailAction icon={<HeartIcon filled={liked} color={liked ? '#FF375F' : colors.white} />} count={likes} label={liked ? `Liked, ${likes}` : `Like, ${likes}`} onPress={() => void toggleLike()} />
         <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" onPress={openComments} />
         <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" onPress={openReplies} />
-        {/* More (Delete) and Share (share sheet) arrive in phase 5; drawn as on the board, inactive. */}
-        {response.is_own ? <RailAction icon={<MoreIcon />} label="More" /> : <RailAction icon={<ShareIcon />} label="Share" />}
+        {response.is_own ? <RailAction icon={<MoreIcon />} label="More" onPress={openDelete} /> : <RailAction icon={<ShareIcon />} label="Share" onPress={openShare} />}
       </View>
 
       <View style={[s.author, { bottom: tabBarSpace + (isFirstOwn ? 150 : 90) + 44 + 32 }]}>

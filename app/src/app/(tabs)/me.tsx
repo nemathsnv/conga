@@ -3,7 +3,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { openPrompts } from '@/lib/content';
@@ -39,9 +39,9 @@ export default function MeTab() {
     <View style={s.root}>
       <StatusBar style="dark" />
       <View style={[s.header, { marginTop: insets.top + 3 }]}>
-        <View style={s.headerButton} accessibilityLabel="Settings">
+        <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={s.headerButton}>
           <GearIcon />
-        </View>
+        </Pressable>
       </View>
       {profile === undefined ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

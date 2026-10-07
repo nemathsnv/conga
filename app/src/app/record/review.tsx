@@ -8,6 +8,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { acknowledgeDisclosure, disclosureAcknowledged } from '@/lib/content';
+import { useSession } from '@/lib/session';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool, ProgressLine, VideoGradients } from '@/ui/dark';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
@@ -24,6 +25,7 @@ export default function ReviewScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const posting = usePosting();
+  const { state: sessionState, refresh } = useSession();
   const current = getCurrentRecording();
   const [caption, setCaption] = useState('');
   const [editing, setEditing] = useState(false);
@@ -70,6 +72,15 @@ export default function ReviewScreen() {
       setCurrentRecording(null);
       router.dismissTo('/(tabs)');
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('posting_paused') || message.includes('suspended')) {
+        // A-Restricted / LV-Suspended: the server refused; show the notice, keep the recording.
+        const fresh = await refresh();
+        const actionId = fresh?.restriction?.action_id ?? sessionState?.restriction?.action_id;
+        if (actionId) router.replace({ pathname: '/notice/[actionId]', params: { actionId } });
+        else router.dismissTo('/(tabs)');
+        return;
+      }
       console.error('post failed', e);
       setBusy(false);
     }

@@ -981,6 +981,8 @@ begin
       'photo_path', v_profile.photo_path
     ) end,
     'suspended', v_account.moderation_status = 'suspended',
+    'restriction', case when v_account.moderation_status = 'restricted' and v_account.restricted_until > now() then jsonb_build_object(
+      'action_id', v_account.moderation_action_id, 'until', v_account.restricted_until) end,
     'suspension', case when v_account.moderation_status = 'suspended' then jsonb_build_object(
       'action_id', v_action.id,
       'reason', v_action.reason,

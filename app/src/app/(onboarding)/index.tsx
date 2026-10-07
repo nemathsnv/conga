@@ -16,6 +16,8 @@ export default function OnboardingIndex() {
       return <Redirect href="/(onboarding)/profile" />;
     case 'photo':
       return <Redirect href="/(onboarding)/photo" />;
+    case 'suspended':
+      return <Redirect href="/(onboarding)/suspended" />;
     default:
       return <Redirect href="/(onboarding)/welcome" />;
   }

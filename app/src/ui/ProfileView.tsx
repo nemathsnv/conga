@@ -86,10 +86,9 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
           <Pressable accessibilityRole="button" onPress={() => router.push('/profile/edit')} style={({ pressed }) => [s.ownButton, pressed && { opacity: 0.6 }]}>
             <Text style={s.ownButtonText}>Edit profile</Text>
           </Pressable>
-          {/* Share profile creates an app link (phase 5). */}
-          <View style={s.ownButton}>
+          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/safety', params: { flow: 'share', kind: 'profile', id: profile.id, authorUsername: profile.username, title: `${profile.name} · @${profile.username}` } })} style={({ pressed }) => [s.ownButton, pressed && { opacity: 0.7 }]}>
             <Text style={s.ownButtonText}>Share profile</Text>
-          </View>
+          </Pressable>
         </View>
       ) : (
         <>
@@ -97,10 +96,9 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
             <Pressable accessibilityRole="button" onPress={() => void toggleFollow()} style={({ pressed }) => [s.followButton, following && s.followingButton, pressed && { opacity: 0.7 }]}>
               <Text style={[s.followButtonText, following && { color: colors.text }]}>{following ? 'Following' : 'Follow'}</Text>
             </Pressable>
-            {/* Share arrives with phase 5. */}
-            <View style={s.shareButton} accessibilityLabel="Share profile">
+            <Pressable accessibilityRole="button" accessibilityLabel="Share profile" onPress={() => router.push({ pathname: '/safety', params: { flow: 'share', kind: 'profile', id: profile.id, authorId: profile.id, authorName: profile.name, authorUsername: profile.username, authorPhoto: profile.photo_path ?? '', title: `${profile.name} · @${profile.username}` } })} style={({ pressed }) => [s.shareButton, pressed && { opacity: 0.7 }]}>
               <ShareIcon size={20} color={colors.text} />
-            </View>
+            </Pressable>
           </View>
           {followedBy ? (
             <View style={s.followedBy}>

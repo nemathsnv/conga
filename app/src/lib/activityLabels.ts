@@ -39,6 +39,14 @@ export function activityText(row: ActivityRow): ActivityText {
       return { names: row.actor?.name ?? '', rest: 'started following you', quote: null };
     case 'followed_responded':
       return { names: actorNames(row), rest: `${row.actor_count > 1 ? 'you follow responded to' : 'you follow responded to'}`, quote: row.prompt?.text ?? null };
+    case 'removed':
+      return { names: '', rest: `We removed one of your ${row.video?.kind === 'reply' ? 'video replies' : row.comment ? 'comments' : 'responses'}`, quote: null };
+    case 'restricted':
+      return { names: '', rest: 'Posting is paused', quote: null };
+    case 'suspended':
+      return { names: '', rest: 'Your account is suspended', quote: null };
+    case 'review_outcome':
+      return { names: '', rest: 'We reviewed your request again', quote: null };
     case 'like': {
       const n = row.like_count ?? row.actor_count;
       const who = n <= 1 ? (row.actor?.name ?? '') : `${first(row.actor?.name ?? '')} and ${n - 1} ${n - 1 === 1 ? 'other' : 'others'}`;

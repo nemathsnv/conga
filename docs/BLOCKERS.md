@@ -63,3 +63,20 @@ Vault secrets and `PUSH_SENDER_KEY` are set per environment.
 **Check.** On a real iPhone and a real Android phone: after N-Prime, a video reply from another
 account arrives as a notification with the spec's text, tapping it opens the reply; Pause all
 stops it; comments within 10 minutes arrive as one notification.
+
+## B-3 · Web domain and app links (phase 5, open)
+
+**Requirement.** Shared links on one domain (SPEC.md Section 4: `shortcut.app/r/{id}`, `/p/{id}`,
+`/i/{code}`), universal links and Android app links opening the app, link previews.
+
+**Why it is open.** The domain is not bought or pointed anywhere (SPEC.md Section 22). The web
+player is built as the `web` Edge Function and works on the Supabase function URL; the app's links
+point there until `EXPO_PUBLIC_WEB_BASE_URL` names the domain. Universal links also need the
+`apple-app-site-association` and `assetlinks.json` files served from the domain and the
+associated-domains entitlement, which needs the paid Apple team.
+
+**What closes it.** Nemat chooses and buys the domain; DNS (or a CNAME through a small proxy) to the
+function; the two association files; `associatedDomains` and `intentFilters` in `app.config.ts`.
+
+**Check.** A shared link opens the app on a phone with it installed, the web page otherwise; the
+preview shows the thumbnail, prompt and name in a messaging app.

@@ -183,6 +183,15 @@ export function ChevronUpIcon({ size = 16, color = '#FFFFFF', strokeWidth = 2.4 
   );
 }
 
+export function LinkIcon({ size = 22, color = '#1C1C1E' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M10 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.5 1.5" />
+      <Path d="M14 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5" />
+    </Svg>
+  );
+}
+
 export function SearchIcon({ size = 21, color = '#FFFFFF' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round">

@@ -8,6 +8,7 @@ import { useSafeAreaInfo } from '@/ui/safeArea';
 
 import { followSuggestions, followUser, followingFeed, getNotificationState, homeFeed, type Conversation, type FollowSuggestion } from '@/lib/content';
 import { shouldAsk } from '@/lib/notificationAsk';
+import { takeFeedDirty } from '@/ui/feedStore';
 import { ConversationView } from '@/ui/ConversationView';
 import { FeedHeader } from '@/ui/dark';
 import { EmptyPrompt, FollowingEmpty, HomeLoading, PostingBanner } from '@/ui/HomeStates';
@@ -79,8 +80,15 @@ export default function HomeTab() {
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
+      if (takeFeedDirty()) {
+        // Something was reported, blocked or deleted: the feed must not show it again.
+        seen.current = [];
+        setItems(null);
+        setIndex(0);
+        void load(tab, true);
+      }
       return () => setFocused(false);
-    }, []),
+    }, [load, tab]),
   );
 
   const onViewable = useCallback(({ viewableItems }: { viewableItems: ViewToken<Conversation>[] }) => {
