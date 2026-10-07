@@ -14,6 +14,9 @@
 #   scripts/moderate.sh restore-video <id> "<reason>" [note]
 #   scripts/moderate.sh close-report <report-id>
 #   scripts/moderate.sh decide <action-id> upheld|reversed [note]
+#   scripts/moderate.sh suggestions                  prompt suggestions in review
+#   scripts/moderate.sh approve <suggestion-id> [keep-name true|false] [note]
+#   scripts/moderate.sh decline <suggestion-id> singles_out|too_similar|promotion|private_details|unclear|other [note]
 #
 # The reason is shown to the person (A-Removed, A-Restricted, LV-Suspended); the note is internal.
 # There is no standalone warning: a warning is the removal notice itself (A-Removed).
@@ -41,5 +44,8 @@ case "$cmd" in
   restore-video)   q "select public.mod_restore_video('$1', '$(lit "$2")', '$(lit "$MOD")', $(note "${3:-}"))" ;;
   close-report)    q "select public.mod_close_report('$1', '$(lit "$MOD")')" ;;
   decide)          q "select public.mod_decide_review('$1', '$2', '$(lit "$MOD")', $(note "${3:-}"))" ;;
-  *) sed -n '2,20p' "$0"; exit 1 ;;
+  suggestions)     q "select jsonb_pretty(public.mod_suggestions_queue())" ;;
+  approve)         q "select public.mod_approve_suggestion('$1', '$(lit "$MOD")', ${2:-true}, $(note "${3:-}"))" ;;
+  decline)         q "select public.mod_decline_suggestion('$1', '$2', '$(lit "$MOD")', $(note "${3:-}"))" ;;
+  *) sed -n '2,23p' "$0"; exit 1 ;;
 esac

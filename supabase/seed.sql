@@ -6,10 +6,22 @@ select public.team_create_invite('TEST-OLD', 'canggu', null, 1);
 update public.invites set expires_at = now() - interval '1 day' where code = 'TEST-OLD';
 
 -- Phase 3: a few live global prompts, one featured today.
+-- Places and topics for local development (phase 6). Team-created in production.
+insert into public.places (slug, name, region, type, is_open) values
+  ('uluwatu', 'Uluwatu', 'Bali, Indonesia', 'city', true),
+  ('seminyak', 'Seminyak', 'Bali, Indonesia', 'city', true),
+  ('ubud', 'Ubud', 'Bali, Indonesia', 'city', false)
+on conflict (slug) do nothing;
+insert into public.place_neighbours (place_id, neighbour_id)
+select a.id, b.id from public.places a, public.places b where a.slug = 'canggu' and b.slug in ('uluwatu', 'seminyak')
+on conflict do nothing;
+insert into public.topics (id, name) values ('food', 'Food'), ('work', 'Work'), ('surf', 'Surf'), ('fitness', 'Fitness'), ('nights', 'Nights') on conflict do nothing;
 select public.team_create_prompt('Be honest about the place you live.', null, (now() at time zone 'utc')::date);
 select public.team_create_prompt('What''s something everybody loves that you hate?');
 select public.team_create_prompt('Speak in every language you know.');
 select public.team_create_prompt('What should every newcomer to Canggu unlearn?', 'canggu');
+select public.team_create_prompt('Where do you actually get work done?', 'canggu', null, 'work');
+select public.team_create_prompt('Best wave for a beginner around here?', 'uluwatu', null, 'surf');
 
 -- Local development people and responses, using the phase 1 spike's Mux assets so Home,
 -- the player and profiles have real video to play. Never applied to the hosted project.
@@ -70,3 +82,10 @@ select id, 'd0000000-0000-0000-0000-000000000003', 'The rice fields are disappea
 insert into public.likes (user_id, target_kind, target_id)
 select u.id, 'video', r.id from public.responses r cross join (values ('d0000000-0000-0000-0000-000000000001'::uuid), ('d0000000-0000-0000-0000-000000000003'::uuid), ('d0000000-0000-0000-0000-000000000004'::uuid)) u(id)
  where r.mux_upload_id in ('dev-2', 'dev-reply-1') and u.id <> r.author_id;
+
+-- Phase 6 development data: Adam's suggestions (one in review, one not published), Sofia follows Uluwatu.
+insert into public.suggestions (author_id, text, place_id, attribution, status)
+select 'd0000000-0000-0000-0000-000000000002', 'What''s one thing you''d change about Canggu tomorrow?', id, true, 'in_review' from public.places where slug = 'canggu';
+insert into public.suggestions (author_id, text, place_id, attribution, status, decline_reason, reviewed_at, reviewed_by)
+select 'd0000000-0000-0000-0000-000000000002', 'Who are the worst drivers in Canggu?', id, true, 'not_published', 'singles_out', now() - interval '1 day', 'nemat' from public.places where slug = 'canggu';
+insert into public.place_follows (account_id, place_id) select 'd0000000-0000-0000-0000-000000000003', id from public.places where slug = 'uluwatu' on conflict do nothing;
