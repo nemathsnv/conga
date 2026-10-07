@@ -154,7 +154,8 @@ export function OfflineBanner({ topInset }: { topInset: number }) {
 
 /** Boards PR-Posting and X-Upload-Failed: the banner at the top of Home. */
 export function PostingBanner({ state, onRetry, topInset }: { state: PostingState; onRetry: () => void; topInset: number }) {
-  if (state.kind === 'idle' || state.kind === 'live') return null;
+  // 'waiting' (Post tapped offline) is drawn by A-Offline, not here.
+  if (state.kind === 'idle' || state.kind === 'live' || state.kind === 'waiting') return null;
   const post = state.post;
   const thumb = post.recording.segments[0]?.uri;
   const failed = state.kind === 'failed';

@@ -1,9 +1,11 @@
 // Posting controller: runs the foreground upload of a posted response, keeps the recording
 // on the phone until it is live, and exposes the state the Home banners draw
-// (PR-Posting, X-Upload-Failed). Survives app restarts through pendingPost storage.
+// (PR-Posting, X-Upload-Failed, and A-Offline while a post waits for the connection). Survives app
+// restarts through pendingPost storage; a post waiting offline when the app closes becomes Retry.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { track } from '@/lib/analytics';
+import { isOnline, subscribeOnline } from '@/lib/connectivity';
 import { abandonResponse, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { loadPendingPost, savePendingPost } from './pendingPost';
 import { resumeState, uploadUrlUsable, type PendingPost } from './pendingPostState';
@@ -12,6 +14,8 @@ import { deleteRecordingFiles, mintUpload, putRecording, waitUntilLive, type Upl
 
 export type PostingState =
   | { kind: 'idle' }
+  /** Post tapped while offline: the recording waits on the phone and posts when the connection returns. */
+  | { kind: 'waiting'; post: PendingPost }
   | { kind: 'uploading'; post: PendingPost; progress: number }
   | { kind: 'processing'; post: PendingPost }
   | { kind: 'failed'; post: PendingPost }
@@ -61,7 +65,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
       deleteRecordingFiles(current.recording);
       await persist(null);
       setState({ kind: 'live', post: { ...current, playbackId }, playbackId });
-      track('video_published', { kind: current.kind, duration_s: Math.round(current.recording.durationMs / 1000), has_caption: !!current.caption });
+      track('video_published', { kind: current.kind, prompt_id: current.promptId, duration_s: Math.round(current.recording.durationMs / 1000), has_caption: !!current.caption });
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       track('upload_failed', { reason: reason.slice(0, 80) });
@@ -109,9 +113,30 @@ export function PostingProvider({ children }: { children: ReactNode }) {
       attempts: 0,
       failedReason: null,
     };
+    if (!isOnline()) {
+      // Offline at Post: keep the recording and wait while the app is open (Nemat, 9 Oct).
+      const waiting: PendingPost = { ...pending, state: 'waiting' };
+      await persist(waiting);
+      setState({ kind: 'waiting', post: waiting });
+      return;
+    }
     await persist(pending);
     void run(pending);
   }, [persist, run]);
+
+  // The connection comes back while a post waits: start it by itself.
+  useEffect(() => {
+    if (state.kind !== 'waiting') return;
+    const post = state.post;
+    if (isOnline()) {
+      // Already back (or the check raced): start on the next tick, outside this render.
+      const t = setTimeout(() => void run(post), 0);
+      return () => clearTimeout(t);
+    }
+    return subscribeOnline((online) => {
+      if (online) void run(post);
+    });
+  }, [state, run]);
 
   const retry = useCallback(async () => {
     if (state.kind !== 'failed') return;

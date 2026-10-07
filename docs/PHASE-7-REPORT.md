@@ -25,7 +25,8 @@ added.
   for phone notifications off, `LV-SignOut`, `LV-CommentActions`, `LV-CommentOwn`,
   `LV-WebUnavailable`, `LV-WebEmpty`). Section 3 of the plan lists them; nothing was changed.
 - **Analytics (Section 21)** in our own table, no SDK (the Section 22 choice; see section 6):
-  `analytics_events` keyed by an anonymous id on the account (random, never the account id),
+  `analytics_events` keyed by a pseudonymous id on the account (random, never the account id; it is
+  account-linked, so it is pseudonymous, not anonymous: Nemat, 9 Oct),
   with cohort, platform, app version, name, properties and client time; nobody but the team can
   read it (RLS, no table grants). The app queues events on the phone (`lib/analytics.ts`), sends
   batches of up to 200 through `track_events` every five seconds and on going to the background,
@@ -33,7 +34,7 @@ added.
   with the first flush after it. Every event in the Section 21 table is recorded at the moment
   the table names, with its properties; `suggestion_reviewed` and
   `account_deletion_cancelled` are written by the server (triggers), `web_link_opened` and
-  `web_signin_sheet_shown` by the web function (a random anonymous id per request, no cookie).
+  `web_signin_sheet_shown` by the web function (a random id per request, no cookie).
   `scripts/metrics.sql` has the four beta metrics as proposed in Section 21.
 - **Members' invites (`S-Invites`, Section 14)**: Settings → Invite people. A personal invite
   link per member (a readable code from the first name, e.g. `ADAM-WJM6`, shown in lower case),
@@ -106,3 +107,21 @@ timezone change; Android.
 6. **Posting while offline** keeps the existing behaviour: the upload fails and the Upload failed
    banner offers Retry. The spec's "Post waits for the connection" (Section 19) is read as that
    banner; nothing retries by itself.
+
+## 7. Corrections of 9 Oct 2026 (Nemat)
+
+Decisions recorded in `docs/DECISIONS.md`: first-party analytics stay (no PostHog or Amplitude);
+the account-linked identifier is documented as pseudonymous (migration `20261010000200_beta_fixes.sql`
+updates the comments; the column name stays); the member invite model as built is confirmed; the
+app icon waits for the approved name and brand, and the Expo template icon never leaves development.
+
+Fixed: **Post while already offline** no longer enters Upload failed. The post is kept on the
+phone in a `waiting` state, Home shows `A-Offline`, and the upload starts by itself when the
+connection returns while the app is open; if the app closes first, the next launch shows the
+existing Retry state (no queue survives termination, SPEC.md Section 19). **Metrics**:
+`video_published` now carries `prompt_id`; Response rate counts published primary responses
+(`video_published`, kind `response`); Day-7 return counts only ios and android events, never
+server-written ones. Checks after the corrections: pgTAP 371/371, Jest 54/54 (the waiting state's
+resume rule is covered), typecheck and lint clean. The waiting state itself was not exercised on
+the simulator (its connection cannot be cut cleanly). The consolidated open list is
+`docs/BETA-READINESS.md`.

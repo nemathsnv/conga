@@ -1,6 +1,7 @@
 // Product events (SPEC.md Section 21) into our own table, no SDK (Section 22 "Analytics",
 // Section 2 "no ads or tracking SDKs"). Events queue on the phone and go to `track_events` in
-// batches once signed in; the server adds the anonymous id and the cohort. Nothing here carries
+// batches once signed in; the server adds the pseudonymous id and the cohort (Nemat, 9 Oct: the
+// account-linked identifier is pseudonymous, not anonymous). Nothing here carries
 // an email, a name or a username.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';

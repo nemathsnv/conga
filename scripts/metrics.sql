@@ -1,6 +1,8 @@
 -- Beta metrics as proposed in SPEC.md Section 21, over public.analytics_events.
 -- Run with the service role (psql, or supabase db query). Weeks start on Monday (UTC).
--- Nothing here joins back to a person: anon_id is the anonymous id on the account.
+-- anon_id is the pseudonymous id on the account (Nemat, 9 Oct); nothing here joins it back.
+-- "Active" means something the person did in the app: events from ios or android, never
+-- server-written ones (suggestion_reviewed, account_deletion_cancelled) and never web visitors.
 
 -- Weekly responders: people who published at least one response or reply in the week.
 select date_trunc('week', received_at)::date as week, count(distinct anon_id) as weekly_responders
@@ -8,11 +10,12 @@ from public.analytics_events
 where name = 'video_published' and props->>'kind' in ('response', 'reply')
 group by 1 order by 1;
 
--- Response rate per prompt: responders ÷ people who watched at least one response to that prompt.
+-- Response rate per prompt: responders (a published primary response) ÷ people who watched at
+-- least one response to that prompt.
 with watched as (
   select props->>'prompt_id' as prompt_id, anon_id from public.analytics_events where name = 'response_viewed' group by 1, 2
 ), responded as (
-  select props->>'prompt_id' as prompt_id, anon_id from public.analytics_events where name = 'record_completed' and props->>'kind' = 'response' group by 1, 2
+  select props->>'prompt_id' as prompt_id, anon_id from public.analytics_events where name = 'video_published' and props->>'kind' = 'response' group by 1, 2
 )
 select w.prompt_id,
        count(distinct w.anon_id) as watchers,
@@ -25,14 +28,17 @@ group by 1 order by watchers desc;
 select round(count(*) filter (where exists (select 1 from public.responses x where x.root_response_id = r.id and x.kind = 'reply' and x.status = 'live'))::numeric / nullif(count(*), 0), 3) as reply_rate
 from public.responses r where r.kind = 'response' and r.status = 'live';
 
--- Day-7 return: share of new members active again 7 days after joining.
+-- Day-7 return: share of new members active again 7 days after joining. Activity is what the
+-- person did in the app (ios or android events), so a server-side event never counts as a return.
 with joined as (
   select anon_id, min(received_at) as joined_at from public.analytics_events where name = 'signup_completed' group by 1
+), active as (
+  select anon_id, received_at from public.analytics_events where platform in ('ios', 'android')
 )
 select date_trunc('week', joined_at)::date as cohort_week,
        count(*) as new_members,
-       count(*) filter (where exists (select 1 from public.analytics_events e where e.anon_id = j.anon_id and e.received_at >= j.joined_at + interval '7 days' and e.received_at < j.joined_at + interval '8 days')) as returned_day_7,
-       round(count(*) filter (where exists (select 1 from public.analytics_events e where e.anon_id = j.anon_id and e.received_at >= j.joined_at + interval '7 days' and e.received_at < j.joined_at + interval '8 days'))::numeric / nullif(count(*), 0), 3) as day_7_return
+       count(*) filter (where exists (select 1 from active e where e.anon_id = j.anon_id and e.received_at >= j.joined_at + interval '7 days' and e.received_at < j.joined_at + interval '8 days')) as returned_day_7,
+       round(count(*) filter (where exists (select 1 from active e where e.anon_id = j.anon_id and e.received_at >= j.joined_at + interval '7 days' and e.received_at < j.joined_at + interval '8 days'))::numeric / nullif(count(*), 0), 3) as day_7_return
 from joined j
 where joined_at < now() - interval '8 days'
 group by 1 order by 1;

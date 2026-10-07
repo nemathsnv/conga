@@ -43,8 +43,8 @@ Section 22 leaves the choice open between PostHog, Amplitude and our own events 
 Section 2 forbids tracking SDKs. The build uses **our own events table**: no SDK, no third party,
 nothing leaves Supabase. Nemat confirms or picks another.
 
-- `analytics_events` (anonymous user id, cohort, platform, app version, name, properties, client
-  time, received time). The anonymous id is a random id on the account, never the account id;
+- `analytics_events` (pseudonymous user id, cohort, platform, app version, name, properties, client
+  time, received time). The pseudonymous id is a random id on the account, never the account id;
   the table holds no email, name or username, and only the team can read it.
 - `track_events(jsonb)` accepts a batch from a signed-in person; the app queues events on the
   phone and flushes every few seconds and on background. Events before sign-in (`signup_started`)

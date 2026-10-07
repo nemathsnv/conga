@@ -193,7 +193,7 @@ function html(body: string, status = 200): Response {
 }
 
 // Web events (SPEC.md Section 21): web_link_opened and web_signin_sheet_shown. A visitor has
-// no account, so the anonymous id is random per request; nothing identifies the person.
+// no account, so the id is random per request (unlike the app's pseudonymous per-account id).
 async function logWebEvent(admin: ReturnType<typeof adminClient>, name: string, props: Record<string, unknown>): Promise<void> {
   try {
     await admin.from("analytics_events").insert({ anon_id: crypto.randomUUID(), platform: "web", name, props, client_ts: new Date().toISOString() });

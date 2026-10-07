@@ -50,6 +50,8 @@ describe('pending post resume', () => {
   it('turns an interrupted upload into a failed post that offers Retry', () => {
     expect(resumeState(base).state).toBe('failed');
     expect(resumeState({ ...base, state: 'processing' }).state).toBe('processing');
+    // Post tapped offline, then the app closed: Retry on the next launch, no background queue.
+    expect(resumeState({ ...base, state: 'waiting' })).toMatchObject({ state: 'failed', failedReason: 'offline' });
   });
 });
 

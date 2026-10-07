@@ -19,16 +19,20 @@ export type PendingPost = {
   /** Mux direct-upload URLs expire; a retry after this needs a fresh one. */
   uploadUrlExpiresAt: number;
   playbackId: string | null;
-  state: 'uploading' | 'processing' | 'failed';
+  /** waiting: Post was tapped offline; the upload starts by itself when the connection returns (Nemat, 9 Oct). */
+  state: 'waiting' | 'uploading' | 'processing' | 'failed';
   attempts: number;
   failedReason: string | null;
 };
 
 /** What a stored post looks like after the app comes back (killed mid-upload). */
 export function resumeState(post: PendingPost): PendingPost {
-  // A post killed while uploading needs Retry (the banner); one killed while processing
-  // only needs its status polled again.
-  return post.state === 'uploading' ? { ...post, state: 'failed', failedReason: 'interrupted' } : post;
+  // A post killed while uploading, or while waiting offline, needs Retry (the banner): no queue
+  // survives the app closing (SPEC.md Section 19). One killed while processing only needs its
+  // status polled again.
+  if (post.state === 'uploading') return { ...post, state: 'failed', failedReason: 'interrupted' };
+  if (post.state === 'waiting') return { ...post, state: 'failed', failedReason: 'offline' };
+  return post;
 }
 
 export function uploadUrlUsable(post: PendingPost, now: number = Date.now()): boolean {

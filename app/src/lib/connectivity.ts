@@ -26,10 +26,11 @@ export function isOnline(): boolean {
 }
 
 export function useOnline(): boolean {
-  return useSyncExternalStore(subscribe, isOnline, isOnline);
+  return useSyncExternalStore(subscribeOnline, isOnline, isOnline);
 }
 
-function subscribe(listener: (online: boolean) => void): () => void {
+/** Calls the listener on every change. Returns the unsubscribe. */
+export function subscribeOnline(listener: (online: boolean) => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);

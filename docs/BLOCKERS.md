@@ -1,5 +1,7 @@
 # Tracked blockers
 
+The consolidated, grouped view of everything still open before the beta is `docs/BETA-READINESS.md`.
+
 Locked requirements that are not yet met in the app, so they cannot disappear between phases. Each one
 names the requirement, where the gap is in the code, what closes it, and how it is checked. Remove an
 entry only when the check has been run on a real device.

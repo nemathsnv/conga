@@ -169,8 +169,8 @@ export default function HomeTab() {
         />
       )}
       <FeedHeader tab={tab} onTab={switchTab} />
-      {/* A-Offline takes the banner slot unless a post is in flight or waiting for Retry. */}
-      {!online && (posting.state.kind === 'idle' || posting.state.kind === 'live') ? <OfflineBanner topInset={top} /> : <PostingBanner state={posting.state} onRetry={() => void posting.retry()} topInset={top} />}
+      {/* A-Offline takes the banner slot unless a post is in flight or waiting for Retry; a post that waits for the connection is A-Offline's own case. */}
+      {(!online && (posting.state.kind === 'idle' || posting.state.kind === 'live')) || posting.state.kind === 'waiting' ? <OfflineBanner topInset={top} /> : <PostingBanner state={posting.state} onRetry={() => void posting.retry()} topInset={top} />}
     </View>
   );
 }
