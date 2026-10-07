@@ -3,6 +3,7 @@
 // (PR-Posting, X-Upload-Failed). Survives app restarts through pendingPost storage.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { track } from '@/lib/analytics';
 import { abandonResponse, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { loadPendingPost, savePendingPost } from './pendingPost';
 import { resumeState, uploadUrlUsable, type PendingPost } from './pendingPostState';
@@ -60,8 +61,10 @@ export function PostingProvider({ children }: { children: ReactNode }) {
       deleteRecordingFiles(current.recording);
       await persist(null);
       setState({ kind: 'live', post: { ...current, playbackId }, playbackId });
+      track('video_published', { kind: current.kind, duration_s: Math.round(current.recording.durationMs / 1000), has_caption: !!current.caption });
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
+      track('upload_failed', { reason: reason.slice(0, 80) });
       const failed: PendingPost = { ...post, state: 'failed', failedReason: reason };
       await persist(failed);
       setState({ kind: 'failed', post: failed });
@@ -112,6 +115,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(async () => {
     if (state.kind !== 'failed') return;
+    track('upload_retried', { reason: (state.post.failedReason ?? '').slice(0, 80) });
     await run(state.post);
   }, [state, run]);
 

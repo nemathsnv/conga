@@ -32,7 +32,7 @@ export default function PlacesScreenRoute() {
 
   const follow = async (p: PlaceCard) => {
     try {
-      await followPlace(p.id);
+      await followPlace(p.id, 'suggestion');
       load();
     } catch (e) {
       console.error('follow_place failed', e);

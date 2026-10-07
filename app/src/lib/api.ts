@@ -2,6 +2,7 @@
 // server; nothing here sends a user id.
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
+import { track } from './analytics';
 import { SUPABASE_ANON_KEY } from './env';
 import { parseOnboardingState, type OnboardingState } from './onboarding';
 import { supabase } from './supabase';
@@ -37,6 +38,7 @@ export async function getOnboardingState(): Promise<OnboardingState> {
 
 export async function confirmAge(): Promise<void> {
   unwrap(await supabase.rpc('confirm_age'));
+  track('age_confirmed');
 }
 
 export async function checkInvite(code: string): Promise<InviteCheck> {
@@ -55,12 +57,16 @@ export async function invitePreview(code: string): Promise<InvitePreview> {
   return unwrap(await supabase.rpc('invite_preview', { p_code: code })) as InvitePreview;
 }
 
-export async function redeemInvite(code: string): Promise<InviteCheck> {
-  return unwrap(await supabase.rpc('redeem_invite', { p_code: code })) as InviteCheck;
+export async function redeemInvite(code: string, source: 'code' | 'link' = 'code'): Promise<InviteCheck> {
+  const result = unwrap(await supabase.rpc('redeem_invite', { p_code: code })) as InviteCheck;
+  if (result.status === 'valid' || result.status === 'already_in') track('invite_redeemed', { source });
+  else track('invite_failed', { source, reason: result.status });
+  return result;
 }
 
 export async function joinWaitlist(): Promise<void> {
   unwrap(await supabase.rpc('join_waitlist'));
+  track('waitlist_joined');
 }
 
 export async function usernameStatus(username: string): Promise<UsernameStatus> {
@@ -74,6 +80,8 @@ export async function usernameSuggestions(name: string, username: string): Promi
 
 export async function createProfile(name: string, username: string): Promise<void> {
   unwrap(await supabase.rpc('create_profile', { p_name: name, p_username: username }));
+  const { data } = await supabase.auth.getSession();
+  track('signup_completed', { method: String(data.session?.user.app_metadata?.provider ?? 'unknown') });
 }
 
 export async function setProfilePhoto(path: string | null): Promise<void> {

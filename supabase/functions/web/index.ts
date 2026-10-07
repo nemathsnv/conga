@@ -60,7 +60,7 @@ const SHEET = `
 <div style="margin-top:14px;text-align:center;font-size:13px;line-height:1.4;color:#8A8A8E">Shortcut is in closed beta. No invite yet? <a href="${WAITLIST_URL}" style="color:#1C1C1E;font-weight:600;text-decoration:none">Join the waitlist</a></div>
 </section>
 <script>
-function showSheet(){document.getElementById('dim').style.display='block';document.getElementById('sheet').style.display='block';}
+function showSheet(){document.getElementById('dim').style.display='block';document.getElementById('sheet').style.display='block';try{navigator.sendBeacon('/functions/v1/web/e/signin')}catch(e){}}
 function hideSheet(){document.getElementById('dim').style.display='none';document.getElementById('sheet').style.display='none';}
 </script>`;
 
@@ -192,13 +192,28 @@ function html(body: string, status = 200): Response {
   return new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=60", "X-Robots-Tag": "noindex" } });
 }
 
+// Web events (SPEC.md Section 21): web_link_opened and web_signin_sheet_shown. A visitor has
+// no account, so the anonymous id is random per request; nothing identifies the person.
+async function logWebEvent(admin: ReturnType<typeof adminClient>, name: string, props: Record<string, unknown>): Promise<void> {
+  try {
+    await admin.from("analytics_events").insert({ anon_id: crypto.randomUUID(), platform: "web", name, props, client_ts: new Date().toISOString() });
+  } catch {
+    // Analytics never break a page.
+  }
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/functions\/v1\/web/, "").replace(/^\/web/, "");
-  const m = /^\/(r|p|i|u)\/([^/]+)\/?$/.exec(path);
+  const m = /^\/(r|p|i|u|e)\/([^/]+)\/?$/.exec(path);
   if (!m) return html(unavailablePage(url.toString()), 404);
   const [, kind, id] = m;
   const admin = adminClient();
+  if (kind === "e") {
+    if (id === "signin") await logWebEvent(admin, "web_signin_sheet_shown", { logged_in: false });
+    return new Response(null, { status: 204 });
+  }
+  void logWebEvent(admin, "web_link_opened", { target: kind === "r" ? "video" : kind === "p" ? "prompt" : kind === "i" ? "invite" : "profile", logged_in: false });
   if (kind === "i") return html(invitePage(decodeURIComponent(id), url.toString()));
   if (kind === "u") return html(unavailablePage(url.toString()));
   const rpc = kind === "r" ? "web_video" : "web_prompt";

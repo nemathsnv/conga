@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { track } from '@/lib/analytics';
 import { pickPhoto, prepareAvatar, uploadAvatar, type PickedPhoto } from '@/lib/photo';
 import { useSession } from '@/lib/session';
 import { Avatar, Button, Group, Header, Lead, Separator, StepBar, Title } from '@/ui/components';
@@ -36,6 +37,7 @@ export default function PhotoScreen() {
         await uploadAvatar(session.user.id, prepared);
         await refresh();
       }
+      track('onboarding_photo', { photo: photo ? 'added' : 'skipped' });
       // Clearing the pending flag lets the root layout switch to the tabs (Home).
       setPhotoStepPending(false);
     } catch (e) {

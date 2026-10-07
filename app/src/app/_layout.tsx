@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { startAnalytics, track } from '@/lib/analytics';
+import { startConnectivity } from '@/lib/connectivity';
 import { onNotificationTap, registerTokenIfAllowed, syncTimezone } from '@/lib/notifications';
 import { SessionProvider, useSession } from '@/lib/session';
 import { PostingProvider } from '@/video/posting';
@@ -31,6 +33,16 @@ function RootNavigator() {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
 
+  // The event queue and the connection watch live for the whole app.
+  useEffect(() => {
+    const stopAnalytics = startAnalytics();
+    const stopConnectivity = startConnectivity();
+    return () => {
+      stopAnalytics();
+      stopConnectivity();
+    };
+  }, []);
+
   // Signed in: keep the phone's timezone and push token current (the permission itself is
   // only ever asked by N-Prime), and follow tapped notifications.
   useEffect(() => {
@@ -40,7 +52,10 @@ function RootNavigator() {
     const foreground = AppState.addEventListener('change', (st) => {
       if (st === 'active') void syncTimezone();
     });
-    const tap = onNotificationTap((href) => router.push(href as never));
+    const tap = onNotificationTap((href) => {
+      track('push_opened', { type: href.replace(/^\//, '').split('/')[0] ?? '' });
+      router.push(href as never);
+    });
     return () => {
       foreground.remove();
       tap();
@@ -77,6 +92,7 @@ function RootNavigator() {
           <Stack.Screen name="notice/[actionId]" />
           <Stack.Screen name="search" options={{ animation: 'fade' }} />
           <Stack.Screen name="settings/places" />
+          <Stack.Screen name="settings/invites" />
           <Stack.Screen name="place/[id]" />
           <Stack.Screen name="suggest/write" options={{ presentation: 'modal' }} />
           <Stack.Screen name="suggest/scope" />

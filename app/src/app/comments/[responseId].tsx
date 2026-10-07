@@ -2,6 +2,7 @@
 // and LV-CommentDeleted (a deleted parent keeps its replies). SPEC.md Section 8.
 // A long-press on someone else's comment opens LV-CommentActions (Report, Block) in /safety. LV-CommentActions (Report, Block) is phase 5, so a long-press
 // on someone else's comment does nothing yet.
+import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -53,8 +54,9 @@ export default function CommentsScreen() {
       .catch((e) => console.error('comments_list failed', e));
   }, [responseId]);
   useEffect(() => {
+    if (responseId) track('comments_opened', { response_id: responseId });
     void load();
-  }, [load]);
+  }, [load, responseId]);
 
   const send = async () => {
     const body = text.trim();

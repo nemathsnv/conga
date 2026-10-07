@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { track } from '@/lib/analytics';
 import { confirmAge } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { useAdvance } from '@/lib/useStepNavigation';
@@ -35,6 +36,7 @@ export default function AgeScreen() {
   const leave = async () => {
     if (busy) return;
     setBusy(true);
+    track('age_declined');
     await signOut();
     router.replace('/(onboarding)/welcome');
   };

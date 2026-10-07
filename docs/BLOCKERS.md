@@ -81,6 +81,25 @@ function; the two association files; `associatedDomains` and `intentFilters` in 
 **Check.** A shared link opens the app on a phone with it installed, the web page otherwise; the
 preview shows the thumbnail, prompt and name in a messaging app.
 
+## B-4 · Store builds and listings (phase 7, open)
+
+**Requirement.** Store builds for iOS and Android with the listings, age ratings, privacy policy,
+terms and community guidelines in place (SPEC.md Section 23, item 7; Section 24).
+
+**Why it is open.** The build profiles exist (`app/eas.json`: development, preview, production;
+build numbers kept on EAS) but every build needs things outside this repository: an Expo account
+and `eas init` for the project id (`EAS_PROJECT_ID` in `.env`, also B-2), the paid Apple team and
+a Google Play developer account (signing), the app icon (no board draws one; the Expo template
+icon is still in `app/assets`), store listing text and screenshots, the age-rating answers, and
+the privacy policy, terms and community guidelines documents or URLs. The Settings rows and the
+`A-Removed` guideline link stay inactive until the URLs exist.
+
+**What closes it.** Nemat provides the accounts, the icon and the documents; `eas build --profile
+preview` succeeds for both platforms and installs on a phone; the listing fields are filled.
+
+**Check.** A preview build installs from an internal link on an iPhone and an Android phone and
+signs in against the hosted Supabase project.
+
 ## Gate 5 and pre-beta items (open)
 
 Tracked here so they cannot disappear; none is closed by code alone.
@@ -91,4 +110,4 @@ Tracked here so they cannot disappear; none is closed by code alone.
 - **Moderation web admin**: required before the first outside tester (Nemat, 8 Oct 2026); the CLI
   is for development only.
 - **Real-device verification** of phases 2 to 5 on iPhone and Android.
-- **B-2** push credentials and **B-3** domain and app links, above.
+- **B-2** push credentials, **B-3** domain and app links and **B-4** store builds, above.

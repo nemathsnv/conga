@@ -1,5 +1,6 @@
 // Board P-Place (SPEC.md Section 11): image, name, region, Following or Follow, Share, the
 // place's open prompts, and the note that global prompts live in Home.
+import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -63,6 +64,7 @@ export default function PlaceScreen() {
     if (!data) return;
     const first = data.prompts[0];
     if (!first) return;
+    track('share_tapped', { target: 'prompt', method: 'share', logged_in: true });
     await Share.share({ url: promptLink(first.id), message: promptLink(first.id) }).catch(() => undefined);
   };
 

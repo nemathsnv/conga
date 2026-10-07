@@ -1,7 +1,6 @@
 // Board S-Settings (gear on Me) and LV-SignOut (only when an unposted recording is on this phone).
-// Invite people (S-Invites) is phase 7 (Nemat, 8 Oct); Community
-// guidelines and Help and feedback need Nemat's document and address (docs/PHASE-5-REPORT.md).
-// Those rows are drawn and inactive until then.
+// Community guidelines and Help and feedback need Nemat's document and address
+// (docs/BLOCKERS.md, Gate 5 items). Those rows are drawn and inactive until then.
 import { useRouter } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -75,7 +74,7 @@ export default function SettingsScreen() {
           {row('Notifications', { icon: <ActivityTabIcon color={colors.white} on size={18} />, iconColor: colors.dangerBorder, onPress: () => router.push('/notifications/settings') })}
         </View>
         <Text style={s.cap}>Closed beta</Text>
-        <View style={s.group}>{row('Invite people', { icon: <PlusIcon color={colors.white} />, iconColor: '#34C759' })}</View>
+        <View style={s.group}>{row('Invite people', { icon: <PlusIcon color={colors.white} />, iconColor: '#34C759', onPress: () => router.push('/settings/invites') })}</View>
         <Text style={s.cap}>Safety and help</Text>
         <View style={s.group}>
           {row('Blocked accounts', { icon: <PersonIcon size={16} color={colors.white} />, onPress: () => router.push('/settings/blocked') })}

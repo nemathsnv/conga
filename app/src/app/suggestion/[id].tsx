@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { track } from '@/lib/analytics';
 import { acknowledgeDisclosure, disclosureAcknowledged, discardDraft, getSuggestion, publishDraft, type Suggestion } from '@/lib/content';
 import { promptLink } from '@/lib/links';
 import { Button, Glass } from '@/ui/components';
@@ -32,8 +33,9 @@ export default function SuggestionOutcomeScreen() {
     if (!sg || busy) return;
     setBusy(true);
     try {
-      if (!(await disclosureAcknowledged())) await acknowledgeDisclosure();
+      if (!(await disclosureAcknowledged())) await acknowledgeDisclosure('draft');
       await publishDraft(sg.id);
+      track('draft_published', { prompt_id: prompt?.id ?? '' });
       toPrompt();
     } catch (e) {
       console.error('publish_draft failed', e);
@@ -45,6 +47,7 @@ export default function SuggestionOutcomeScreen() {
     if (!sg || busy) return;
     try {
       await discardDraft(sg.id);
+      track('draft_deleted', { prompt_id: prompt?.id ?? '' });
       setSg({ ...sg, draft: null });
     } catch (e) {
       console.error('discard_draft failed', e);
@@ -100,7 +103,7 @@ export default function SuggestionOutcomeScreen() {
         <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
           <Button title="Publish response" variant="white" onPress={() => void publish()} disabled={busy || !sg.draft.ready} />
           <View style={{ marginTop: 10, flexDirection: 'row', gap: 10 }}>
-            <Pressable accessibilityRole="button" onPress={() => router.replace({ pathname: '/record/[promptId]', params: { promptId: 'draft', draftFor: sg.id } })} style={{ flex: 1 }}>
+            <Pressable accessibilityRole="button" onPress={() => { track('draft_rerecorded', { prompt_id: prompt.id }); router.replace({ pathname: '/record/[promptId]', params: { promptId: 'draft', draftFor: sg.id } }); }} style={{ flex: 1 }}>
               <Glass style={s.halfButton} radius={22}>
                 <Text style={s.halfText}>Re-record</Text>
               </Glass>
@@ -146,7 +149,7 @@ export default function SuggestionOutcomeScreen() {
           <RecordDotIcon color={colors.black} />
           <Text style={s.firstButtonText}>Be the first to respond</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => void Share.share({ url: promptLink(prompt.id), message: promptLink(prompt.id) }).catch(() => undefined)} style={s.shareLink}>
+        <Pressable accessibilityRole="button" onPress={() => { track('share_tapped', { target: 'prompt', method: 'share', logged_in: true }); void Share.share({ url: promptLink(prompt.id), message: promptLink(prompt.id) }).catch(() => undefined); }} style={s.shareLink}>
           <Text style={s.shareLinkText}>Share prompt</Text>
         </Pressable>
       </View>

@@ -33,8 +33,8 @@ export default function FollowsScreen() {
     const patch = (list: FollowRow[] | null) => list?.map((x) => (x.id === row.id ? { ...x, is_following: next } : x)) ?? null;
     setRows((r) => ({ followers: patch(r.followers), following: patch(r.following) }));
     try {
-      if (next) await followUser(row.id);
-      else await unfollowUser(row.id);
+      if (next) await followUser(row.id, 'follows');
+      else await unfollowUser(row.id, 'follows');
     } catch {
       const undo = (list: FollowRow[] | null) => list?.map((x) => (x.id === row.id ? { ...x, is_following: !next } : x)) ?? null;
       setRows((r) => ({ followers: undo(r.followers), following: undo(r.following) }));

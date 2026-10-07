@@ -7,11 +7,13 @@ import { FlatList, StyleSheet, View, useWindowDimensions, type ViewToken } from 
 import { useSafeAreaInfo } from '@/ui/safeArea';
 
 import { followSuggestions, followUser, followingFeed, getNotificationState, homeFeed, type Conversation, type FollowSuggestion } from '@/lib/content';
+import { track } from '@/lib/analytics';
+import { useOnline } from '@/lib/connectivity';
 import { shouldAsk } from '@/lib/notificationAsk';
 import { takeFeedDirty } from '@/ui/feedStore';
 import { ConversationView } from '@/ui/ConversationView';
 import { FeedHeader } from '@/ui/dark';
-import { EmptyPrompt, FollowingEmpty, HomeLoading, PostingBanner } from '@/ui/HomeStates';
+import { EmptyPrompt, FollowingEmpty, HomeLoading, OfflineBanner, PostingBanner } from '@/ui/HomeStates';
 import { usePosting } from '@/video/posting';
 
 type Tab = 'following' | 'foryou';
@@ -20,6 +22,7 @@ export default function HomeTab() {
   const { height } = useWindowDimensions();
   const { top, bottomSpace } = useSafeAreaInfo();
   const posting = usePosting();
+  const online = useOnline();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('foryou');
   const [items, setItems] = useState<Conversation[] | null>(null);
@@ -28,6 +31,14 @@ export default function HomeTab() {
   const [suggestions, setSuggestions] = useState<FollowSuggestion[]>([]);
   const seen = useRef<string[]>([]);
   const loading = useRef(false);
+  const viewing = useRef<{ id: string; promptId: string; position: number; since: number; durationMs: number } | null>(null);
+  const endView = useCallback(() => {
+    const v = viewing.current;
+    if (!v) return;
+    viewing.current = null;
+    const watchMs = Date.now() - v.since;
+    track('response_viewed', { response_id: v.id, prompt_id: v.promptId, position: v.position, surface: 'home', watch_ms: watchMs, completed: v.durationMs > 0 && watchMs >= v.durationMs });
+  }, []);
 
   const load = useCallback(async (which: Tab, reset: boolean) => {
     if (loading.current) return;
@@ -71,7 +82,7 @@ export default function HomeTab() {
       // N-Prime: right after the person's first public video posts (SPEC.md Section 15).
       getNotificationState()
         .then(({ ask }) => {
-          if (shouldAsk(ask, 'first_post')) router.push('/notifications/prime');
+          if (shouldAsk(ask, 'first_post')) router.push({ pathname: '/notifications/prime', params: { ask: '1' } });
         })
         .catch(() => undefined);
     }
@@ -87,8 +98,11 @@ export default function HomeTab() {
         setIndex(0);
         void load(tab, true);
       }
-      return () => setFocused(false);
-    }, [load, tab]),
+      return () => {
+        setFocused(false);
+        endView();
+      };
+    }, [load, tab, endView]),
   );
 
   const onViewable = useCallback(({ viewableItems }: { viewableItems: ViewToken<Conversation>[] }) => {
@@ -96,9 +110,14 @@ export default function HomeTab() {
     if (first && typeof first.index === 'number') {
       setIndex(first.index);
       const id = first.item.prompt.id;
-      if (!seen.current.includes(id)) seen.current.push(id);
+      if (!seen.current.includes(id)) {
+        seen.current.push(id);
+        track('prompt_viewed', { prompt_id: id, scope: first.item.prompt.place ? 'place' : 'global', surface: 'home' });
+      }
+      endView();
+      if (first.item.response) viewing.current = { id: first.item.response.id, promptId: id, position: first.index, since: Date.now(), durationMs: first.item.response.duration_ms ?? 0 };
     }
-  }, []);
+  }, [endView]);
 
   const onEndReached = () => {
     if (tab === 'foryou' && items && items.length > 0) void load('foryou', false);
@@ -106,7 +125,7 @@ export default function HomeTab() {
 
   const follow = async (id: string) => {
     try {
-      await followUser(id);
+      await followUser(id, 'suggestion');
       setSuggestions((s) => s.filter((x) => x.id !== id));
       void load('following', true);
     } catch (e) {
@@ -150,7 +169,8 @@ export default function HomeTab() {
         />
       )}
       <FeedHeader tab={tab} onTab={switchTab} />
-      <PostingBanner state={posting.state} onRetry={() => void posting.retry()} topInset={top} />
+      {/* A-Offline takes the banner slot unless a post is in flight or waiting for Retry. */}
+      {!online && (posting.state.kind === 'idle' || posting.state.kind === 'live') ? <OfflineBanner topInset={top} /> : <PostingBanner state={posting.state} onRetry={() => void posting.retry()} topInset={top} />}
     </View>
   );
 }

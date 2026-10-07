@@ -68,8 +68,8 @@ export default function SearchScreen() {
     const next = !current;
     setPeopleFollows((m) => ({ ...m, [id]: next }));
     try {
-      if (next) await followUser(id);
-      else await unfollowUser(id);
+      if (next) await followUser(id, 'search');
+      else await unfollowUser(id, 'search');
     } catch {
       setPeopleFollows((m) => ({ ...m, [id]: !next }));
     }

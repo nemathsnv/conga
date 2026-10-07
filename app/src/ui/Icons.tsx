@@ -270,3 +270,18 @@ export function PlusSlotIcon({ size = 16, color = 'rgba(255,255,255,0.75)' }: Ic
     </Svg>
   );
 }
+
+/** A-Offline: the crossed wifi glyph. */
+export function OfflineIcon({ size = 17, color = '#FFFFFF' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 3l18 18" />
+      <Path d="M8.5 16.2a5 5 0 0 1 7 0" />
+      <Path d="M5 12.6a10 10 0 0 1 4.2-2.3" />
+      <Path d="M19 12.6a10 10 0 0 0-3.4-2.1" />
+      <Path d="M2 9a15 15 0 0 1 4.3-2.7" />
+      <Path d="M22 9a15 15 0 0 0-11-4" />
+      <Circle cx="12" cy="19.5" r="0.8" fill={color} />
+    </Svg>
+  );
+}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { track } from '@/lib/analytics';
 import { signinProviders } from '@/lib/api';
 import { sendEmailCode, verifyEmailCode } from '@/lib/auth';
 import { formatCountdown, isValidEmail, normaliseOtp, OTP_LENGTH } from '@/lib/validation';
@@ -39,6 +40,7 @@ export default function EmailScreen() {
         router.push({ pathname: '/(onboarding)/linked', params: { provider: other, email: to } });
         return;
       }
+      track('signup_started', { method: 'email' });
       await sendEmailCode(to);
       setSentTo(to);
       setCode('');

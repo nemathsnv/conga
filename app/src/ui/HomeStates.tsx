@@ -1,15 +1,16 @@
 // Home's non-video states: X-Loading, Z-Empty (prompt with no responses), X-Following-Empty,
-// and the posting banners PR-Posting / X-Upload-Failed.
+// the posting banners PR-Posting / X-Upload-Failed, and A-Offline.
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { track } from '@/lib/analytics';
 import { avatarUrl } from '@/lib/api';
 import type { Conversation, FollowSuggestion } from '@/lib/content';
 import { agoLabel, responsesLabel } from '@/lib/format';
 import { Avatar, Button, Glass } from '@/ui/components';
-import { ChevronRightIcon, PlacePinIcon, PlusSlotIcon, RecordDotIcon } from '@/ui/Icons';
+import { ChevronRightIcon, OfflineIcon, PlacePinIcon, PlusSlotIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
 import type { PostingState } from '@/video/posting';
@@ -131,6 +132,26 @@ export function FollowingEmpty({ suggestions, onFollow, onBack, topInset }: { su
   );
 }
 
+/** Board A-Offline: the banner at the top of Home while the phone has no connection. */
+export function OfflineBanner({ topInset }: { topInset: number }) {
+  useEffect(() => {
+    track('offline_shown');
+  }, []);
+  return (
+    <Glass style={[s.banner, { top: topInset + 53 }]}>
+      <View style={s.bannerRow}>
+        <View style={s.offlineIcon}>
+          <OfflineIcon />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.bannerTitle}>You&apos;re offline</Text>
+          <Text style={s.bannerSub}>Your response stays saved on this phone. Post when you&apos;re back online.</Text>
+        </View>
+      </View>
+    </Glass>
+  );
+}
+
 /** Boards PR-Posting and X-Upload-Failed: the banner at the top of Home. */
 export function PostingBanner({ state, onRetry, topInset }: { state: PostingState; onRetry: () => void; topInset: number }) {
   if (state.kind === 'idle' || state.kind === 'live') return null;
@@ -186,6 +207,7 @@ const s = StyleSheet.create({
   firstButton: { marginTop: 20, height: 50, paddingHorizontal: 26, borderRadius: 25, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', gap: 8 },
   firstButtonText: { ...type.button16, letterSpacing: 0, color: colors.black, fontFamily },
   upTo: { marginTop: 10, ...type.caption13, color: colors.white62, fontFamily },
+  offlineIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
   nextCard: { position: 'absolute', left: 16, right: 16, height: 64, paddingLeft: 8, paddingRight: 14, justifyContent: 'center' },
   nextRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   nextThumb: { width: 40, height: 48, borderRadius: 8 },

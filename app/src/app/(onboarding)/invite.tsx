@@ -53,7 +53,7 @@ export default function InviteScreen() {
     const linkCode = pendingInvite.code;
     setCode(linkCode);
     setBusy(true);
-    void redeemInvite(linkCode)
+    void redeemInvite(linkCode, 'link')
       .then(async (result) => {
         setPendingInvite(null);
         if (result.status === 'valid' || result.status === 'already_in') await advance();

@@ -20,7 +20,7 @@ function useSecondAsk() {
     checking.current = true;
     getNotificationState()
       .then(({ ask, ask_due }) => {
-        if (ask_due && shouldAsk(ask, 'first_reply_or_comment')) router.push('/notifications/prime');
+        if (ask_due && shouldAsk(ask, 'first_reply_or_comment')) router.push({ pathname: '/notifications/prime', params: { ask: '2' } });
       })
       .catch(() => undefined)
       .finally(() => {

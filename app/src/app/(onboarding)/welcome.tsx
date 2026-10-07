@@ -7,6 +7,7 @@ import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SignInCancelled, SignInMethodConflict, SignInNotConfigured, signInWithApple, signInWithGoogle } from '@/lib/auth';
+import { track } from '@/lib/analytics';
 import { avatarUrl } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { Avatar, Button, Glass } from '@/ui/components';
@@ -25,6 +26,7 @@ export default function WelcomeScreen() {
   const run = async (method: 'apple' | 'google') => {
     if (busy) return;
     setBusy(method);
+    track('signup_started', { method });
     try {
       if (method === 'apple') await signInWithApple();
       else await signInWithGoogle();

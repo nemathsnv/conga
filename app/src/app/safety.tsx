@@ -5,6 +5,7 @@
 //   delete  — SF-Delete for your own video (id)
 //   comment — LV-CommentActions for someone else's comment (id, authorId, authorName, body)
 import * as Clipboard from 'expo-clipboard';
+import { track } from '@/lib/analytics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -47,10 +48,12 @@ export default function SafetyScreen() {
 
   const link = kind === 'profile' ? profileLink(author?.username ?? '') : videoLink(p.id);
   const copyLink = async () => {
+    track('share_tapped', { target: kind, method: 'copy', logged_in: true });
     await Clipboard.setStringAsync(link);
     close();
   };
   const shareTo = async () => {
+    track('share_tapped', { target: kind, method: 'share', logged_in: true });
     try {
       await Share.share({ url: link, message: link });
     } finally {

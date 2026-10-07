@@ -2,8 +2,9 @@
 // first public video posts, once more when the first reply or comment arrives after Not now,
 // and from Settings → Notifications when the phone's permission is off (then its button goes
 // to the phone's settings).
+import { track } from '@/lib/analytics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,8 +16,12 @@ import { colors, fontFamily, type } from '@/ui/theme';
 export default function NotificationPrimeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { mode } = useLocalSearchParams<{ mode?: 'settings' }>();
+  const { mode, ask } = useLocalSearchParams<{ mode?: 'settings'; ask?: string }>();
   const [busy, setBusy] = useState(false);
+  const askNumber = Number(ask ?? 0);
+  useEffect(() => {
+    if (mode !== 'settings') track('notif_ask_shown', { ask_number: askNumber });
+  }, [mode, askNumber]);
 
   const turnOn = async () => {
     if (busy) return;
@@ -26,6 +31,7 @@ export default function NotificationPrimeScreen() {
         await Linking.openSettings();
       } else {
         const granted = await requestPermissionAndRegister();
+        track(granted ? 'notif_ask_accepted' : 'notif_ask_declined', { ask_number: askNumber });
         await setNotificationAsk(granted ? 'accepted' : 'declined').catch(() => undefined);
       }
     } finally {
@@ -35,7 +41,10 @@ export default function NotificationPrimeScreen() {
   };
 
   const notNow = async () => {
-    if (mode !== 'settings') await setNotificationAsk('declined').catch(() => undefined);
+    if (mode !== 'settings') {
+      track('notif_ask_declined', { ask_number: askNumber });
+      await setNotificationAsk('declined').catch(() => undefined);
+    }
     router.back();
   };
 

@@ -23,8 +23,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
+  // Store builds (phase 7): EAS profiles in eas.json; build numbers are kept on EAS
+  // ("appVersionSource": "remote") and the project id arrives with `eas init` (docs/BLOCKERS.md B-4).
   ios: {
     bundleIdentifier: 'app.shortcut',
+    buildNumber: '1',
     supportsTablet: false,
     appleTeamId: process.env.APPLE_TEAM_ID,
     usesAppleSignIn: true,
@@ -35,6 +38,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'app.shortcut',
+    versionCode: 1,
     adaptiveIcon: {
       backgroundColor: '#000000',
       foregroundImage: './assets/android-icon-foreground.png',
@@ -70,5 +74,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   experiments: {
     typedRoutes: true,
+  },
+  extra: {
+    ...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),
   },
 });

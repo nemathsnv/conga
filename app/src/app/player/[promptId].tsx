@@ -1,6 +1,7 @@
 // Boards R-Player-2 / R-Player-3 (response player: swipe up for the next response to the
 // same prompt, face strip, "2 of 23"), R-Player-End (end card) and X-Unavailable.
 // SPEC.md Sections 4 and 6.
+import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -39,12 +40,23 @@ export default function PlayerScreen() {
   const list = useRef<FlatList<Page>>(null);
   const seen = useRef<string[]>([]);
   const left = useRef(false);
+  // response_viewed: how long each response was on screen (SPEC.md Section 21).
+  const viewing = useRef<{ id: string; position: number; since: number; durationMs: number } | null>(null);
+  const endView = useCallback(() => {
+    const v = viewing.current;
+    if (!v) return;
+    viewing.current = null;
+    const watchMs = Date.now() - v.since;
+    track('response_viewed', { response_id: v.id, prompt_id: promptId ?? '', position: v.position, surface: 'player', watch_ms: watchMs, completed: v.durationMs > 0 && watchMs >= v.durationMs });
+  }, [promptId]);
+  useEffect(() => endView, [endView]);
 
   const load = useCallback(async () => {
     if (!promptId) return;
     try {
       const data = await promptResponses(promptId, entry ?? null, seen.current);
       setPrompt(data.prompt);
+      track('prompt_viewed', { prompt_id: data.prompt.id, scope: data.prompt.place ? 'place' : 'global', surface: 'player' });
       const next: Page[] = data.responses.map((r) => ({ kind: 'response', response: r }));
       if (entry && data.entry_status && data.entry_status !== 'live') next.unshift({ kind: 'unavailable' });
       // A prompt with no live responses is Z-Empty, not an end card (SPEC.md Section 20).
@@ -104,11 +116,20 @@ export default function PlayerScreen() {
     if (first && typeof first.index === 'number') {
       setIndex(first.index);
       setProgress(0);
-      if (first.item.kind === 'response' && !seen.current.includes(first.item.response.id)) seen.current.push(first.item.response.id);
+      endView();
+      if (first.item.kind === 'response') {
+        viewing.current = { id: first.item.response.id, position: first.index, since: Date.now(), durationMs: first.item.response.duration_ms ?? 0 };
+        if (!seen.current.includes(first.item.response.id)) seen.current.push(first.item.response.id);
+      } else if (first.item.kind === 'end') {
+        track('player_end_reached', { prompt_id: promptId ?? '' });
+      }
     }
-  }, []);
+  }, [endView, promptId]);
 
-  const goTo = (i: number) => list.current?.scrollToIndex({ index: i, animated: true });
+  const goTo = (i: number) => {
+    track('player_jump', { prompt_id: promptId ?? '' });
+    list.current?.scrollToIndex({ index: i, animated: true });
+  };
   const advance = useCallback(() => {
     if (pages && index < pages.length - 1) list.current?.scrollToIndex({ index: index + 1, animated: true });
   }, [pages, index]);
@@ -248,8 +269,8 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
     const nextValue = !following;
     setFollowing(nextValue);
     try {
-      if (nextValue) await followUser(response.author.id);
-      else await unfollowUser(response.author.id);
+      if (nextValue) await followUser(response.author.id, 'player');
+      else await unfollowUser(response.author.id, 'player');
     } catch {
       setFollowing(!nextValue);
     }

@@ -1,5 +1,6 @@
 // Server calls and types for the core loop (phase 3) and the conversation (phase 4).
 // Shapes mirror the SQL card functions.
+import { track } from './analytics';
 import { ServerError } from './api';
 import { supabase } from './supabase';
 
@@ -194,8 +195,9 @@ export async function getPrompt(id: string): Promise<PromptCard | null> {
   return (unwrap(await supabase.rpc('get_prompt', { p_id: id })) ?? null) as PromptCard | null;
 }
 
-export async function acknowledgeDisclosure(): Promise<void> {
+export async function acknowledgeDisclosure(kind: 'response' | 'reply' | 'draft' = 'response'): Promise<void> {
   unwrap(await supabase.rpc('acknowledge_disclosure'));
+  track('disclosure_accepted', { kind });
 }
 
 export async function postResponse(promptId: string, uploadId: string, caption: string | null, durationMs: number): Promise<ResponseCard> {
@@ -218,12 +220,16 @@ export async function profileResponses(profileId: string): Promise<ProfileRespon
   return (unwrap(await supabase.rpc('profile_responses', { p_profile: profileId })) ?? []) as ProfileResponse[];
 }
 
-export async function followUser(id: string): Promise<void> {
+export type FollowSource = 'profile' | 'player' | 'home' | 'reply' | 'search' | 'activity' | 'suggestion' | 'follows' | 'invites';
+
+export async function followUser(id: string, source: FollowSource = 'profile'): Promise<void> {
   unwrap(await supabase.rpc('follow_user', { p_user: id }));
+  track('follow_user', { source });
 }
 
-export async function unfollowUser(id: string): Promise<void> {
+export async function unfollowUser(id: string, source: FollowSource = 'profile'): Promise<void> {
   unwrap(await supabase.rpc('unfollow_user', { p_user: id }));
+  track('unfollow_user', { source });
 }
 
 export async function followList(profileId: string, kind: 'followers' | 'following'): Promise<FollowRow[]> {
@@ -273,15 +279,20 @@ export async function commentsList(responseId: string): Promise<CommentsSheet> {
 }
 
 export async function postComment(responseId: string, body: string, parentId: string | null): Promise<CommentThread> {
-  return unwrap(await supabase.rpc('post_comment', { p_response: responseId, p_body: body, p_parent: parentId })) as CommentThread;
+  const card = unwrap(await supabase.rpc('post_comment', { p_response: responseId, p_body: body, p_parent: parentId })) as CommentThread;
+  track('comment_posted', { target_type: parentId ? 'comment' : 'video' });
+  return card;
 }
 
 export async function deleteComment(id: string): Promise<void> {
   unwrap(await supabase.rpc('delete_comment', { p_id: id }));
+  track('content_deleted', { target_type: 'comment' });
 }
 
 export async function likeVideo(id: string): Promise<number> {
-  return unwrap(await supabase.rpc('like_video', { p_video: id })) as number;
+  const n = unwrap(await supabase.rpc('like_video', { p_video: id })) as number;
+  track('like_added', { target_type: 'video' });
+  return n;
 }
 
 export async function unlikeVideo(id: string): Promise<number> {
@@ -290,6 +301,7 @@ export async function unlikeVideo(id: string): Promise<number> {
 
 export async function likeComment(id: string): Promise<void> {
   unwrap(await supabase.rpc('like_comment', { p_comment: id }));
+  track('like_added', { target_type: 'comment' });
 }
 
 export async function unlikeComment(id: string): Promise<void> {
@@ -348,11 +360,14 @@ export type ReportReason = 'harassment' | 'hate' | 'nudity' | 'violence' | 'self
 export type ReportKind = 'video' | 'comment' | 'profile';
 
 export async function reportItem(kind: ReportKind, id: string, reason: ReportReason): Promise<ProfileCard> {
-  return unwrap(await supabase.rpc('report_item', { p_kind: kind, p_id: id, p_reason: reason })) as ProfileCard;
+  const who = unwrap(await supabase.rpc('report_item', { p_kind: kind, p_id: id, p_reason: reason })) as ProfileCard;
+  track('report_submitted', { reason, target_type: kind });
+  return who;
 }
 
 export async function blockUser(id: string): Promise<void> {
   unwrap(await supabase.rpc('block_user', { p_user: id }));
+  track('user_blocked', { target_type: 'profile' });
 }
 
 export async function unblockUser(id: string): Promise<void> {
@@ -365,11 +380,13 @@ export async function blockedList(): Promise<ProfileCard[]> {
 
 export async function deleteVideo(id: string): Promise<void> {
   unwrap(await supabase.rpc('delete_video', { p_id: id }));
+  track('content_deleted', { target_type: 'video' });
 }
 
 /** Needs a sign-in no older than ten minutes; otherwise the server says reauth_required. */
 export async function deleteAccount(): Promise<void> {
   unwrap(await supabase.rpc('delete_account'));
+  track('account_deletion_requested', { target_type: 'account' });
 }
 
 export type Notice = {
@@ -441,11 +458,13 @@ export type Suggestion = {
 };
 export type MySuggestions = { in_review_count: number; suggestions: Suggestion[] };
 
-export async function followPlace(id: string): Promise<void> {
+export async function followPlace(id: string, source: 'manual' | 'suggestion' = 'manual'): Promise<void> {
   unwrap(await supabase.rpc('follow_place', { p_place: id }));
+  track('place_followed', { place_id: id, source });
 }
-export async function unfollowPlace(id: string): Promise<void> {
+export async function unfollowPlace(id: string, source: 'manual' | 'suggestion' = 'manual'): Promise<void> {
   unwrap(await supabase.rpc('unfollow_place', { p_place: id }));
+  track('place_unfollowed', { place_id: id, source });
 }
 export async function placesScreen(): Promise<PlacesScreen> {
   return unwrap(await supabase.rpc('places_screen')) as PlacesScreen;
@@ -460,13 +479,19 @@ export async function search(q: string): Promise<SearchResults> {
   return unwrap(await supabase.rpc('search', { p_q: q })) as SearchResults;
 }
 export async function suggestPrompt(text: string, placeId: string | null, attribution: boolean): Promise<Suggestion> {
-  return unwrap(await supabase.rpc('suggest_prompt', { p_text: text, p_place: placeId, p_attribution: attribution })) as Suggestion;
+  const sg = unwrap(await supabase.rpc('suggest_prompt', { p_text: text, p_place: placeId, p_attribution: attribution })) as Suggestion;
+  track('suggestion_submitted', { scope: placeId ? 'place' : 'global', attribution });
+  return sg;
 }
+/** Edit in review, or rewrite and resend a declined one: both go back into review. */
 export async function editSuggestion(id: string, text: string, placeId: string | null, attribution: boolean): Promise<Suggestion> {
-  return unwrap(await supabase.rpc('edit_suggestion', { p_id: id, p_text: text, p_place: placeId, p_attribution: attribution })) as Suggestion;
+  const sg = unwrap(await supabase.rpc('edit_suggestion', { p_id: id, p_text: text, p_place: placeId, p_attribution: attribution })) as Suggestion;
+  track('suggestion_submitted', { scope: placeId ? 'place' : 'global', attribution });
+  return sg;
 }
 export async function withdrawSuggestion(id: string): Promise<void> {
   unwrap(await supabase.rpc('withdraw_suggestion', { p_id: id }));
+  track('suggestion_withdrawn', { target_type: 'suggestion' });
 }
 export async function mySuggestions(): Promise<MySuggestions> {
   return unwrap(await supabase.rpc('my_suggestions')) as MySuggestions;
@@ -482,4 +507,23 @@ export async function publishDraft(suggestionId: string): Promise<ResponseCard> 
 }
 export async function discardDraft(suggestionId: string): Promise<void> {
   unwrap(await supabase.rpc('discard_draft', { p_suggestion: suggestionId }));
+}
+
+// ---------------------------------------------------------------------------
+// Members' invites (phase 7, board S-Invites)
+export type SentInvite = {
+  id: string;
+  status: 'joined' | 'opened';
+  expires_at: string | null;
+  joined_at: string | null;
+  profile: { id: string; name: string; username: string; photo_path: string | null } | null;
+  following: boolean;
+};
+export type MyInvites = { code: string; left: number; total: number; cohort_name: string | null; sent: SentInvite[] };
+
+export async function myInvites(): Promise<MyInvites> {
+  return unwrap(await supabase.rpc('my_invites')) as MyInvites;
+}
+export async function cancelInvite(id: string): Promise<void> {
+  unwrap(await supabase.rpc('cancel_invite', { p_id: id }));
 }

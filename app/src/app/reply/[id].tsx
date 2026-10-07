@@ -1,5 +1,6 @@
 // Boards Reply-Watch (a reply to the root), Reply-Watch-2 (a reply to a reply, flat in the
 // root's room) and A-Orphan (the root response was deleted). SPEC.md Section 7.
+import { track } from '@/lib/analytics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -44,6 +45,7 @@ export default function ReplyPlayerScreen() {
         if (full.context.kind === 'reply' && !full.context.root_deleted && full.root_response_id) {
           const room = await replyRoom(full.root_response_id);
           const start = Math.max(0, room.replies.findIndex((r) => r.id === full.id));
+          track('reply_room_opened', { response_id: full.root_response_id });
           setPages(room.replies);
           setIndex(start);
           setTimeout(() => list.current?.scrollToIndex({ index: start, animated: false }), 0);
@@ -169,8 +171,8 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
     const nextValue = !following;
     setFollowing(nextValue);
     try {
-      if (nextValue) await followUser(reply.author.id);
-      else await unfollowUser(reply.author.id);
+      if (nextValue) await followUser(reply.author.id, 'reply');
+      else await unfollowUser(reply.author.id, 'reply');
     } catch {
       setFollowing(!nextValue);
     }

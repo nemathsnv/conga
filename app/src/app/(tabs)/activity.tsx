@@ -45,7 +45,7 @@ export default function ActivityTab() {
     if (!row.actor) return;
     setFollowedBack((s) => new Set(s).add(row.actor!.id));
     try {
-      await followUser(row.actor.id);
+      await followUser(row.actor.id, 'activity');
     } catch {
       setFollowedBack((s) => {
         const n = new Set(s);

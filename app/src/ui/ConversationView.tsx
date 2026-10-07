@@ -53,8 +53,8 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
     const next = !following;
     setFollowing(next);
     try {
-      if (next) await followUser(response.author.id);
-      else await unfollowUser(response.author.id);
+      if (next) await followUser(response.author.id, 'home');
+      else await unfollowUser(response.author.id, 'home');
     } catch (e) {
       setFollowing(!next);
       console.error('follow failed', e);

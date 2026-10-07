@@ -11,6 +11,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
+import { track } from '@/lib/analytics';
 import { getPrompt, getSuggestion, getVideo, type PromptCard, type Video } from '@/lib/content';
 import { ReplyCard } from '@/ui/ReplyCard';
 import { Button, Glass } from '@/ui/components';
@@ -82,6 +83,7 @@ export default function RecordScreen() {
     if (!cam.current || !ready || recording || !prompt || (replyTo && !target)) return;
     setRecording(true);
     startedAt.current = Date.now();
+    track('record_started', { kind: draftFor ? 'draft' : replyTo ? 'reply' : 'response' });
     setElapsedMs(0);
     timer.current = setInterval(() => setElapsedMs(Math.min(MAX_DURATION_MS, Date.now() - startedAt.current)), 100);
     if (light && facing === 'back') {
@@ -102,6 +104,7 @@ export default function RecordScreen() {
         setTimeout(() => setShortToast(false), 2200);
         return;
       }
+      track('record_completed', { kind: draftFor ? 'draft' : replyTo ? 'reply' : 'response', duration_s: Math.round(durationMs / 1000) });
       const segment = keepSegment(result.uri, facing, durationMs);
       setCurrentRecording({ recording: makeRecording(prompt.id, [segment]), prompt, replyTo: target ?? undefined, draftFor: draftFor ?? undefined });
       router.replace('/record/review');
@@ -123,6 +126,12 @@ export default function RecordScreen() {
 
   const cameraOff = camera && !camera.granted && !camera.canAskAgain;
   const micOff = !!camera?.granted && !!mic && !mic.granted && !mic.canAskAgain;
+  useEffect(() => {
+    if (cameraOff) track('permission_denied', { permission: 'camera' });
+  }, [cameraOff]);
+  useEffect(() => {
+    if (micOff) track('permission_denied', { permission: 'microphone' });
+  }, [micOff]);
   const progress = elapsedMs / MAX_DURATION_MS;
   const circumference = Math.PI * (RING - RING_STROKE);
 

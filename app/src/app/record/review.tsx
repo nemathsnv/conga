@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { track } from '@/lib/analytics';
 import { acknowledgeDisclosure, disclosureAcknowledged } from '@/lib/content';
 import { useSession } from '@/lib/session';
 import { Button, Glass } from '@/ui/components';
@@ -99,6 +100,7 @@ export default function ReviewScreen() {
       const acked = await disclosureAcknowledged();
       if (!acked) {
         setDisclosure(true);
+        track('disclosure_shown', { kind: replyTo ? 'reply' : 'response' });
         return;
       }
     } catch (e) {
@@ -110,7 +112,7 @@ export default function ReviewScreen() {
 
   const onDisclosurePost = async () => {
     try {
-      await acknowledgeDisclosure();
+      await acknowledgeDisclosure(replyTo ? 'reply' : 'response');
       setDisclosure(false);
       await submit();
     } catch (e) {
@@ -230,7 +232,7 @@ export default function ReviewScreen() {
               <Point icon={<CommentIcon size={16} color={colors.text} />} title="You stay in control" text="Delete any of your videos at any time." />
             </View>
             <Button title="Post" onPress={() => void onDisclosurePost()} disabled={busy} style={{ marginTop: 24 }} />
-            <Button title="Go back" variant="text" onPress={() => setDisclosure(false)} style={{ marginTop: 6 }} textStyle={{ fontSize: 16 }} />
+            <Button title="Go back" variant="text" onPress={() => { track('disclosure_back', { kind: replyTo ? 'reply' : 'response' }); setDisclosure(false); }} style={{ marginTop: 6 }} textStyle={{ fontSize: 16 }} />
             <Text style={s.sheetNote}>Shown once, before your first public video: a response, a video reply or a published draft.</Text>
           </View>
         </View>
