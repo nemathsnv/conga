@@ -67,7 +67,7 @@ select is((select count(*)::int from public.profiles where id = '22222222-2222-2
 select is((select count(*)::int from public.invites), 0, 'invites of other people are not readable');
 
 select is(
-  public.get_onboarding_state() - 'profile',
+  public.get_onboarding_state() - 'profile' - 'suspended' - 'suspension',
   '{"email":"lena@example.com","age_confirmed":false,"invite_required":true,"has_beta_access":false,"waitlisted":false,"has_profile":false}'::jsonb,
   'initial onboarding state'
 );
