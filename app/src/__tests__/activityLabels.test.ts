@@ -20,6 +20,7 @@ const base: ActivityRow = {
   prompt: null,
   like_count: null,
   moderation_action_id: null,
+  review_outcome: null,
 };
 
 describe('actorNames', () => {

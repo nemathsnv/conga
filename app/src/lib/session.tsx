@@ -4,6 +4,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { setSuspendedHandler } from './content';
 import { getOnboardingState } from './api';
 import { loadPendingInvite, savePendingInvite, type PendingInvite } from './pendingInvite';
 import { type OnboardingState, type OnboardingStep, resolveStep } from './onboarding';
@@ -95,6 +96,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!userId) return null;
     return load(userId);
   }, [load]);
+
+  // A 'suspended' refusal anywhere re-reads the sign-in state (LV-Suspended).
+  useEffect(() => {
+    setSuspendedHandler(() => void refresh());
+  }, [refresh]);
 
   const signOut = useCallback(async () => {
     setPhotoStepPending(false);

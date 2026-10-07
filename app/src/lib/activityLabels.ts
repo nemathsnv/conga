@@ -46,7 +46,7 @@ export function activityText(row: ActivityRow): ActivityText {
     case 'suspended':
       return { names: '', rest: 'Your account is suspended', quote: null };
     case 'review_outcome':
-      return { names: '', rest: 'We reviewed your request again', quote: null };
+      return { names: '', rest: row.review_outcome === 'reversed' ? 'We reviewed your request and reversed the decision.' : 'We reviewed your request. The decision stands.', quote: null };
     case 'like': {
       const n = row.like_count ?? row.actor_count;
       const who = n <= 1 ? (row.actor?.name ?? '') : `${first(row.actor?.name ?? '')} and ${n - 1} ${n - 1 === 1 ? 'other' : 'others'}`;

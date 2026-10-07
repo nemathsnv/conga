@@ -1,7 +1,7 @@
 -- pgTAP tests for phase 5: reports, blocks, deleting videos and accounts, the enforcement ladder,
 -- notices and review requests, moderator functions, the web read functions.
 begin;
-select plan(80);
+select plan(94);
 
 delete from public.reports;
 delete from public.review_requests;
@@ -45,6 +45,14 @@ select is(jsonb_array_length((public.web_video('d4444444-4444-4444-4444-44444444
 select is((public.web_prompt('22222222-aaaa-aaaa-aaaa-222222222222'))->>'status', 'empty', 'a prompt with no responses is the web empty state');
 select throws_ok($$ select public.report_item('video', 'd4444444-4444-4444-4444-444444444444', 'spam') $$, '42501', null, 'anon cannot report');
 select throws_ok($$ select public.mod_remove_video('d4444444-4444-4444-4444-444444444444', 'x', 'nemat') $$, '42501', null, 'anon cannot moderate');
+reset role;
+
+-- The API gate lets a normal account through.
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+select set_config('request.path', '/rpc/home_feed', true);
+select lives_ok($$ select public.pre_request() $$, 'the gate lets a normal account through');
+select set_config('request.path', '', true);
 reset role;
 
 -- ---------------------------------------------------------------------------
@@ -126,6 +134,7 @@ select is(jsonb_array_length(public.mod_review_queue()), 1, 'the review is in th
 select lives_ok($$ select public.mod_decide_review((select id from public.moderation_actions where kind = 'remove'), 'reversed', 'nemat', 'fair point') $$, 'decide: reversed');
 select is((select status from public.responses where id = 'd5555555-5555-5555-5555-555555555555'), 'live', 'a reversed removal restores the video');
 select is((select count(*)::int from public.activity where recipient_id = 'c3333333-3333-3333-3333-333333333333' and kind = 'review_outcome'), 1, 'the outcome is a notification');
+select is((select public.push_text(o) from public.push_outbox o where kind = 'review_outcome'), 'We reviewed your request and reversed the decision.', 'with the decided text');
 select is(jsonb_array_length(public.mod_review_queue()), 0, 'the queue is empty again');
 
 select lives_ok($$ select public.mod_restrict('c3333333-3333-3333-3333-333333333333', now() + interval '5 days', 'Two of your responses were removed for harassment.', 'nemat') $$, 'restrict Maya');
@@ -144,12 +153,31 @@ select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-3333333
 select is((public.get_onboarding_state())->>'suspended', 'true', 'sign-in state says suspended');
 select is((public.get_onboarding_state())->'suspension'->>'reason', 'Repeated harassment in responses and comments.', 'with the reason');
 select throws_ok($$ select public.post_comment('d5555555-5555-5555-5555-555555555555', 'hi') $$, 'P0001', 'suspended', 'a suspended account cannot post');
+-- The API gate: every PostgREST request is refused except the suspended experience's own paths.
+select set_config('request.path', '/rpc/home_feed', true);
+select throws_ok($$ select public.pre_request() $$, 'P0001', 'suspended', 'the gate refuses the feed');
+select set_config('request.path', '/responses', true);
+select throws_ok($$ select public.pre_request() $$, 'P0001', 'suspended', 'and direct table reads');
+select set_config('request.path', '/rpc/get_onboarding_state', true);
+select lives_ok($$ select public.pre_request() $$, 'but lets the sign-in state through');
+select set_config('request.path', '/rpc/request_review', true);
+select lives_ok($$ select public.pre_request() $$, 'and the review request');
+select set_config('request.path', '/rpc/delete_account', true);
+select lives_ok($$ select public.pre_request() $$, 'and account deletion');
+select throws_ok($$ select public.home_feed() $$, 'P0001', 'suspended', 'the read functions refuse a suspended viewer too');
+select throws_ok($$ select public.prompt_responses('11111111-aaaa-aaaa-aaaa-111111111111') $$, 'P0001', 'suspended', 'the player too');
+select throws_ok($$ select public.get_profile('a1111111-1111-1111-1111-111111111111') $$, 'P0001', 'suspended', 'and profiles with videos');
+select throws_ok($$ select public.activity_list() $$, 'P0001', 'suspended', 'and Activity');
+select throws_ok($$ select public.open_prompts() $$, 'P0001', 'suspended', 'and the + sheet');
+select set_config('request.path', '', true);
 select lives_ok($$ select public.request_review(((public.get_onboarding_state())->'suspension'->>'action_id')::uuid) $$, 'Request a review of the suspension');
 select is((public.get_onboarding_state())->'suspension'->>'review_requested', 'true', 'LV-ReviewRequested');
 reset role;
 select lives_ok($$ select public.mod_restore_account('c3333333-3333-3333-3333-333333333333', 'Review: reversed', 'nemat') $$, 'restore');
 select is((select moderation_status from public.accounts where id = 'c3333333-3333-3333-3333-333333333333'), 'active', 'active again');
 select is(jsonb_array_length(public.mod_account_log('c3333333-3333-3333-3333-333333333333')), 5, 'the log holds every action (remove, restore via review, restrict, suspend, restore)');
+select throws_ok($$ select public.mod_warn('c3333333-3333-3333-3333-333333333333', 'x', 'nemat') $$, '42883', null, 'there is no standalone warning action');
+select throws_ok($$ insert into public.moderation_actions (moderator, account_id, kind, reason) values ('nemat', 'c3333333-3333-3333-3333-333333333333', 'warn', 'x') $$, '23514', null, 'nor a warn kind in the log');
 
 -- ---------------------------------------------------------------------------
 -- Delete your account: a fresh sign-in first, then hidden for 30 days, restored by signing in.

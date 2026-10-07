@@ -8,7 +8,6 @@
 #   scripts/moderate.sh log <account-id>             every action on an account
 #   scripts/moderate.sh remove-video <id> "<reason>" [note]
 #   scripts/moderate.sh remove-comment <id> "<reason>" [note]
-#   scripts/moderate.sh warn <account-id> "<reason>" [note]
 #   scripts/moderate.sh restrict <account-id> <until ISO date> "<reason>" [note]
 #   scripts/moderate.sh suspend <account-id> "<reason>" [note]
 #   scripts/moderate.sh restore-account <account-id> "<reason>" [note]
@@ -17,6 +16,7 @@
 #   scripts/moderate.sh decide <action-id> upheld|reversed [note]
 #
 # The reason is shown to the person (A-Removed, A-Restricted, LV-Suspended); the note is internal.
+# There is no standalone warning: a warning is the removal notice itself (A-Removed).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -35,7 +35,6 @@ case "$cmd" in
   log)             q "select jsonb_pretty(public.mod_account_log('$1'))" ;;
   remove-video)    q "select public.mod_remove_video('$1', '$(lit "$2")', '$(lit "$MOD")', $(note "${3:-}"))" ;;
   remove-comment)  q "select public.mod_remove_comment('$1', '$(lit "$2")', '$(lit "$MOD")', $(note "${3:-}"))" ;;
-  warn)            q "select public.mod_warn('$1', '$(lit "$2")', '$(lit "$MOD")', $(note "${3:-}"))" ;;
   restrict)        q "select public.mod_restrict('$1', '$2'::timestamptz, '$(lit "$3")', '$(lit "$MOD")', $(note "${4:-}"))" ;;
   suspend)         q "select public.mod_suspend('$1', '$(lit "$2")', '$(lit "$MOD")', $(note "${3:-}"))" ;;
   restore-account) q "select public.mod_restore_account('$1', '$(lit "$2")', '$(lit "$MOD")', $(note "${3:-}"))" ;;

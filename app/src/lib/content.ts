@@ -100,6 +100,7 @@ export type ActivityRow = {
   prompt: { id: string; text: string } | null;
   like_count: number | null;
   moderation_action_id: string | null;
+  review_outcome: 'upheld' | 'reversed' | null;
 };
 
 export type ActivityList = { unread_count: number; tonight: PromptCard | null; rows: ActivityRow[] };
@@ -146,8 +147,22 @@ export type FollowRow = ProfileCard & { is_following: boolean; follows_you: bool
 export type FollowSuggestion = ProfileCard & { response_count: number; prompt_text: string };
 
 function unwrap<T>(res: { data: T; error: { message: string } | null }): T {
-  if (res.error) throw new ServerError(res.error.message);
+  if (res.error) {
+    // The server refuses everything from a suspended account (pre_request gate): the session
+    // re-reads its state so the app lands on LV-Suspended.
+    if (res.error.message.includes('suspended')) onSuspended();
+    throw new ServerError(res.error.message);
+  }
   return res.data;
+}
+
+let suspendedHandler: () => void = () => undefined;
+/** Registered by the session provider. */
+export function setSuspendedHandler(fn: () => void): void {
+  suspendedHandler = fn;
+}
+function onSuspended(): void {
+  suspendedHandler();
 }
 
 export async function homeFeed(exclude: string[], limit = 10): Promise<Conversation[]> {

@@ -80,3 +80,15 @@ function; the two association files; `associatedDomains` and `intentFilters` in 
 
 **Check.** A shared link opens the app on a phone with it installed, the web page otherwise; the
 preview shows the thumbnail, prompt and name in a messaging app.
+
+## Gate 5 and pre-beta items (open)
+
+Tracked here so they cannot disappear; none is closed by code alone.
+
+- **Community guidelines** (and privacy policy, terms): no document or URL yet. `S-Settings` and
+  `A-Removed` ("Read the Community Guidelines") stay inactive until then.
+- **Help and feedback**: no destination (address or form) yet.
+- **Moderation web admin**: required before the first outside tester (Nemat, 8 Oct 2026); the CLI
+  is for development only.
+- **Real-device verification** of phases 2 to 5 on iPhone and Android.
+- **B-2** push credentials and **B-3** domain and app links, above.

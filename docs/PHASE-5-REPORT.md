@@ -63,7 +63,7 @@ inactive; it is not in the phase 5 list and belongs with the closed-beta work, s
 
 | Check | Result |
 | --- | --- |
-| pgTAP (`supabase test db`) | 260/260 (onboarding 50, core loop 31, conversation 99, safety 80) |
+| pgTAP (`supabase test db`) | 274/274 (onboarding 50, core loop 31, conversation 99, safety 94) |
 | `npm run typecheck`, `npm run lint` | clean |
 | Jest | 46/46 |
 | Web function in the browser pane (local stack) | `SF-Web` with HLS playback and counts, `LV-WebEmpty`, `LV-WebUnavailable`, the sign-in sheet |
@@ -89,7 +89,25 @@ Apple or Google (needs the paid team and Google credentials); account deletion w
 on a device; enforcement notices arriving by push (B-2); link previews in a messaging app and
 opening the app from a link (B-3); Android.
 
-## 6. Deviations, open questions and blockers for Nemat
+## 6. Corrections of 8 Oct 2026 (Nemat)
+
+Migration `20261008000200_safety_fixes.sql`: a suspended account is refused on every product API
+path by a PostgREST pre-request gate (`pre_request`, set on the `authenticator` role) and, inside
+the database, by the card helpers every read goes through; only `get_onboarding_state`,
+`request_review`, `delete_account`, `remove_push_token` and `set_timezone` stay open (sign-out is
+client-side). The app re-reads its sign-in state on any "suspended" refusal and lands on
+`LV-Suspended`. The standalone moderator `warn` action is gone: a warning is `A-Removed`. Review
+outcomes use the decided texts. Decisions recorded in `docs/DECISIONS.md`: they/their copy on
+`SF-Block`, `S-Invites` in phase 7, the moderation web admin before the first outside tester (CLI
+for development), the review-outcome texts, viewer-visible counts. Gate 5 items are listed in
+`docs/BLOCKERS.md`.
+
+Checked against the local API with a suspended account's JWT: `home_feed`, `activity_list`,
+`get_profile`, `open_prompts` and a direct read of the responses table all return the suspended
+error; `get_onboarding_state` still answers. pgTAP covers the gate function, the read functions,
+the removed `warn` and the outcome text.
+
+## 7. Deviations, open questions and blockers for Nemat (as of 7 Oct; items 1, 3, 4 and 6 decided on 8 Oct)
 
 1. **`SF-Block` copy is gendered** on the board ("He won't be able to see…", written for Adam).
    Profiles carry no pronouns, so the sheet says "They won't be able to see your responses, reply to

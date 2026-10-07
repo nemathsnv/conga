@@ -11,6 +11,12 @@ Gate decisions belong to Nemat. Claude Code records them here once they are made
 | 2026-10-07 | Tonight's prompt uses the phone's current IANA timezone, refreshed on launch and when the app returns to the foreground. Clarifies SPEC.md Section 15. | Nemat | Phase 4 review message |
 | 2026-10-07 | `LV-CommentActions` (Report, Block on someone else's comment) ships in phase 5 with safety; no partial version before then. | Nemat | Phase 4 review message |
 | 2026-10-07 | Second notification ask: after the first Not now, the arrival of the first reply or comment makes another ask due; N-Prime shows at the next safe foreground moment, not only when Activity is opened. Clarifies SPEC.md Section 15. | Nemat | Phase 4 review message |
+| 2026-10-08 | `SF-Block` uses gender-neutral they/their copy ("They won't be able to see your responses, reply to you or follow you, and you won't see theirs. They won't be told."). | Nemat | Phase 5 review message |
+| 2026-10-08 | `S-Invites` (members' invites) belongs to phase 7 closed-beta work. | Nemat | Phase 5 review message |
+| 2026-10-08 | A small internal moderation web admin is required before the first outside tester; the CLI (`scripts/moderate.sh`) stays acceptable for development. Tracked as a Gate 5 item. | Nemat | Phase 5 review message |
+| 2026-10-08 | Review outcome texts: "We reviewed your request. The decision stands." and "We reviewed your request and reversed the decision." | Nemat | Phase 5 review message |
+| 2026-10-08 | Viewer-visible reply and comment counts may exclude content hidden from that viewer by a block or a report. | Nemat | Phase 5 review message |
+| 2026-10-08 | Suspension is enforced server-side across every product API path; only the suspension notice, review request, account deletion and recovery, and sign-out remain. A standalone moderator "warn" action is unavailable: a warning is the removal notice (`A-Removed`), per the enforcement ladder. | Nemat | Phase 5 review message |
 
 ## Gates (SPEC.md Section 23)
 
