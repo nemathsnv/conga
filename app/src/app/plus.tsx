@@ -1,15 +1,15 @@
-// Board C-Plus: the + sheet. "Respond to" lists tonight's prompt first, then open global
-// prompts (followed places arrive in phase 6). The "Suggest a prompt" rows belong to the
-// suggestion flow (phase 6) and are not drawn until then.
+// Board C-Plus: the + sheet. "Respond to" lists tonight's prompt first, then open prompts
+// from the feed (global and followed places); "Suggest a prompt · Reviewed before anyone sees
+// it"; "Your suggestions · N in review". SPEC.md Sections 4, 12.
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { openPrompts, type PromptCard } from '@/lib/content';
+import { mySuggestions, openPrompts, type PromptCard } from '@/lib/content';
 import { responsesLabel } from '@/lib/format';
 import { Separator } from '@/ui/components';
-import { PlacePinIcon } from '@/ui/Icons';
+import { ChevronRightIcon, PlacePinIcon, PromptBubbleIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 function isTonight(p: PromptCard): boolean {
@@ -20,9 +20,11 @@ export default function PlusSheet() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [prompts, setPrompts] = useState<PromptCard[] | null>(null);
+  const [inReview, setInReview] = useState<number | null>(null);
 
   useEffect(() => {
     void openPrompts().then(setPrompts).catch((e) => console.error('open_prompts failed', e));
+    void mySuggestions().then((d) => setInReview(d.in_review_count)).catch((e) => console.error('my_suggestions failed', e));
   }, []);
 
   const respond = (p: PromptCard) => {
@@ -59,6 +61,21 @@ export default function PlusSheet() {
             ))}
           </View>
         </ScrollView>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/suggest/write')} style={({ pressed }) => [s.suggestRow, pressed && { opacity: 0.7 }]}>
+          <View style={s.suggestIcon}>
+            <PromptBubbleIcon color={colors.text} size={16} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.suggestTitle}>Suggest a prompt</Text>
+            <Text style={s.sub}>Reviewed before anyone sees it</Text>
+          </View>
+          <ChevronRightIcon color="#C7C7CC" size={16} />
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/suggestions')} style={s.yours}>
+          <Text style={s.yoursText}>
+            Your suggestions · <Text style={s.yoursCount}>{inReview ?? 0} in review</Text>
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -76,4 +93,10 @@ const s = StyleSheet.create({
   sub: { ...type.caption13, color: colors.textSecondary, fontFamily },
   pill: { height: 30, paddingHorizontal: 13, borderRadius: 15, backgroundColor: colors.text, justifyContent: 'center' },
   pillText: { ...type.semi14, color: colors.white, fontFamily },
+  suggestRow: { marginTop: 12, borderRadius: 14, backgroundColor: colors.fill, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  suggestIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
+  suggestTitle: { ...type.button16, color: colors.text, fontFamily },
+  yours: { marginTop: 12, alignItems: 'center' },
+  yoursText: { ...type.body14, color: colors.textSecondary, fontFamily },
+  yoursCount: { fontWeight: '600', color: colors.text },
 });

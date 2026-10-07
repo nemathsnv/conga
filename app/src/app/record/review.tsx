@@ -1,6 +1,7 @@
 // Boards PR-Review (watch, caption, Re-record, Post), PR-Caption (typing), PR-Discard
 // (Discard this recording?) and A-Disclosure (first public video). SPEC.md Sections 6, 16.
 // PR-Reply: the same review for a video reply, with the context card and "Post reply".
+// PR-Draft: a private first response for a suggestion in review, with "Save draft".
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
@@ -48,7 +49,7 @@ export default function ReviewScreen() {
     if (!current) router.replace('/(tabs)');
   }, [current, router]);
   if (!current) return null;
-  const { recording, prompt, replyTo } = current;
+  const { recording, prompt, replyTo, draftFor } = current;
   const rootName = replyTo?.context.kind === 'reply' ? replyTo.context.root?.author.name ?? null : null;
 
   const discard = () => {
@@ -61,16 +62,17 @@ export default function ReviewScreen() {
   const rerecord = () => {
     deleteRecordingFiles(recording);
     setCurrentRecording(null);
-    router.replace({ pathname: '/record/[promptId]', params: { promptId: prompt.id, ...(replyTo ? { replyTo: replyTo.id } : {}) } });
+    router.replace({ pathname: '/record/[promptId]', params: { promptId: draftFor ? 'draft' : prompt.id, ...(replyTo ? { replyTo: replyTo.id } : {}), ...(draftFor ? { draftFor } : {}) } });
   };
 
   const submit = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      await posting.post({ recording, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, ticket: ticket.current, replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined });
+      await posting.post({ recording, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, ticket: ticket.current, replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined, draftFor });
       setCurrentRecording(null);
-      router.dismissTo('/(tabs)');
+      if (draftFor) router.dismissTo('/suggestions');
+      else router.dismissTo('/(tabs)');
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       if (message.includes('posting_paused') || message.includes('suspended')) {
@@ -88,6 +90,11 @@ export default function ReviewScreen() {
 
   const onPost = async () => {
     if (busy) return;
+    // A private draft is not a public video: no disclosure until it is published (C-Draft).
+    if (draftFor) {
+      await submit();
+      return;
+    }
     try {
       const acked = await disclosureAcknowledged();
       if (!acked) {
@@ -123,7 +130,7 @@ export default function ReviewScreen() {
         <GlassTool label="Discard" onPress={() => setDiscardAsk(true)}>
           <CloseIcon />
         </GlassTool>
-        {replyTo ? (
+        {replyTo || draftFor ? (
           <View style={{ flex: 1 }} />
         ) : (
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -132,6 +139,16 @@ export default function ReviewScreen() {
           </View>
         )}
       </View>
+      {draftFor ? (
+        <Glass style={[s.draftCard, { top: insets.top + 59 }]} radius={16}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={s.draftKicker}>First response for your suggested prompt</Text>
+            <Text style={s.draftKicker}>Only you</Text>
+          </View>
+          <Text style={s.draftText} numberOfLines={2}>{prompt.text}</Text>
+          <Text style={s.draftSub}>{prompt.place ? `${prompt.place.name} · ` : ''}in review</Text>
+        </Glass>
+      ) : null}
       {replyTo ? (
         <ReplyCard
           kicker="Your reply to"
@@ -163,6 +180,7 @@ export default function ReviewScreen() {
             />
           </Glass>
           {editing ? <Text style={s.counter}>{caption.length} / {CAPTION_MAX}</Text> : null}
+          {draftFor && !editing ? <Text style={s.draftNote}>Saved privately. When your prompt goes live, you choose whether to publish it.</Text> : null}
           {!editing ? (
             <View style={s.buttons}>
               <Pressable accessibilityRole="button" onPress={rerecord} style={({ pressed }) => [s.rerecord, pressed && { opacity: 0.7 }]}>
@@ -170,7 +188,7 @@ export default function ReviewScreen() {
                 <RecordDotIcon />
                 <Text style={s.rerecordText}>Re-record</Text>
               </Pressable>
-              <Button title={replyTo ? 'Post reply' : 'Post'} variant="white" onPress={() => void onPost()} disabled={busy} style={{ flex: 1 }} />
+              <Button title={draftFor ? 'Save draft' : replyTo ? 'Post reply' : 'Post'} variant="white" onPress={() => void onPost()} disabled={busy} style={{ flex: 1 }} />
             </View>
           ) : null}
         </View>
@@ -245,6 +263,11 @@ const s = StyleSheet.create({
   buttons: { marginHorizontal: 16, marginTop: 16, flexDirection: 'row', gap: 10 },
   rerecord: { height: 52, paddingHorizontal: 18, borderRadius: 26, flexDirection: 'row', alignItems: 'center', gap: 7, overflow: 'hidden' },
   rerecordText: { ...type.button16, letterSpacing: 0, color: colors.white, fontFamily },
+  draftCard: { position: 'absolute', left: 16, right: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  draftKicker: { ...type.caption12, color: 'rgba(255,255,255,0.75)', fontFamily },
+  draftText: { marginTop: 4, ...type.semi15, lineHeight: 19, color: colors.white, fontFamily },
+  draftSub: { marginTop: 3, ...type.caption12, color: 'rgba(255,255,255,0.68)', fontFamily },
+  draftNote: { marginHorizontal: 24, marginTop: 10, textAlign: 'center', ...type.caption12, lineHeight: 17, color: 'rgba(255,255,255,0.7)', fontFamily },
   dim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   sheetWrap: { paddingHorizontal: 8 },
   actionSheet: { borderRadius: 14, backgroundColor: 'rgba(249,249,249,0.96)', overflow: 'hidden', alignItems: 'stretch' },

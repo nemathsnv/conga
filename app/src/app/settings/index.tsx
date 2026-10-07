@@ -1,5 +1,5 @@
 // Board S-Settings (gear on Me) and LV-SignOut (only when an unposted recording is on this phone).
-// Places is phase 6; Invite people (S-Invites) is beta work outside this phase; Community
+// Invite people (S-Invites) is phase 7 (Nemat, 8 Oct); Community
 // guidelines and Help and feedback need Nemat's document and address (docs/PHASE-5-REPORT.md).
 // Those rows are drawn and inactive until then.
 import { useRouter } from 'expo-router';
@@ -70,7 +70,7 @@ export default function SettingsScreen() {
         </View>
         <Text style={s.cap}>Your feed</Text>
         <View style={s.group}>
-          {row('Places', { icon: <PlacePinIcon size={16} color={colors.white} />, iconColor: colors.text })}
+          {row('Places', { icon: <PlacePinIcon size={16} color={colors.white} />, iconColor: colors.text, onPress: () => router.push('/settings/places') })}
           {sep(true)}
           {row('Notifications', { icon: <ActivityTabIcon color={colors.white} on size={18} />, iconColor: colors.dangerBorder, onPress: () => router.push('/notifications/settings') })}
         </View>

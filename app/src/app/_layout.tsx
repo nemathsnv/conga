@@ -75,6 +75,15 @@ function RootNavigator() {
           <Stack.Screen name="settings/delete-account" />
           <Stack.Screen name="settings/confirm-email" />
           <Stack.Screen name="notice/[actionId]" />
+          <Stack.Screen name="search" options={{ animation: 'fade' }} />
+          <Stack.Screen name="settings/places" />
+          <Stack.Screen name="place/[id]" />
+          <Stack.Screen name="suggest/write" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="suggest/scope" />
+          <Stack.Screen name="suggest/preview" options={{ animation: 'fade' }} />
+          <Stack.Screen name="suggest/submitted" options={{ animation: 'fade' }} />
+          <Stack.Screen name="suggestions" />
+          <Stack.Screen name="suggestion/[id]" options={{ animation: 'fade' }} />
         </Stack.Protected>
         <Stack.Protected guard={!inApp}>
           <Stack.Screen name="(onboarding)" options={{ animation: 'fade' }} />

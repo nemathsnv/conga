@@ -54,14 +54,15 @@ export async function checkUploadStatus(uploadId: string): Promise<UploadStatus>
   return data as UploadStatus;
 }
 
-/** Polls until the response is live. Resolves with the playback id. */
-export async function waitUntilLive(uploadId: string, opts: { intervalMs?: number; timeoutMs?: number; signal?: { cancelled: boolean } } = {}): Promise<string> {
+/** Polls until the response is live (or, for a private draft, until its asset is ready). Resolves with the playback id. */
+export async function waitUntilLive(uploadId: string, opts: { intervalMs?: number; timeoutMs?: number; signal?: { cancelled: boolean }; until?: 'live' | 'ready' } = {}): Promise<string> {
   const interval = opts.intervalMs ?? 1500;
   const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
   while (Date.now() < deadline) {
     if (opts.signal?.cancelled) throw new Error('cancelled');
     const status = await checkUploadStatus(uploadId);
     if (status.responseStatus === 'live' && status.playbackId) return status.playbackId;
+    if (opts.until === 'ready' && status.assetStatus === 'ready' && status.playbackId) return status.playbackId;
     if (status.assetStatus === 'errored' || status.uploadStatus === 'errored' || status.uploadStatus === 'cancelled') throw new Error('asset_errored');
     await new Promise((r) => setTimeout(r, interval));
   }

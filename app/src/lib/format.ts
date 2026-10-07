@@ -1,6 +1,12 @@
 // Pure text helpers for the boards' labels.
 
 /** "2h", "5h", "3d", "Just now" (Main, R-Player, Z-First). */
+/** "just now" or "15m ago": timeAgo with the trailing word, for sentences. */
+export function agoLabel(iso: string | null, now: number = Date.now()): string {
+  const t = timeAgo(iso, now);
+  return t === 'Just now' ? 'just now' : `${t} ago`;
+}
+
 export function timeAgo(iso: string | null, now: number = Date.now()): string {
   if (!iso) return 'Just now';
   const diff = Math.max(0, now - new Date(iso).getTime());

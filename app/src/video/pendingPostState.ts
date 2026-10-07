@@ -4,7 +4,9 @@ import type { Recording } from './types';
 export type PendingPost = {
   /** The posted row's id (a response or a video reply; both live in responses). */
   responseId: string;
-  kind: 'response' | 'reply';
+  kind: 'response' | 'reply' | 'draft';
+  /** Drafts: the suggestion the draft belongs to. */
+  draftFor: string | null;
   /** Replies: the video replied to and its author's first name, for the banner. */
   replyToId: string | null;
   replyToName: string | null;

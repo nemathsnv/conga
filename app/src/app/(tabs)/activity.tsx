@@ -12,7 +12,7 @@ import { activityList, followUser, markActivityRead, type ActivityList, type Act
 import { setUnread } from '@/ui/activityStore';
 import { Avatar } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
-import { ActivityTabIcon, HeartIcon, PlayIcon, RecordDotIcon } from '@/ui/Icons';
+import { ActivityTabIcon, HeartIcon, PlacePinIcon, PlayIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
 
@@ -75,6 +75,15 @@ export default function ActivityTab() {
       case 'suspended':
       case 'review_outcome':
         if (row.moderation_action_id) router.push({ pathname: '/notice/[actionId]', params: { actionId: row.moderation_action_id } });
+        break;
+      case 'suggestion_live':
+        if (row.suggestion) router.push({ pathname: '/suggestion/[id]', params: { id: row.suggestion.id } });
+        break;
+      case 'suggestion_declined':
+        router.push('/suggestions');
+        break;
+      case 'place_prompt':
+        if (row.prompt) router.push({ pathname: '/player/[promptId]', params: { promptId: row.prompt.id } });
         break;
       default:
         break;
@@ -164,7 +173,8 @@ function Row({ row, onOpen, onFollowBack, followedBack }: { row: ActivityRow; on
   }
 
   const tappable = row.kind !== 'like';
-  const notice = row.kind === 'removed' || row.kind === 'restricted' || row.kind === 'suspended' || row.kind === 'review_outcome';
+  const notice = row.kind === 'removed' || row.kind === 'restricted' || row.kind === 'suspended' || row.kind === 'review_outcome' || row.kind === 'suggestion_live' || row.kind === 'suggestion_declined';
+  const placePrompt = row.kind === 'place_prompt';
   const leading =
     row.kind === 'comment' && row.actors.length > 1 ? (
       <View style={{ width: 44, height: 44 }}>
@@ -184,6 +194,10 @@ function Row({ row, onOpen, onFollowBack, followedBack }: { row: ActivityRow; on
       <View style={[s.likeCircle, { backgroundColor: colors.text }]}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.white, fontFamily }}>S</Text>
       </View>
+    ) : placePrompt ? (
+      <View style={[s.likeCircle, { borderRadius: 10 }]}>
+        {row.prompt?.place?.image_path ? <Image source={{ uri: row.prompt.place.image_path }} style={[StyleSheet.absoluteFill, { borderRadius: 10 }]} contentFit="cover" /> : <PlacePinIcon size={18} color={colors.textSecondary} />}
+      </View>
     ) : (
       <Avatar uri={avatarUrl(row.actor?.photo_path ?? null)} size={44} />
     );
@@ -192,7 +206,10 @@ function Row({ row, onOpen, onFollowBack, followedBack }: { row: ActivityRow; on
     <Pressable accessibilityRole={tappable ? 'button' : undefined} onPress={tappable ? onOpen : undefined} style={({ pressed }) => [s.row, tappable && pressed && { opacity: 0.8 }]}>
       {leading}
       <Text style={[s.text, { flex: 1 }, row.kind === 'like' && { color: colors.textSecondary }]}>
-        <Text style={[s.bold, row.kind === 'like' && { color: colors.text }]}>{text.names}</Text> {text.rest}
+        {placePrompt ? 'New prompt in ' : ''}
+        {text.names ? <Text style={[s.bold, row.kind === 'like' && { color: colors.text }]}>{text.names}</Text> : null}
+        {text.names ? (placePrompt ? ', ' : ' ') : ''}
+        {text.rest}
         {row.kind === 'followed_responded' && row.prompt ? <Text style={s.bold}> {row.prompt.text}</Text> : null} <Text style={s.time}>· {when}</Text>
         {text.quote && row.kind !== 'followed_responded' ? (
           <Text style={s.quoteInline} numberOfLines={1}>
@@ -207,6 +224,11 @@ function Row({ row, onOpen, onFollowBack, followedBack }: { row: ActivityRow; on
         </Pressable>
       ) : null}
       {(row.kind === 'comment' || row.kind === 'comment_reply') && thumb ? <Image source={{ uri: thumb }} style={s.rowThumb} contentFit="cover" /> : null}
+      {placePrompt ? (
+        <View style={s.respondPill}>
+          <Text style={s.respondText}>Respond</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -228,6 +250,8 @@ const s = StyleSheet.create({
   likeCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.fill, alignItems: 'center', justifyContent: 'center' },
   followBack: { height: 32, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.text, justifyContent: 'center' },
   followBackText: { ...type.semi14, color: colors.white, fontFamily },
+  respondPill: { height: 32, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.fill, justifyContent: 'center' },
+  respondText: { ...type.semi14, color: colors.text, fontFamily },
   emptyBlock: { position: 'absolute', left: 32, right: 32, top: 250, alignItems: 'center' },
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.fill, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { marginTop: 18, fontSize: 22, lineHeight: 27, fontWeight: '600', letterSpacing: -0.4, color: colors.text, textAlign: 'center', fontFamily },

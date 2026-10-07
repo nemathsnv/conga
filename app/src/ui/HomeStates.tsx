@@ -7,7 +7,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 
 import { avatarUrl } from '@/lib/api';
 import type { Conversation, FollowSuggestion } from '@/lib/content';
-import { responsesLabel, timeAgo } from '@/lib/format';
+import { agoLabel, responsesLabel } from '@/lib/format';
 import { Avatar, Button, Glass } from '@/ui/components';
 import { ChevronRightIcon, PlacePinIcon, PlusSlotIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
@@ -69,7 +69,7 @@ export function EmptyPrompt({ item, next, topInset, bottomSpace }: { item: Conve
       <View style={[s.emptyBlock, { top: topInset + 149 }]}>
         <View style={s.newPromptRow}>
           {p.place ? <PlacePinIcon size={13} color="rgba(255,255,255,0.72)" /> : null}
-          <Text style={s.newPrompt}>{p.place ? `${p.place.name} · ` : ''}New prompt · {timeAgo(p.published_at)} ago</Text>
+          <Text style={s.newPrompt}>{p.place ? `${p.place.name} · ` : ''}New prompt · {agoLabel(p.published_at)}</Text>
         </View>
         <Text style={s.emptyTitle}>{p.text}</Text>
         <View style={s.dash}>
@@ -145,13 +145,13 @@ export function PostingBanner({ state, onRetry, topInset }: { state: PostingStat
         <View style={{ flex: 1, minWidth: 0 }}>
           {failed ? (
             <>
-              <Text style={s.bannerTitle}>Your response didn&apos;t post</Text>
+              <Text style={s.bannerTitle}>Your {post.kind === 'draft' ? 'draft' : 'response'} didn&apos;t {post.kind === 'draft' ? 'save' : 'post'}</Text>
               <Text style={s.bannerSub}>It&apos;s saved on this phone. Check your connection.</Text>
             </>
           ) : (
             <>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={s.bannerTitle}>Posting your response</Text>
+                <Text style={s.bannerTitle}>{post.kind === 'draft' ? 'Saving your draft' : 'Posting your response'}</Text>
                 <Text style={s.bannerPct}>{Math.round(progress * 100)}%</Text>
               </View>
               <View style={s.bannerTrack}>

@@ -47,6 +47,12 @@ export function activityText(row: ActivityRow): ActivityText {
       return { names: '', rest: 'Your account is suspended', quote: null };
     case 'review_outcome':
       return { names: '', rest: row.review_outcome === 'reversed' ? 'We reviewed your request and reversed the decision.' : 'We reviewed your request. The decision stands.', quote: null };
+    case 'suggestion_live':
+      return { names: '', rest: `Your prompt is live${row.prompt?.place ? ` in ${row.prompt.place.name}` : ''}`, quote: row.suggestion?.text ?? row.prompt?.text ?? null };
+    case 'suggestion_declined':
+      return { names: '', rest: "Your prompt wasn't published", quote: row.suggestion?.decline_text ?? null };
+    case 'place_prompt':
+      return { names: row.prompt?.place?.name ?? '', rest: 'a place you follow', quote: row.prompt?.text ?? null };
     case 'like': {
       const n = row.like_count ?? row.actor_count;
       const who = n <= 1 ? (row.actor?.name ?? '') : `${first(row.actor?.name ?? '')} and ${n - 1} ${n - 1 === 1 ? 'other' : 'others'}`;

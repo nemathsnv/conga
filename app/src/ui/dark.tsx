@@ -67,7 +67,7 @@ export function FeedHeader({ tab, onTab }: { tab: 'following' | 'foryou'; onTab:
 }
 
 /** The glass prompt label on Home (Main): bubble icon, text, "23 responses". */
-export function PromptLabel({ text, count, place, onPress, style, subtitle }: { text: string; count: number; place?: { name: string } | null; onPress?: () => void; style?: StyleProp<ViewStyle>; subtitle?: string }) {
+export function PromptLabel({ text, count, place, onPress, onPlacePress, style, subtitle }: { text: string; count: number; place?: { name: string } | null; onPress?: () => void; onPlacePress?: () => void; style?: StyleProp<ViewStyle>; subtitle?: string }) {
   const sub = subtitle ?? `${place ? `${place.name} · ` : ''}${responsesLabel(count)}`;
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [{ maxWidth: 286 }, pressed && { opacity: 0.8 }, style]}>
@@ -76,7 +76,13 @@ export function PromptLabel({ text, count, place, onPress, style, subtitle }: { 
           <View style={{ marginTop: 2 }}>{place ? <PlacePinIcon size={15} /> : <PromptBubbleIcon />}</View>
           <View style={{ flexShrink: 1 }}>
             <Text style={s.promptText}>{text}</Text>
-            <Text style={s.promptSub}>{sub}</Text>
+            {place && onPlacePress ? (
+              <Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, place page`} onPress={onPlacePress} hitSlop={6}>
+                <Text style={s.promptSub}>{sub}</Text>
+              </Pressable>
+            ) : (
+              <Text style={s.promptSub}>{sub}</Text>
+            )}
           </View>
         </View>
       </Glass>

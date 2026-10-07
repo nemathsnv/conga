@@ -72,6 +72,7 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
         place={prompt.place}
         subtitle={isFirstOwn ? `${prompt.place ? `${prompt.place.name} · ` : ''}1 response · yours` : undefined}
         onPress={openPlayer}
+        onPlacePress={prompt.place ? () => router.push({ pathname: '/place/[id]', params: { id: prompt.place!.id } }) : undefined}
         style={{ position: 'absolute', left: 16, top: topInset + 57 }}
       />
 

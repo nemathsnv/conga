@@ -11,8 +11,12 @@ export type PromptCard = {
   place: { id: string; name: string } | null;
   featured_on: string | null;
   published_at: string | null;
+  topic_id?: string | null;
   response_count: number;
   faces: ProfileCard[];
+  /** Phase 6: "Suggested by …" when the member kept their name on it. */
+  suggested_by?: ProfileCard | null;
+  is_own_suggestion?: boolean;
 };
 
 export type ResponseCard = {
@@ -81,7 +85,7 @@ export type CommentsSheet = {
   comments: CommentThread[];
 };
 
-export type ActivityKind = 'video_reply' | 'comment' | 'comment_reply' | 'follow' | 'like' | 'followed_responded' | 'removed' | 'restricted' | 'suspended' | 'review_outcome';
+export type ActivityKind = 'video_reply' | 'comment' | 'comment_reply' | 'follow' | 'like' | 'followed_responded' | 'removed' | 'restricted' | 'suspended' | 'review_outcome' | 'suggestion_live' | 'suggestion_declined' | 'place_prompt';
 
 export type ActivityRow = {
   id: string;
@@ -97,10 +101,11 @@ export type ActivityRow = {
   following_actor: boolean;
   video: { id: string; kind: 'response' | 'reply'; playback_id: string | null; caption: string | null; status: string; root_response_id: string | null; prompt_id: string; prompt_text: string } | null;
   comment: { id: string; body: string; deleted: boolean } | null;
-  prompt: { id: string; text: string } | null;
+  prompt: { id: string; text: string; place?: { id: string; name: string; image_path: string | null } | null } | null;
   like_count: number | null;
   moderation_action_id: string | null;
   review_outcome: 'upheld' | 'reversed' | null;
+  suggestion?: Suggestion | null;
 };
 
 export type ActivityList = { unread_count: number; tonight: PromptCard | null; rows: ActivityRow[] };
@@ -387,4 +392,94 @@ export async function getNotice(actionId: string): Promise<Notice> {
 
 export async function requestReview(actionId: string): Promise<void> {
   unwrap(await supabase.rpc('request_review', { p_action: actionId }));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: places, Discover, search, suggestions, drafts
+// ---------------------------------------------------------------------------
+
+export type PlaceCard = {
+  id: string;
+  slug: string;
+  name: string;
+  region: string;
+  type: 'city' | 'region' | 'country' | 'community';
+  image_path: string | null;
+  open: boolean;
+  prompt_count: number;
+  following: boolean;
+  from_cohort: boolean;
+};
+
+export type PlacesScreen = { following: PlaceCard[]; suggested: PlaceCard[] };
+export type PlacePage = { place: PlaceCard; prompts: (PromptCard & { latest_response: ResponseCard | null })[] };
+export type Discover = {
+  tonight: (PromptCard & { hours_left: number; thumbnails: string[] }) | null;
+  topics: { id: string; name: string }[];
+  busy: (PromptCard & { recent_count: number; thumbnail: string | null })[];
+};
+export type SearchResults = {
+  places: PlaceCard[];
+  prompts: PromptCard[];
+  people: (ProfileCard & { is_following: boolean; is_self: boolean })[];
+};
+
+export type SuggestionStatus = 'in_review' | 'withdrawn' | 'live' | 'not_published';
+export type DeclineReason = 'singles_out' | 'too_similar' | 'promotion' | 'private_details' | 'unclear' | 'other';
+export type Suggestion = {
+  id: string;
+  text: string;
+  place: { id: string; name: string } | null;
+  attribution: boolean;
+  status: SuggestionStatus;
+  decline_reason: DeclineReason | null;
+  decline_text: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  prompt: PromptCard | null;
+  draft: { id: string; playback_id: string | null; caption: string | null; duration_ms: number; ready: boolean } | null;
+};
+export type MySuggestions = { in_review_count: number; suggestions: Suggestion[] };
+
+export async function followPlace(id: string): Promise<void> {
+  unwrap(await supabase.rpc('follow_place', { p_place: id }));
+}
+export async function unfollowPlace(id: string): Promise<void> {
+  unwrap(await supabase.rpc('unfollow_place', { p_place: id }));
+}
+export async function placesScreen(): Promise<PlacesScreen> {
+  return unwrap(await supabase.rpc('places_screen')) as PlacesScreen;
+}
+export async function placePage(id: string): Promise<PlacePage> {
+  return unwrap(await supabase.rpc('place_page', { p_place: id })) as PlacePage;
+}
+export async function discover(topic: string | null): Promise<Discover> {
+  return unwrap(await supabase.rpc('discover', { p_topic: topic })) as Discover;
+}
+export async function search(q: string): Promise<SearchResults> {
+  return unwrap(await supabase.rpc('search', { p_q: q })) as SearchResults;
+}
+export async function suggestPrompt(text: string, placeId: string | null, attribution: boolean): Promise<Suggestion> {
+  return unwrap(await supabase.rpc('suggest_prompt', { p_text: text, p_place: placeId, p_attribution: attribution })) as Suggestion;
+}
+export async function editSuggestion(id: string, text: string, placeId: string | null, attribution: boolean): Promise<Suggestion> {
+  return unwrap(await supabase.rpc('edit_suggestion', { p_id: id, p_text: text, p_place: placeId, p_attribution: attribution })) as Suggestion;
+}
+export async function withdrawSuggestion(id: string): Promise<void> {
+  unwrap(await supabase.rpc('withdraw_suggestion', { p_id: id }));
+}
+export async function mySuggestions(): Promise<MySuggestions> {
+  return unwrap(await supabase.rpc('my_suggestions')) as MySuggestions;
+}
+export async function getSuggestion(id: string): Promise<Suggestion> {
+  return unwrap(await supabase.rpc('get_suggestion', { p_id: id })) as Suggestion;
+}
+export async function postDraft(suggestionId: string, uploadId: string, caption: string | null, durationMs: number): Promise<{ id: string; status: string }> {
+  return unwrap(await supabase.rpc('post_draft', { p_suggestion: suggestionId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs })) as { id: string; status: string };
+}
+export async function publishDraft(suggestionId: string): Promise<ResponseCard> {
+  return unwrap(await supabase.rpc('publish_draft', { p_suggestion: suggestionId })) as ResponseCard;
+}
+export async function discardDraft(suggestionId: string): Promise<void> {
+  unwrap(await supabase.rpc('discard_draft', { p_suggestion: suggestionId }));
 }

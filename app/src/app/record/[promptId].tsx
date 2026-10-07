@@ -1,6 +1,8 @@
 // Board R-Record (recording a response), with A-Camera (camera access off), A-Mic
 // (microphone access off) and PR-Short (under 2 seconds). SPEC.md Section 6.
 // With ?replyTo=<video id>: board Record-Reply (recording a video reply), SPEC.md Section 7.
+// With ?draftFor=<suggestion id>: the private first response for a suggestion in review
+// (SPEC.md Section 12); the suggestion's text stands in for the prompt.
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -9,7 +11,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-import { getPrompt, getVideo, type PromptCard, type Video } from '@/lib/content';
+import { getPrompt, getSuggestion, getVideo, type PromptCard, type Video } from '@/lib/content';
 import { ReplyCard } from '@/ui/ReplyCard';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool } from '@/ui/dark';
@@ -26,7 +28,7 @@ const RING_STROKE = 3.5;
 export default function RecordScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { promptId, replyTo } = useLocalSearchParams<{ promptId: string; replyTo?: string }>();
+  const { promptId, replyTo, draftFor } = useLocalSearchParams<{ promptId: string; replyTo?: string; draftFor?: string }>();
   const [prompt, setPrompt] = useState<PromptCard | null>(null);
   const [target, setTarget] = useState<Video | null>(null);
   const [camera, requestCamera] = useCameraPermissions();
@@ -46,8 +48,14 @@ export default function RecordScreen() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    if (draftFor) {
+      getSuggestion(draftFor)
+        .then((sg) => setPrompt({ id: `draft:${sg.id}`, text: sg.text, place: sg.place, featured_on: null, published_at: null, response_count: 0, faces: [] }))
+        .catch((e) => console.error('get_suggestion failed', e));
+      return;
+    }
     if (promptId) void getPrompt(promptId).then(setPrompt).catch((e) => console.error('get_prompt failed', e));
-  }, [promptId]);
+  }, [promptId, draftFor]);
   useEffect(() => {
     if (!replyTo) return;
     getVideo(replyTo)
@@ -95,14 +103,14 @@ export default function RecordScreen() {
         return;
       }
       const segment = keepSegment(result.uri, facing, durationMs);
-      setCurrentRecording({ recording: makeRecording(prompt.id, [segment]), prompt, replyTo: target ?? undefined });
+      setCurrentRecording({ recording: makeRecording(prompt.id, [segment]), prompt, replyTo: target ?? undefined, draftFor: draftFor ?? undefined });
       router.replace('/record/review');
     } catch (e) {
       stopTimer();
       setRecording(false);
       console.error('recordAsync failed', e);
     }
-  }, [ready, recording, prompt, light, facing, router, replyTo, target]);
+  }, [ready, recording, prompt, light, facing, router, replyTo, target, draftFor]);
 
   const stop = () => {
     cam.current?.stopRecording();

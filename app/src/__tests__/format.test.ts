@@ -1,4 +1,4 @@
-import { followedByLabel, moreResponsesLabel, responsesLabel, timeAgo } from '@/lib/format';
+import { agoLabel, followedByLabel, moreResponsesLabel, responsesLabel, timeAgo } from '@/lib/format';
 import { formatTimer, isTooShort } from '@/video/limits';
 import { resumeState, type PendingPost } from '@/video/pendingPostState';
 
@@ -41,6 +41,7 @@ describe('pending post resume', () => {
   const base: PendingPost = {
     responseId: 'r',
     kind: 'response',
+    draftFor: null,
     replyToId: null,
     replyToName: null, promptId: 'p', promptText: 't', caption: null, uploadId: 'u', uploadUrl: 'https://x', uploadUrlExpiresAt: 0,
     playbackId: null, state: 'uploading', attempts: 1, failedReason: null,
@@ -49,5 +50,13 @@ describe('pending post resume', () => {
   it('turns an interrupted upload into a failed post that offers Retry', () => {
     expect(resumeState(base).state).toBe('failed');
     expect(resumeState({ ...base, state: 'processing' }).state).toBe('processing');
+  });
+});
+
+describe('agoLabel', () => {
+  it('reads as a sentence', () => {
+    const now = Date.parse('2026-10-07T12:00:00Z');
+    expect(agoLabel('2026-10-07T11:59:40Z', now)).toBe('just now');
+    expect(agoLabel('2026-10-07T11:45:00Z', now)).toBe('15m ago');
   });
 });

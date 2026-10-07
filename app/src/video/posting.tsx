@@ -3,7 +3,7 @@
 // (PR-Posting, X-Upload-Failed). Survives app restarts through pendingPost storage.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { abandonResponse, postReply, postResponse, retryResponseUpload } from '@/lib/content';
+import { abandonResponse, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { loadPendingPost, savePendingPost } from './pendingPost';
 import { resumeState, uploadUrlUsable, type PendingPost } from './pendingPostState';
 import type { Recording } from './types';
@@ -19,7 +19,7 @@ export type PostingState =
 type PostingContextValue = {
   state: PostingState;
   /** Post is tapped: create the row (a response, or a video reply when replyTo is set), then upload. Resolves once the row exists. */
-  post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; ticket: UploadTicket | null; replyTo?: { id: string; name: string } }) => Promise<void>;
+  post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; ticket: UploadTicket | null; replyTo?: { id: string; name: string }; draftFor?: string }) => Promise<void>;
   retry: () => Promise<void>;
   /** Give up on a failed post: the recording is deleted from the phone. */
   discardFailed: () => Promise<void>;
@@ -56,7 +56,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
       current = { ...current, state: 'processing' };
       await persist(current);
       setState({ kind: 'processing', post: current });
-      const playbackId = await waitUntilLive(current.uploadId);
+      const playbackId = await waitUntilLive(current.uploadId, { until: current.kind === 'draft' ? 'ready' : 'live' });
       deleteRecordingFiles(current.recording);
       await persist(null);
       setState({ kind: 'live', post: { ...current, playbackId }, playbackId });
@@ -81,12 +81,17 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     });
   }, [run]);
 
-  const post = useCallback<PostingContextValue['post']>(async ({ recording, promptId, promptText, caption, ticket, replyTo }) => {
+  const post = useCallback<PostingContextValue['post']>(async ({ recording, promptId, promptText, caption, ticket, replyTo, draftFor }) => {
     const t = ticket ?? (await mintUpload());
-    const row = replyTo ? await postReply(replyTo.id, t.uploadId, caption, recording.durationMs) : await postResponse(promptId, t.uploadId, caption, recording.durationMs);
+    const row = draftFor
+      ? await postDraft(draftFor, t.uploadId, caption, recording.durationMs)
+      : replyTo
+        ? await postReply(replyTo.id, t.uploadId, caption, recording.durationMs)
+        : await postResponse(promptId, t.uploadId, caption, recording.durationMs);
     const pending: PendingPost = {
       responseId: row.id,
-      kind: replyTo ? 'reply' : 'response',
+      kind: draftFor ? 'draft' : replyTo ? 'reply' : 'response',
+      draftFor: draftFor ?? null,
       replyToId: replyTo?.id ?? null,
       replyToName: replyTo?.name ?? null,
       promptId,

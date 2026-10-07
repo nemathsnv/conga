@@ -4,7 +4,7 @@ import type { PromptCard, Video } from '@/lib/content';
 import type { Recording } from './types';
 
 /** A reply take carries the video it replies to (Record-Reply, PR-Reply). */
-export type Current = { recording: Recording; prompt: PromptCard; replyTo?: Video } | null;
+export type Current = { recording: Recording; prompt: PromptCard; replyTo?: Video; /** A private first response for a suggestion in review (PR-Draft). */ draftFor?: string } | null;
 
 let current: Current = null;
 const listeners = new Set<() => void>();
