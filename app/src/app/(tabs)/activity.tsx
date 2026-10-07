@@ -8,8 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
 import { activityText, shortAgo } from '@/lib/activityLabels';
-import { activityList, followUser, getNotificationState, markActivityRead, type ActivityList, type ActivityRow } from '@/lib/content';
-import { hasReplyOrComment, shouldAsk } from '@/lib/notificationAsk';
+import { activityList, followUser, markActivityRead, type ActivityList, type ActivityRow } from '@/lib/content';
 import { setUnread } from '@/ui/activityStore';
 import { Avatar } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
@@ -34,19 +33,12 @@ export default function ActivityTab() {
             await markActivityRead().catch(() => undefined);
             setUnread(0);
           }
-          // Second ask: after Not now, once more when the first reply or comment arrives.
-          try {
-            const { ask } = await getNotificationState();
-            if (shouldAsk(ask, 'first_reply_or_comment') && hasReplyOrComment(list.rows)) router.push('/notifications/prime');
-          } catch {
-            // not fatal
-          }
         })
         .catch((e) => console.error('activity_list failed', e));
       return () => {
         cancelled = true;
       };
-    }, [router]),
+    }, []),
   );
 
   const followBack = async (row: ActivityRow) => {

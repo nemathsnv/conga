@@ -1,5 +1,5 @@
-// Board Comments (the sheet over a playing response) and LV-CommentOwn (delete your own
-// comment). SPEC.md Section 8. LV-CommentActions (Report, Block) is phase 5, so a long-press
+// Board Comments (the sheet over a playing response), LV-CommentOwn (delete your own comment)
+// and LV-CommentDeleted (a deleted parent keeps its replies). SPEC.md Section 8. LV-CommentActions (Report, Block) is phase 5, so a long-press
 // on someone else's comment does nothing yet.
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -109,12 +109,33 @@ export default function CommentsScreen() {
   const vr = sheet?.video_replies;
   const faceNames = vr ? actorNames({ actors: vr.faces.slice(0, 2), actor_count: vr.faces.length, actor: null }) : '';
 
-  const renderComment = (c: CommentCard, thread: CommentThread | null) => (
+  const renderComment = (c: CommentCard, thread: CommentThread | null) => {
+    if (c.deleted || !c.author) {
+      // Board LV-CommentDeleted: the row keeps its place, nothing else about it is shown.
+      return (
+        <View key={c.id} accessibilityLabel="Deleted comment" style={[s.cm, thread && s.cmReply]}>
+          <Avatar uri={null} size={thread ? 26 : 34} />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.body, { color: colors.textTertiary }]}>Comment deleted</Text>
+            <View style={s.actions}>
+              {!thread && (c as CommentThread).replies.length > 0 && !expanded.has(c.id) ? (
+                <Pressable accessibilityRole="button" onPress={() => setExpanded((e) => new Set(e).add(c.id))} hitSlop={6}>
+                  <Text style={s.action}>View {(c as CommentThread).replies.length} {(c as CommentThread).replies.length === 1 ? 'reply' : 'replies'}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+          <View style={s.like} />
+        </View>
+      );
+    }
+    const author = c.author;
+    return (
     <Pressable key={c.id} onLongPress={() => (c.is_own ? setOwn(c) : undefined)} delayLongPress={350} style={[s.cm, thread && s.cmReply]}>
-      <Avatar uri={avatarUrl(c.author.photo_path)} size={thread ? 26 : 34} />
+      <Avatar uri={avatarUrl(author.photo_path)} size={thread ? 26 : 34} />
       <View style={{ flex: 1 }}>
         <Text style={s.nameLine}>
-          <Text style={s.name}>{c.author.name}</Text>
+          <Text style={s.name}>{author.name}</Text>
           {c.is_author ? <Text style={s.authorTag}> Author</Text> : null}
           <Text style={s.time}> · {ago(c.created_at)}</Text>
         </Text>
@@ -141,7 +162,8 @@ export default function CommentsScreen() {
         <HeartIcon size={18} color={c.liked ? '#FF375F' : '#C7C7CC'} filled={c.liked} />
       </Pressable>
     </Pressable>
-  );
+    );
+  };
 
   return (
     <View style={s.root}>
@@ -203,7 +225,7 @@ export default function CommentsScreen() {
             style={s.input}
             value={text}
             onChangeText={(v) => setText(v.slice(0, COMMENT_MAX))}
-            placeholder={replyTo ? `Reply to ${replyTo.author.name.split(' ')[0]}` : 'Add a comment'}
+            placeholder={replyTo?.author ? `Reply to ${replyTo.author.name.split(' ')[0]}` : 'Add a comment'}
             placeholderTextColor={colors.textTertiary}
             maxLength={COMMENT_MAX}
             returnKeyType="send"

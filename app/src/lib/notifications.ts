@@ -44,13 +44,21 @@ export async function registerTokenIfAllowed(): Promise<void> {
   }
 }
 
-/** The phone's timezone, for "tonight's prompt" at about 18:30 local time. */
+let sentTimezone: string | null = null;
+
+/**
+ * The phone's current IANA timezone, for "tonight's prompt" at about 18:30 local time
+ * (Nemat, 7 Oct 2026). Called on launch and when the app returns to the foreground; only
+ * sent when it changed.
+ */
 export async function syncTimezone(): Promise<void> {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz) await setTimezone(tz);
+    if (!tz || tz === sentTimezone) return;
+    await setTimezone(tz);
+    sentTimezone = tz;
   } catch {
-    // not fatal
+    // not fatal; tried again on the next foreground
   }
 }
 

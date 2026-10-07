@@ -2,6 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { onNotificationTap, registerTokenIfAllowed, syncTimezone } from '@/lib/notifications';
@@ -36,7 +37,14 @@ function RootNavigator() {
     if (step !== 'home') return;
     void syncTimezone();
     void registerTokenIfAllowed();
-    return onNotificationTap((href) => router.push(href as never));
+    const foreground = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void syncTimezone();
+    });
+    const tap = onNotificationTap((href) => router.push(href as never));
+    return () => {
+      foreground.remove();
+      tap();
+    };
   }, [step, router]);
 
   if (!ready) return null;

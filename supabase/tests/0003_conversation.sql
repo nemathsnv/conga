@@ -1,7 +1,7 @@
 -- pgTAP tests for phase 4: video replies, comments, likes, Activity, notification
 -- preferences, the ask state, the push outbox.
 begin;
-select plan(90);
+select plan(99);
 
 delete from public.responses;
 delete from public.prompts;
@@ -123,7 +123,13 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 select lives_ok($$ select public.delete_comment((select id from public.comments where body like 'Pererenan%')) $$, 'you can delete your own comment');
-select is((public.comments_list('d4444444-4444-4444-4444-444444444444'))->>'count', '1', 'deleting a top-level comment takes its thread with it');
+select is((public.comments_list('d4444444-4444-4444-4444-444444444444'))->>'count', '3', 'deleting a top-level comment leaves other people''s replies counted');
+select is(jsonb_array_length((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments'), 2, 'the deleted parent keeps its place while it has replies');
+-- (every comment in this transaction shares one created_at, so the row is found by flag, not position)
+select is((select count(*)::int from jsonb_array_elements((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments') x where x->>'deleted' = 'true'), 1, 'the parent is a deleted-parent row');
+select is((select x->'body' from jsonb_array_elements((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments') x where x->>'deleted' = 'true'), 'null'::jsonb, 'a deleted parent shows no text');
+select is((select jsonb_array_length(x->'replies') from jsonb_array_elements((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments') x where x->>'deleted' = 'true'), 2, 'its replies stay under it');
+select throws_ok($$ select public.delete_comment((select id from public.comments where body like 'Pererenan%')) $$, 'P0001', 'comment_not_found', 'a deleted comment cannot be deleted again (no undo, no second confirmation)');
 reset role;
 select is((select public.push_text(o) from public.push_outbox o where kind = 'comment' and recipient_id = 'b2222222-2222-2222-2222-222222222222'), 'Lena Hart commented on your response', 'a reply to the author''s own comment is not a second commenter');
 set local role authenticated;
@@ -160,8 +166,19 @@ select is((public.get_notification_state())->'prefs'->>'likes', 'false', 'likes 
 select is((public.update_notification_prefs('{"pause_all": true}'))->'prefs'->>'pause_all', 'true', 'Pause all can be turned on');
 select lives_ok($$ select public.set_notification_ask('declined') $$, 'Not now once');
 select is((public.get_notification_state())->>'ask', 'declined_once', 'declined once');
+select is((public.get_notification_state())->>'ask_due', 'false', 'no second ask due yet');
+reset role;
+-- Lena comments on Adam's response: the first reply or comment after Not now makes the second ask due.
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+select lives_ok($$ select public.post_comment('d4444444-4444-4444-4444-444444444444', 'One more.') $$, 'a comment arrives for Adam');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"b2222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+select is((public.get_notification_state())->>'ask_due', 'true', 'the second ask is due');
 select lives_ok($$ select public.set_notification_ask('declined') $$, 'Not now twice');
 select is((public.get_notification_state())->>'ask', 'declined_twice', 'declined twice: Settings only from here');
+select is((public.get_notification_state())->>'ask_due', 'false', 'answering clears the due ask');
 select throws_ok($$ select public.set_timezone('Mars/Olympus') $$, 'P0001', 'invalid_timezone', 'timezone must be a real zone');
 select throws_ok($$ select public.register_push_token('tok', 'web') $$, 'P0001', 'invalid_token', 'push tokens are ios or android');
 select throws_ok($$ select public.push_due() $$, '42501', null, 'members cannot read the outbox');

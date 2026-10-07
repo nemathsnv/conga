@@ -200,12 +200,15 @@
 | `LV-SignOut` | A1 · Sign-out warning | [jpg](boards/LV-SignOut.jpg) | [html](html/LV-SignOut.html) |
 | `LV-CommentActions` | A1 · Comment actions — someone else's comment | [jpg](boards/LV-CommentActions.jpg) | [html](html/LV-CommentActions.html) |
 | `LV-CommentOwn` | A1 · Comment actions — your own comment | [jpg](boards/LV-CommentOwn.jpg) | [html](html/LV-CommentOwn.html) |
+| `LV-CommentDeleted` | A1 · Comments — deleted parent comment keeps its replies (added 7 Oct 2026 for Nemat's deletion rule; built from `Comments`, no new pattern; no render yet) | — | [html](html/LV-CommentDeleted.html) |
 | `LV-WebUnavailable` | Web · Video unavailable | [jpg](boards/LV-WebUnavailable.jpg) | [html](html/LV-WebUnavailable.html) |
 | `LV-WebEmpty` | Web · Prompt with no responses | [jpg](boards/LV-WebEmpty.jpg) | [html](html/LV-WebEmpty.html) |
 
 > **Canvas note:** Each is built from an approved screen and adds no new pattern.
 >
 > Comment actions: someone else's comment shows Report comment and Block; your own shows Delete comment only, with "Deleting can't be undone" (the sheet is the confirmation; no undo). Response authors can't delete other people's comments.
+>
+> Deleted parent (7 Oct 2026, Nemat): deleting your own top-level comment never removes other people's replies. The row stays in its place as "Comment deleted" (grey, placeholder avatar, no name, no Reply, no heart) with the replies under it; a deleted comment with no replies disappears.
 >
 > Permanent suspension is shown at sign-in; one review request per decision; after it is sent, the button is replaced by "Review requested" and the outcome arrives as a notification. No review-time promise.
 >

@@ -61,9 +61,11 @@ export type CommentCard = {
   response_id: string;
   parent_id: string | null;
   thread_id: string | null;
-  body: string;
+  /** A deleted parent keeps its place while it has replies (board LV-CommentDeleted). */
+  deleted: boolean;
+  body: string | null;
   created_at: string;
-  author: ProfileCard;
+  author: ProfileCard | null;
   is_author: boolean;
   is_own: boolean;
   liked: boolean;
@@ -115,7 +117,7 @@ export type NotificationPrefs = {
 
 export type NotificationAsk = 'never' | 'declined_once' | 'declined_twice' | 'accepted';
 
-export type NotificationState = { ask: NotificationAsk; prefs: NotificationPrefs };
+export type NotificationState = { ask: NotificationAsk; ask_due: boolean; prefs: NotificationPrefs };
 
 export type Conversation = { prompt: PromptCard; response: ResponseCard | null };
 

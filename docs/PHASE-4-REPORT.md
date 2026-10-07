@@ -47,7 +47,7 @@ trigger by preference, grouping); pg_cron jobs `send-push` and `tonight-prompt`;
 
 ## 4. Boards
 
-Built: `Comments`, `LV-CommentOwn`, `Replies`, `Reply-Watch`, `Reply-Watch-2`, `A-Orphan`,
+Built: `Comments`, `LV-CommentOwn`, `LV-CommentDeleted` (added 7 Oct), `Replies`, `Reply-Watch`, `Reply-Watch-2`, `A-Orphan`,
 `Record-Reply`, `PR-Reply`, `Activity`, `X-Activity-Empty`, `N-Prime`, `N-Settings`.
 Not built: `LV-CommentActions` (Report, Block: phase 5; long-press on someone else's comment does
 nothing). Share and More on the rails stay drawn and inactive until phase 5.
@@ -56,7 +56,7 @@ nothing). Share and More on the rails stay drawn and inactive until phase 5.
 
 | Check | Result |
 | --- | --- |
-| pgTAP (`supabase test db`) | 171/171 (onboarding 50, core loop 31, conversation 90) |
+| pgTAP (`supabase test db`) | 180/180 (onboarding 50, core loop 31, conversation 99) |
 | `npm run typecheck`, `npm run lint` | clean |
 | Jest | 46/46 (activity labels, ask timing, phase 2–3 suites) |
 | iOS simulator build (iPhone 17) | runs with the seed and a seeded dev session |
@@ -76,24 +76,34 @@ right after a first post, the Replies tab grid on a profile, a room grid with ti
 room was drawn), push delivery (B-2), `A-Orphan` on screen (deletion is phase 5), Android, any real
 phone.
 
-## 6. Deviations and open questions for Nemat
+## 6. Deviations and decisions
 
-1. **Reply room order**: oldest first. Not in the spec; "x of N" counts in that order.
-2. **Deleting a top-level comment** hides its thread (no board for a placeholder). Replies by others
-   are soft-deleted with it; nothing is lost in the database.
-3. **Comment input while replying**: the placeholder reads "Reply to Putu" while a reply is being
+Decided by Nemat on 7 Oct 2026 (recorded in `docs/DECISIONS.md`) and applied in migration
+`20261007000200_conversation_fixes.sql` and the app:
+
+1. **Reply room order**: oldest first for v1.
+2. **Deleting your own top-level comment** never removes or hides other people's replies: the row
+   becomes a deleted-parent row ("Comment deleted", board `LV-CommentDeleted`, added to the design
+   as a lightweight variant of `Comments` and awaiting Nemat's look) with the replies under it; a
+   deleted comment with no replies disappears; no undo after the confirmation.
+3. **Tonight's prompt timezone**: the phone's current IANA zone, sent on launch and when the app
+   returns to the foreground if it changed.
+4. **`LV-CommentActions`** (Report, Block) ships in phase 5 with safety; nothing partial before.
+5. **Second ask**: the server marks another ask due when the first reply or comment arrives after
+   the first Not now (`accounts.notification_ask_due_at`); the app shows N-Prime at the next safe
+   foreground moment (the tabs, app active), not only when Activity is opened.
+
+Still open or worth a look:
+
+6. **Comment input while replying**: the placeholder reads "Reply to Putu" while a reply is being
    typed. The board has no state for this; the alternative was no indication at all.
-4. **Single-commenter push text** uses the full name ("Lena Hart commented on your response"); the
+7. **Single-commenter push text** uses the full name ("Lena Hart commented on your response"); the
    grouped text uses first names as the spec's example does.
-5. **Second ask trigger**: N-Prime opens when the Activity tab loads with a reply or comment present
-   (and the state is declined once). The spec says "when their first reply or comment arrives"; the
-   push itself cannot open a sheet, so the tab is the moment.
-6. **Tonight's prompt timezone**: the phone's zone, recorded on launch. Confirm.
-7. **Record-Reply's sub line** can truncate on narrow phones ("… · up to 30 seco…"); same width as
+8. **Record-Reply's sub line** can truncate on narrow phones ("… · up to 30 seco…"); same width as
    the board.
-8. **Opening the camera from a sheet** replaces the sheet (a screen pushed over a transparent modal
+9. **Opening the camera from a sheet** replaces the sheet (a screen pushed over a transparent modal
    would present as a card). Back from the camera returns to the player, not the sheet.
-9. **`expo-notifications`** was added (needed for the permission ask, token and tap handling).
+10. **`expo-notifications`** was added (needed for the permission ask, token and tap handling).
 
 ## 7. Blockers
 
