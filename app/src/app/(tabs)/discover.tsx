@@ -1,4 +1,5 @@
-// Board R-Discover (SPEC.md Sections 4, 10): search, topic chips, tonight's prompt,
+// Board R-Discover (SPEC.md Sections 4, 10): search, topic chips, tonight's prompt (featured
+// whatever chip is selected; Nemat, 8 Oct),
 // "Busy right now" from global prompts and followed places.
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -56,7 +57,7 @@ export default function DiscoverTab() {
           </View>
         ) : (
           <>
-            {tonight && topic === null ? (
+            {tonight ? (
               <Pressable accessibilityRole="button" onPress={() => openPrompt(tonight.id)} style={({ pressed }) => [s.tonight, pressed && { opacity: 0.85 }]}>
                 <View style={s.tonightGrid}>
                   {[0, 1, 2, 3].map((i) => (

@@ -17,6 +17,12 @@ Gate decisions belong to Nemat. Claude Code records them here once they are made
 | 2026-10-08 | Review outcome texts: "We reviewed your request. The decision stands." and "We reviewed your request and reversed the decision." | Nemat | Phase 5 review message |
 | 2026-10-08 | Viewer-visible reply and comment counts may exclude content hidden from that viewer by a block or a report. | Nemat | Phase 5 review message |
 | 2026-10-08 | Suspension is enforced server-side across every product API path; only the suspension notice, review request, account deletion and recovery, and sign-out remain. A standalone moderator "warn" action is unavailable: a warning is the removal notice (`A-Removed`), per the enforcement ladder. | Nemat | Phase 5 review message |
+| 2026-10-08 | "Busy right now" (Discover) = prompts visible to the viewer, ranked by response count in the last 48 hours, then newest. Clarifies SPEC.md Section 4. | Nemat | Phase 6 review message |
+| 2026-10-08 | Discover topic chips use the team-managed prompt topics and filter the browse / Busy section. Tonight's featured prompt stays featured regardless of the selected chip. "For you" means no topic filter. | Nemat | Phase 6 review message |
+| 2026-10-08 | The plain-English decline-reason sentences (`decline_reason_text`) are accepted. The fixed reason categories of SPEC.md Section 12 stay locked; the copy stays neutral and actionable. | Nemat | Phase 6 review message |
+| 2026-10-08 | First-response drafts reuse the normal approved response recorder; no separate draft-recording board. `PR-Draft` remains the distinct draft review state. | Nemat | Phase 6 review message |
+| 2026-10-08 | Substring search is sufficient for the closed beta. No full-text ranking unless beta usage shows a real problem. | Nemat | Phase 6 review message |
+| 2026-10-08 | Viewer-visible counts and thumbnails (place pages, Discover, search) continue to respect block and report visibility. | Nemat | Phase 6 review message |
 
 ## Gates (SPEC.md Section 23)
 
