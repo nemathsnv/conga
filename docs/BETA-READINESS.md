@@ -33,7 +33,7 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, Auth configuration and the auth hardening migration (section 10; nothing pushed), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted step 1): the auth hardening migration `20261010000300`; the access token hook exists but is not enabled. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, Auth configuration with the hook on (section 10, hosted step 2; nothing pushed), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
 | Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. On 9 Oct the hosted `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` were the same pair as the spike's and the product's local `.env` (digest comparison), so the product needs its own Mux credentials; not rotated yet (section 8). | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
@@ -147,7 +147,7 @@ calls no longer work against the hosted project; `spike/` is unchanged.
 - **Not done:** Edge Functions, secrets, Vault, Auth configuration, Mux. `spike/supabase/.temp`
   was removed on 9 Oct so the spike is no longer linked to this project.
 
-## 10. Email sign-in (local only, 9 Oct; nothing applied to the hosted project)
+## 10. Email sign-in (9 Oct; hosted: migration applied, Auth configuration not pushed)
 
 **Reproduced on the local stack** with `scripts/auth-integration.mjs` (`PHASE=before`, 29 of 29
 observations as described):
@@ -214,18 +214,61 @@ these settings (the integration test calls the same Auth endpoints the app calls
 > The code expires in one hour.
 > If you didn't ask for this code, you can ignore this email.
 
-**Hosted steps, in order, each waiting for Nemat's approval** (none run):
+**Hosted steps, in order, each waiting for Nemat's approval** (step 1 done, steps 2 to 4 not run):
 
-1. `supabase db push --dry-run`, then `supabase db push`: only `20261010000300_auth_hardening.sql`.
+1. **Done 9 Oct (Nemat approved).** `supabase db push --dry-run`, then `supabase db push`: only
+   `20261010000300_auth_hardening.sql`. Result below.
 2. `supabase config diff --project-ref picvoavfxnajfjkqawju`, then `supabase config push`. The diff
    (through `[remotes.hosted]`) shows only: OTP length 8 to 6; confirmation, magic link and
    recovery subjects (and their content); the access token hook on; TOTP MFA off; site URL
    `http://localhost:3000` to `shortcut://`; redirect URL `shortcut://auth/callback`. Confirm
    email (on), 60 s and the expiry already match; Apple and Google stay off; pooler and storage
-   unchanged.
+   unchanged. The 9 Oct diff also lists `auth.password_requirements` as local-only (`""`, no
+   requirements); it does not matter while no password is stored, but it is part of what step 2
+   pushes.
 3. `supabase functions deploy auth-signin-method` (no secrets of its own; `verify_jwt = false` from
    `config.toml`).
 4. Resend SMTP on the hosted project (Nemat), then the email rate limit, then the delivery check.
+
+**Hosted step 1, 9 Oct** (`supabase db push --linked --yes`, exit 0; one migration, no seed, no
+roles). All checks are read-only catalog queries and `supabase config diff` against
+`picvoavfxnajfjkqawju`, before and after.
+
+- **Before.** Branch `phase-7-beta` at `f1f74c6`, clean. Hosted history had exactly the 12
+  migrations of section 9; the dry run listed only `20261010000300`. 0 auth users, 0 identities;
+  the only trigger on `auth.users` was `on_auth_user_created`; neither new function existed; the
+  hosted `pre_request` body was identical to `20261008000200_safety_fixes.sql` (no drift);
+  `auth.users.encrypted_password` is nullable.
+- **After.**
+  - 13 migrations recorded, the last `20261010000300`; local and remote lists match.
+  - `discard_auth_password` trigger on `auth.users`: `BEFORE INSERT OR UPDATE OF
+    encrypted_password`, only when the password is not empty, enabled. `on_auth_user_created`
+    unchanged.
+  - `custom_access_token_hook(jsonb)`: owner `postgres`, `SECURITY INVOKER`, stable,
+    `search_path=""`. Executable by `supabase_auth_admin` and `service_role`; not by `PUBLIC`,
+    `anon` or `authenticated`.
+  - `discard_auth_password()`: owner `postgres`, `SECURITY INVOKER`, `search_path=""`.
+    Executable by `service_role` only; not by `PUBLIC`, `anon`, `authenticated` or
+    `supabase_auth_admin`. Postgres checks execute on a trigger function when the trigger is
+    created, not when it fires, as on the local stack where the integration test passed.
+  - `pre_request()`: body now the migration's (adds the `amr = password` refusal); owner,
+    `SECURITY DEFINER`, `search_path` and grants (`anon`, `authenticated`, `service_role`)
+    unchanged. `authenticator` still has `pgrst.db_pre_request=public.pre_request`.
+  - `supabase_auth_admin` has `USAGE` on `public`.
+  - Nothing else changed: 156 functions (154 plus the two new ones). Hashes taken before and after
+    are identical for every other `public` function (body, grants, owner), all policies, every
+    trigger outside `auth.users`, and the columns of `public`, `storage` and `auth`. 25 tables,
+    0 auth users.
+- **Auth configuration unchanged.** `supabase config diff` after the push is byte-for-byte the
+  same as before it: the hosted `custom_access_token` hook is `enabled = false` with no URI, and
+  the other differences are the ones listed in step 2.
+- **Security advisor (hosted), 89 findings, no errors:** the same counts and kinds as section 9
+  (77 `authenticated` and 4 `anon` `SECURITY DEFINER`, 5 RLS without policy, 2 `search_path`,
+  `pg_net` in `public`). None names the two new functions; the `pre_request` ones were already
+  there.
+- **Not tested on the hosted project.** No sign-up, sign-in or token refresh ran against it: there
+  are no users, no SMTP, and the hook is off, so neither the trigger nor the hook has yet run there.
+  That check belongs after step 2 (and step 4 for delivery).
 
 ## Gates
 
