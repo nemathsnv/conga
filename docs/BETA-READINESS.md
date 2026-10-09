@@ -33,8 +33,8 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | built, unverified | Migrations `20261006000100` to `20261010000200` applied; Edge Functions `send-push` and `web` deployed with their env; cron and Vault set; the app's `.env` pointed at it. Everything so far ran on the local stack. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
-| Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. | A posted response goes live through the hosted stack. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | built, unverified | Migrations `20261006000100` to `20261010000200` applied; Edge Functions `send-push` and `web` deployed with their env; cron and Vault set; the app's `.env` pointed at it. Everything so far ran on the local stack. Checked on the hosted project on 9 Oct (section 8): none of the 12 migrations applied and no Edge Function deployed. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. On 9 Oct the hosted `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` were the same pair as the spike's and the product's local `.env` (digest comparison), so the product needs its own Mux credentials; not rotated yet (section 8). | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (SPEC.md Section 22) | Supabase built-in, Resend or Postmark on the hosted project; deliverability to Bali addresses. | A code arrives within a minute on a real address; a waitlist admission email arrives. |
 
 ## 3. Real-device verification
@@ -98,6 +98,21 @@ report and block each other. Each phase's "Not verified" list is the checklist.
 | Enforcement texts and the guidelines | needs input | The notices refer to the Community Guidelines (section 4). |
 | Automated checks on uploads | open decision (SPEC.md Section 22) | None today; human review is the default. Decide whether a nudity and violence scanner is wanted before the beta. |
 | Waitlist admission and team invites | built, unverified | `team_admit_from_waitlist` and `team_create_invite` exist for the service role only; a team workflow (who admits, how the email goes out) is not defined. |
+
+## 8. Hosted project security
+
+**Spike Mux functions removed from `picvoavfxnajfjkqawju` (9 Oct, Nemat approved).** The exposure
+was deployed, not only in the old source. `mux-create-upload`, `mux-upload-status` (both deployed
+6 Oct 07:13 WITA) and `mux-delete-assets` (6 Oct 14:35 WITA) were ACTIVE with `verify_jwt = false`, no
+check in the code, CORS `*` and the shared Mux credentials set; the deployed source was byte-identical
+to `spike/supabase/functions/`. An empty POST to `mux-delete-assets` would have listed and deleted up
+to 100 Mux assets; `mux-create-upload` minted public-playback upload URLs for anyone. All three were
+deleted with `supabase functions delete`; afterwards the function list was empty, each URL returned
+`404 NOT_FOUND`, the Mux asset list was unchanged (the same 7 spike assets, same ids, status and
+playback ids) and the project secrets were unchanged. Not checked: the function invocation logs for
+calls between 6 and 9 Oct (dashboard, Edge Functions, Logs; the functions are gone, so the logs may
+only be in Logs Explorer). Mux tokens not rotated yet. The spike app's clean-up, upload and status
+calls no longer work against the hosted project; `spike/` is unchanged.
 
 ## Gates
 
