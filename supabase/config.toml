@@ -224,11 +224,15 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# On: a new email account gets no session until its code is entered, and a password sign-up
+# for someone else's address cannot sign in. New accounts get the confirmation template, so it
+# carries the same 6-digit code as the magic link template below.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
-max_frequency = "1s"
+# 60 s matches the app's "Resend code" countdown on O-Email.
+max_frequency = "60s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
@@ -244,10 +248,22 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Email code sign-in (O-Email): the magic link template carries the 6-digit code.
+# Email code sign-in (O-Email). A new account gets the confirmation email and a returning one
+# the magic link email; both carry the same 6-digit code and no link. Copy awaiting Nemat's
+# approval (docs/BETA-READINESS.md section 10).
+[auth.email.template.confirmation]
+subject = "Your Shortcut sign-in code"
+content_path = "./supabase/templates/sign_in_code.html"
+
 [auth.email.template.magic_link]
-subject = "Your Shortcut code"
-content_path = "./supabase/templates/magic_link.html"
+subject = "Your Shortcut sign-in code"
+content_path = "./supabase/templates/sign_in_code.html"
+
+# Anyone can ask Auth's public API for a "recovery" email. The app has no passwords, so it gets the
+# same code email instead of the default "Reset your password" link.
+[auth.email.template.recovery]
+subject = "Your Shortcut sign-in code"
+content_path = "./supabase/templates/sign_in_code.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -287,6 +303,12 @@ max_frequency = "5s"
 # uri = "pg-functions://postgres/auth/before-user-created-hook"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
+# Shortcut: refuses tokens for sessions that used a password, and email codes on Apple or Google
+# accounts (migration 20261010000300_auth_hardening.sql). The function must exist before this is on.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
 # [auth.hook.custom_access_token]
 # enabled = true
 # uri = "pg-functions://<database>/<schema>/<hook_name>"
@@ -443,3 +465,32 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# ---------------------------------------------------------------------------
+# Hosted project (picvoavfxnajfjkqawju). These values override the ones above when the CLI
+# compares or pushes to that project. Only Auth should change there; the db and storage values
+# below are the hosted project's current ones, so a push leaves them alone. Check with
+#   supabase config diff --project-ref picvoavfxnajfjkqawju
+# before any push, and push only after the auth hardening migration is applied there (the access
+# token hook must exist before Auth calls it). Apple and Google stay off until their credentials
+# are set for this project.
+# ---------------------------------------------------------------------------
+[remotes.hosted]
+project_id = "picvoavfxnajfjkqawju"
+
+[remotes.hosted.auth.external.apple]
+enabled = false
+
+[remotes.hosted.auth.external.google]
+enabled = false
+
+[remotes.hosted.db.pooler]
+default_pool_size = 15
+max_client_conn = 200
+
+[remotes.hosted.storage.analytics]
+enabled = true
+max_namespaces = 10
+
+[remotes.hosted.storage.image_transformation]
+enabled = true

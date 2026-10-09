@@ -29,6 +29,8 @@ Gate decisions belong to Nemat. Claude Code records them here once they are made
 | 2026-10-09 | The app icon is not finalised until the product name and brand are approved. The Expo template icon is development-only and must not go to outside testers or the stores. | Nemat | Phase 7 review message |
 | 2026-10-09 | Posting while already offline: no Upload failed state. The recording stays on the phone and waits for the connection while the app is open, then posts by itself. If the app closes first, the next launch shows the existing Retry state. No background queue survives app termination. Clarifies SPEC.md Section 19. | Nemat | Phase 7 review message |
 | 2026-10-09 | Beta metrics: Response rate counts published primary responses (`video_published` with kind `response`, carrying `prompt_id`), not `record_completed`. Day-7 return counts only activity the person did in the app, never server-only events. Clarifies SPEC.md Section 21. | Nemat | Phase 7 review message |
+| 2026-10-09 | Email provider for the closed beta: Resend (free plan) as Supabase Auth's SMTP sender for the six-digit sign-in codes. Settles the SPEC.md Section 22 "Email" row for the beta. The sending domain is not chosen yet and is not to be a domain of the provisional Conga brand. | Nemat | Auth preparation message, 9 Oct |
+| 2026-10-09 | Email sign-in settings: six-digit codes, Confirm email on, 60 seconds between codes, one-hour expiry. Apple and Google stay disabled on the hosted project until their credentials are configured. | Nemat | Auth preparation message, 9 Oct |
 
 ## Gates (SPEC.md Section 23)
 

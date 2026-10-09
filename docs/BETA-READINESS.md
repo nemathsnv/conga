@@ -33,9 +33,9 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, Auth configuration (`config.toml` not pushed), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, Auth configuration and the auth hardening migration (section 10; nothing pushed), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
 | Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. On 9 Oct the hosted `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` were the same pair as the spike's and the product's local `.env` (digest comparison), so the product needs its own Mux credentials; not rotated yet (section 8). | A posted response goes live through the hosted stack. |
-| Email provider for sign-in codes and waitlist emails | needs input (SPEC.md Section 22) | Supabase built-in, Resend or Postmark on the hosted project; deliverability to Bali addresses. | A code arrives within a minute on a real address; a waitlist admission email arrives. |
+| Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
 ## 3. Real-device verification
 
@@ -146,6 +146,86 @@ calls no longer work against the hosted project; `spike/` is unchanged.
   registered in `public` (its functions live in schema `net`, which the API does not expose).
 - **Not done:** Edge Functions, secrets, Vault, Auth configuration, Mux. `spike/supabase/.temp`
   was removed on 9 Oct so the spike is no longer linked to this project.
+
+## 10. Email sign-in (local only, 9 Oct; nothing applied to the hosted project)
+
+**Reproduced on the local stack** with `scripts/auth-integration.mjs` (`PHASE=before`, 29 of 29
+observations as described):
+
+- **Password pre-registration.** Auth's email provider accepts password sign-up on the public API.
+  Someone signs up another person's address with their own password; when that person later signs
+  up with an email code, the first person's password signs into their account.
+- **Passwords added later.** A signed-in session (or a stolen one) can set a password through the
+  Auth API and use it from then on. SPEC.md Section 13: no passwords.
+- **One sign-in method per account (SPEC.md Section 18).** An email code signs into an account that
+  uses Google: Auth adds no identity, so the `refuse_second_signin_method` trigger never runs. Only
+  the app's own E-Linked check stood in the way.
+
+**Fixed locally**: migration `20261010000300_auth_hardening.sql` and `supabase/config.toml`.
+
+- No password is ever stored (`discard_auth_password` trigger on `auth.users`).
+- The custom access token hook (`custom_access_token_hook`, run by Auth for every access token,
+  refreshes included) issues no token when the session used a password, and none when an email
+  code (or recovery) is used on an account whose sign-in method is Apple or Google
+  (`signin_method_conflict:<provider>`).
+- `pre_request` refuses any API token whose session used a password, which also covers access
+  tokens issued before the hook was on.
+- Auth settings: six-digit codes, one-hour expiry, 60 s between emails to one address, Confirm
+  email on. New accounts get the confirmation email, returning ones the magic link email, and a
+  recovery request gets the same email: all three use `templates/sign_in_code.html` (code, no link).
+
+**Local checks.** pgTAP 400 of 400 (29 new in `0007_auth_hardening.sql`). Integration 41 of 41:
+new account by code (confirmation template), returning account (magic link template), recovery
+email, wrong code refused, second code within 60 s refused, refresh keeps the session, product
+API call, password sign-up stores no password and cannot sign in before or after the owner
+confirms, a password set later is not stored, an email code is refused on a Google account and
+adds no identity, `auth-signin-method` still reports `google` for E-Linked. A password account and
+session made with the hook off (as one could exist before the fix): the refresh is refused by the
+hook, the old access token by `pre_request`, a new password sign-in by the hook; the stored
+password itself is blocked, not erased. Jest 54 of 54, typecheck and lint clean; no app code changed.
+
+**Not tested.** Real Apple and Google sign-in (no credentials locally; the hook's `oauth` path is
+covered in pgTAP only). Delivery through Resend. The app's screens on a simulator or phone against
+these settings (the integration test calls the same Auth endpoints the app calls).
+
+**Still open.**
+
+- `auth-signin-method` tells anyone holding the public key whether an address has an account and
+  with which provider, with no rate limit. E-Linked needs the answer; a limit needs a decision and
+  has no approved state on O-Email.
+- Email budget: anyone with the public key can request codes for any address. Once custom SMTP is
+  on, Auth sends at most 30 emails an hour for the whole project (adjustable) and Resend Free 100 a
+  day, so a flood can delay real sign-in codes. CAPTCHA would need a board.
+- Accounts started and never confirmed (code requested, or a password sign-up) stay in
+  `auth.users` with an `accounts` row; nothing removes them.
+- `auth-signin-method` accepts only the legacy anon key, which the hosted project still issues and
+  the app uses. Moving the app to a publishable key needs this function changed and tested first.
+- The hook is in every sign-in: if it errors, nobody can sign in. It is small and tested; the order
+  below matters.
+- The email copy below awaits Nemat's approval.
+
+**Proposed email** (all three templates; sender name and address come with Resend):
+
+> Subject: Your Shortcut sign-in code
+>
+> **Your Shortcut sign-in code**
+> Enter this code in the app to sign in:
+> **123456**
+> The code expires in one hour.
+> If you didn't ask for this code, you can ignore this email.
+
+**Hosted steps, in order, each waiting for Nemat's approval** (none run):
+
+1. `supabase db push --dry-run`, then `supabase db push`: only `20261010000300_auth_hardening.sql`.
+2. `supabase config diff --project-ref picvoavfxnajfjkqawju`, then `supabase config push`. The diff
+   (through `[remotes.hosted]`) shows only: OTP length 8 to 6; confirmation, magic link and
+   recovery subjects (and their content); the access token hook on; TOTP MFA off; site URL
+   `http://localhost:3000` to `shortcut://`; redirect URL `shortcut://auth/callback`. Confirm
+   email (on), 60 s and the expiry already match; Apple and Google stay off; pooler and storage
+   unchanged.
+3. `supabase functions deploy auth-signin-method` (no secrets of its own; `verify_jwt = false` from
+   `config.toml`).
+4. Resend SMTP on the hosted project (Nemat), then the email rate limit, then the delivery check.
 
 ## Gates
 
