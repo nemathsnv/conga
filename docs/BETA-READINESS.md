@@ -33,9 +33,9 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted step 1): the auth hardening migration `20261010000300`; the access token hook exists but is not enabled. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, Auth configuration with the hook on (section 10, hosted step 2; nothing pushed), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, `auth-signin-method` (section 10, hosted step 3), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
 | Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. On 9 Oct the hosted `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` were the same pair as the spike's and the product's local `.env` (digest comparison), so the product needs its own Mux credentials; not rotated yet (section 8). | A posted response goes live through the hosted stack. |
-| Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
+| Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. 9 Oct: domain `auth.churntech.com` verified in Resend and SMTP saved in the hosted dashboard by Nemat (sender `no-reply@auth.churntech.com`, name Shortcut); no email delivered or checked yet. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
 ## 3. Real-device verification
 
@@ -147,7 +147,7 @@ calls no longer work against the hosted project; `spike/` is unchanged.
 - **Not done:** Edge Functions, secrets, Vault, Auth configuration, Mux. `spike/supabase/.temp`
   was removed on 9 Oct so the spike is no longer linked to this project.
 
-## 10. Email sign-in (9 Oct; hosted: migration applied, Auth configuration not pushed)
+## 10. Email sign-in (9 Oct; hosted: migration applied, Auth configuration pushed)
 
 **Reproduced on the local stack** with `scripts/auth-integration.mjs` (`PHASE=before`, 29 of 29
 observations as described):
@@ -215,11 +215,13 @@ these settings (the integration test calls the same Auth endpoints the app calls
 > The code expires in one hour.
 > If you didn't ask for this code, you can ignore this email.
 
-**Hosted steps, in order, each waiting for Nemat's approval** (step 1 done, steps 2 to 4 not run):
+**Hosted steps, in order, each waiting for Nemat's approval** (steps 1 and 2 done 9 Oct; SMTP for
+step 4 saved by Nemat; step 3 and the delivery check not run):
 
 1. **Done 9 Oct (Nemat approved).** `supabase db push --dry-run`, then `supabase db push`: only
    `20261010000300_auth_hardening.sql`. Result below.
-2. `supabase config diff --project-ref picvoavfxnajfjkqawju`, then `supabase config push`. The diff
+2. **Done 9 Oct (Nemat approved), second attempt.** `supabase config diff --project-ref
+   picvoavfxnajfjkqawju`, then `supabase config push`. The diff
    (through `[remotes.hosted]`) shows only: OTP length 8 to 6; confirmation, magic link and
    recovery subjects (and their content); the access token hook on; TOTP MFA off; site URL
    `http://localhost:3000` to `shortcut://`; redirect URL `shortcut://auth/callback`. Confirm
@@ -324,6 +326,58 @@ roles). All checks are read-only catalog queries and `supabase config diff` agai
   confirmation, magic link and recovery emails.
 - **Open.** The default email change template (a link) is reachable by any signed-in session
   through `PUT /auth/v1/user`; the app has no email change.
+
+**Stage 2 push attempt, 9 Oct (Nemat approved): refused by the API, nothing changed.**
+
+- Before: branch `phase-7-beta` at `1de364a`, clean; CLI 2.119.0; hosted diff identical to the
+  reviewed ten changes; the template file has the approved copy, one `{{ .Token }}`, no link.
+- Preview (`config push ... < /dev/null`): only Auth had changes, the ten settings plus the
+  confirmation, magic link and recovery bodies; nothing forced, unsupported or unencodable; no
+  secrets sent (Apple, Google, Twilio secrets gated); API, DB and storage up to date. Nothing
+  written.
+- Push, Auth confirmed with `y`: HTTP 400 from the Management API, "Email template modification is
+  not available for free tier projects using the default email provider. Please upgrade your plan
+  or configure a custom SMTP provider." The CLI sends Auth as one update, so the whole update was
+  refused.
+- After: `config diff` is identical to before the push. The hook is still off; OTP length 8, site
+  URL, redirect, TOTP and subjects all unchanged.
+- Consequence: the email subjects and bodies can only be set on this project once custom SMTP
+  (step 4, Resend) is configured, or on a paid plan. The hook and the other settings do not depend
+  on templates; splitting them out needs Nemat's decision.
+
+**Hosted step 2, 9 Oct (Nemat approved): Auth configuration pushed.**
+
+- **Prerequisite.** Nemat verified `auth.churntech.com` in Resend and saved custom SMTP in the
+  hosted dashboard. Read-only check (`config diff` against a scratch copy of `config.toml` that
+  declares SMTP; the password is masked by the API and was not read): SMTP on, sender
+  `no-reply@auth.churntech.com`, name Shortcut, host `smtp.resend.com`, port 465. The hosted email
+  rate limit is now 30 an hour.
+- **Before.** Branch `phase-7-beta` at `1de364a`; CLI 2.119.0. Hosted diff: the ten reviewed
+  changes, plus six SMTP properties set in the dashboard that `config.toml` does not declare
+  (left alone by `config push`). Template file unchanged (approved copy, one `{{ .Token }}`, no
+  link). Preview: only Auth, the ten settings and the three template bodies; nothing forced,
+  unsupported or unencodable; no secrets sent; "6 remote properties ... left unchanged".
+- **Push.** The confirmation block was compared with the preview's by script and confirmed only
+  because it was identical. Result: Auth updated, 13 properties; nothing forced; no secrets sent;
+  API, DB and storage up to date; SMTP left unchanged.
+- **After.**
+  - `config diff`: no differences in any declared property (the only entries are the six
+    undeclared SMTP ones, unchanged). That covers the hook on with
+    `pg-functions://postgres/public/custom_access_token_hook`, 6-digit codes, one-hour expiry,
+    60 s between emails, Confirm email on, site URL `shortcut://`, redirect
+    `shortcut://auth/callback`, TOTP off, Apple and Google off, and the three subjects.
+  - A second preview reports Auth "up to date", which includes the three template bodies (the
+    push compares bodies; the diff does not).
+  - SMTP check repeated: unchanged, rate limit still 30 an hour (`config.toml` says 2; it is only
+    pushed if SMTP is ever declared there, so change it first if that happens).
+  - Database unchanged: 13 migrations, 0 users, both `auth.users` triggers enabled, `pre_request`
+    and the hook bodies as deployed, `supabase_auth_admin` privileges as before. Synthetic hook
+    calls give the same results as in the preparation above.
+- **Not verified.** No sign-in, refresh, password attempt or email has run against the hosted
+  Auth with the hook on (no test accounts, by instruction). Until then it is not known that Auth
+  calls the hook successfully: if it fails, every sign-in and refresh fails, and the rollback is
+  the dashboard switch in "Stage 2 preparation". Next checks: the list there, once Nemat approves
+  test accounts; delivery by Resend to Gmail, Outlook, iCloud and a Bali address.
 
 ## Gates
 
