@@ -5,6 +5,7 @@ Gate decisions belong to Nemat. Claude Code records them here once they are made
 | Date | Decision | By | Evidence |
 |---|---|---|---|
 | 2026-10-05 | v1 spec locked (rev 110); A1 Native canvas final (version 26, 86 boards) | Nemat | `SPEC.md`, `design/` |
+| 2026-10-06 | Provisional implementation stack: Mux for video hosting and playback, expo-camera for recording. Selected on the phase 1 iPhone evidence and used to build phases 2 to 7. A technology selection for implementation, **not** a gate decision: Gate 1 stays open (see Gates). Does not settle SPEC.md Section 22's video hosting and camera library rows. Evidence (iPhone 17 Pro, iOS 27.0, mobile data): 4 rounds, 22 recordings, 21 uploads, 31 playbacks; median upload 9.9 s over the 19 mobile-data uploads; median Mux upload-to-playable 1.6 s (4.8 s for three 30 s clips); median cold first frame 4.5 s over 18 cold plays; no mid-transfer upload failures. Recorded on 9 Oct 2026. | Nemat | `spike/REPORT.md` Sections 2 and 9; `docs/PHASE-2-REPORT.md` Section 2 |
 | 2026-10-06 | Camera flip must work while recording, not only before it. Clarifies SPEC.md Section 6 "camera flip" control. Needs a spec edit at the next revision. | Nemat | Said during the phase 1 spike; `spike/REPORT.md` |
 | 2026-10-07 | Reply room order is oldest first for v1 ("x of N" counts in that order). Clarifies SPEC.md Section 7. | Nemat | Phase 4 review message |
 | 2026-10-07 | Deleting your own top-level comment never removes or hides other people's replies: the parent becomes a deleted-parent (tombstone) row and the replies stay under it. "No undo after confirmation" stands. Clarifies SPEC.md Section 8. | Nemat | Phase 4 review message; board `LV-CommentDeleted` |
@@ -32,6 +33,10 @@ Gate decisions belong to Nemat. Claude Code records them here once they are made
 ## Gates (SPEC.md Section 23)
 
 - [ ] **Gate 1:** video provider picked (Mux / Cloudflare Stream / Supabase Storage). Camera library picked (expo-camera / react-native-vision-camera).
+  - Technology selected for implementation: **yes, provisionally.** Mux and expo-camera (6 Oct, above).
+  - Gate formally approved by Nemat: **no.** Open until Nemat explicitly approves its closure.
+  - Android verification: **still required.** The spike checklist on a real mid-range Android over Bali mobile data (SPEC.md Section 23, phase 1; `spike/REPORT.md` Section 8). Not run.
+  - Related open item: B-1, camera flip during a take, which neither camera library does without segment stitching (`docs/BLOCKERS.md`).
 - [ ] **Gate 2:** Nemat can sign up on iOS and Android.
 - [ ] **Gate 5:** safety complete. Required before any outside tester.
 - [ ] **Gate 7:** the closed beta opens in Canggu.

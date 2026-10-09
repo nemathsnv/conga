@@ -33,7 +33,7 @@ If SPEC.md and a board or canvas note disagree, SPEC.md wins. Flag the mismatch 
 Expo / React Native / TypeScript / Expo Router, and Supabase (Postgres, Auth, Storage, Edge Functions), starting from clean migrations.
 
 - iOS and Android from one app, plus a minimal web player for shared links (phase 5).
-- The open choices are listed in SPEC.md Section 22. The video provider and camera library are decided by the phase 1 spike, not by preference.
+- The open choices are listed in SPEC.md Section 22. The video provider and camera library are decided by the phase 1 spike evidence, not by preference. Mux and expo-camera are provisional until Gate 1 closes (see Current state).
 
 ## Words
 
@@ -42,12 +42,17 @@ Expo / React Native / TypeScript / Expo Router, and Supabase (Postgres, Auth, St
 - A **comment** is text.
 - Never use "answer" or "post" as a noun for these, in code identifiers, UI copy or docs.
 
-## Current phase
+## Current state (9 Oct 2026)
 
-**Phase 1: video spike.** Not started. The prompt is in `prompts/PHASE-1-video-spike.md`.
+**Current work: beta readiness and real-device validation.** No new feature phase is authorized. Don't add features, screens or flows. Change app code only to fix a demonstrated setup or verification blocker, and say so.
 
-- The spike is throwaway code in `spike/`. It is not the app.
-- Do not scaffold the product app, database schema or any product screens until Nemat has picked the video provider (gate 1) and asked for phase 2.
+- **Phase 1, video spike:** run on a real iPhone 17 Pro over mobile data (4 rounds, 22 recordings, 21 uploads, 31 playbacks; `spike/REPORT.md`). Android has not been run. `spike/` is throwaway code, not the app.
+- **Phases 2 to 7:** implemented in `app/` and `supabase/`. None has been verified on a real device. What was seen on the iOS simulator is listed in each `docs/PHASE-*-REPORT.md`. Android has never run.
+- **Provisional stack:** Mux (video hosting and playback) and expo-camera, selected on the iPhone spike evidence and used for implementation since phase 2. Provisional means Gate 1 is not passed and SPEC.md Section 22's video rows are not settled. Don't swap either without Nemat.
+- **Outstanding:** Android video validation (the spike checklist on a real mid-range Android over Bali mobile data), and B-1, camera flip during a take (segment stitching; `docs/BLOCKERS.md`).
+- **Gates 1, 2, 5 and 7 are open.** Only Nemat closes a gate, and it is recorded in `docs/DECISIONS.md`. Never mark a gate passed.
+- **What is still open:** `docs/BETA-READINESS.md` (consolidated) and `docs/BLOCKERS.md` (B-1 to B-4).
+- **Name:** "Shortcut" is the implementation name in code, copy and docs. "Conga" is a provisional working brand, not cleared or final. Don't rename the code, bundle id, Supabase project or user-facing copy; a rename is a spec-first change.
 
 ## Working style
 

@@ -1,10 +1,11 @@
 # Beta readiness: everything still open before the closed beta
 
 Consolidated from `docs/BLOCKERS.md` (B-1 to B-4 and the Gate 5 list), the phase reports and
-`docs/DECISIONS.md`, as of 9 Oct 2026. Every phase from 2 to 7 is **implemented, awaiting
-real-device verification**. No gate has been passed: Gate 5 ("safety complete; required before any
-outside tester") and Gate 7 ("the closed beta opens in Canggu") are both open and are Nemat's
-decisions. Nothing below is marked done unless its check has actually been run; "seen on the
+`docs/DECISIONS.md`, as of 9 Oct 2026. Phase 1 (the video spike) ran on a real iPhone 17 Pro; its
+Android run is outstanding, and Mux and expo-camera are the provisional stack. Every phase from 2 to 7
+is **implemented, awaiting real-device verification**. No gate has been passed: Gate 1, Gate 2,
+Gate 5 ("safety complete; required before any outside tester") and Gate 7 ("the closed beta opens
+in Canggu") are all open and are Nemat's decisions. Nothing below is marked done unless its check has actually been run; "seen on the
 simulator" is not "verified on a device".
 
 Status words: **open** (nothing done), **built, unverified** (code exists, the check has not been
@@ -38,11 +39,14 @@ new feature work after phase 7.
 
 ## 3. Real-device verification
 
-Nothing has run on a physical phone. Android has never been run at all (no device, no emulator).
+No phase 2 to 7 build has run on a physical phone. The only real-device runs are the phase 1 spike's
+(a throwaway app in `spike/`) on an iPhone 17 Pro, `spike/REPORT.md`. Android has never been run at
+all (no device, no emulator), for the spike or the app.
 Each phase report lists what was seen on the iPhone 17 simulator and what was not.
 
 | Phase | Status | Not yet run anywhere |
 | --- | --- | --- |
+| 1 Video spike (`spike/REPORT.md`) | iPhone run on a device; Android open | The spike checklist (`spike/CHECKLIST.md`) on a real mid-range Android over Bali mobile data, needed for Gate 1. |
 | 2 Foundations (`docs/PHASE-2-REPORT.md`) | built, unverified | Google sign-in; Apple sign-in on a device; the invite link redeemed after sign-in; the image picker; keyboard behaviour; Android entirely. |
 | 3 Core loop (`docs/PHASE-3-REPORT.md`) | built, unverified | Recording, posting and playback on a phone over mobile data; B-1. |
 | 4 Conversation (`docs/PHASE-4-REPORT.md`) | built, unverified | Pushes end to end (B-2); the second notification ask on a device. |
@@ -97,6 +101,11 @@ report and block each other. Each phase's "Not verified" list is the checklist.
 
 ## Gates
 
+- **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
+  provisional stack on the iPhone spike evidence (`docs/DECISIONS.md`, 6 Oct). Closes only when Nemat
+  approves it; the Android spike run (section 3) has not happened.
+- **Gate 2** (Nemat can sign up on iOS and Android): open. Depends on phase 2 on a real iPhone and a
+  real Android against the hosted project (sections 2 and 3).
 - **Gate 5** (safety complete, before any outside tester): open. Depends on sections 3 (phase 5 on
   a device), 4 (guidelines), 7 (the web admin) and B-2.
 - **Gate 7** (the closed beta opens in Canggu): open. Depends on everything above.
