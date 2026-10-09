@@ -202,7 +202,8 @@ these settings (the integration test calls the same Auth endpoints the app calls
   the app uses. Moving the app to a publishable key needs this function changed and tested first.
 - The hook is in every sign-in: if it errors, nobody can sign in. It is small and tested; the order
   below matters.
-- The email copy below awaits Nemat's approval.
+- The email copy below was approved by Nemat on 9 Oct, as it stands in
+  `templates/sign_in_code.html`.
 
 **Proposed email** (all three templates; sender name and address come with Resend):
 
@@ -223,9 +224,8 @@ these settings (the integration test calls the same Auth endpoints the app calls
    recovery subjects (and their content); the access token hook on; TOTP MFA off; site URL
    `http://localhost:3000` to `shortcut://`; redirect URL `shortcut://auth/callback`. Confirm
    email (on), 60 s and the expiry already match; Apple and Google stay off; pooler and storage
-   unchanged. The 9 Oct diff also lists `auth.password_requirements` as local-only (`""`, no
-   requirements); it does not matter while no password is stored, but it is part of what step 2
-   pushes.
+   unchanged. `auth.password_requirements` is no longer declared in `config.toml` (9 Oct), so it
+   is not pushed. Preparation, rollback and checks: "Stage 2 preparation" below.
 3. `supabase functions deploy auth-signin-method` (no secrets of its own; `verify_jwt = false` from
    `config.toml`).
 4. Resend SMTP on the hosted project (Nemat), then the email rate limit, then the delivery check.
@@ -269,6 +269,61 @@ roles). All checks are read-only catalog queries and `supabase config diff` agai
 - **Not tested on the hosted project.** No sign-up, sign-in or token refresh ran against it: there
   are no users, no SMTP, and the hook is off, so neither the trigger nor the hook has yet run there.
   That check belongs after step 2 (and step 4 for delivery).
+
+**Stage 2 preparation, 9 Oct** (read-only against the hosted project; nothing pushed).
+
+- **Hook readiness.** The hosted `custom_access_token_hook` body is byte-identical to the
+  migration (md5). It is `plpgsql`, `SECURITY INVOKER`, stable, `search_path=""`, and depends only
+  on its language and schema. `supabase_auth_admin` can execute it, has `USAGE` on `public` and
+  `auth`, and owns `auth.identities`. The URI to enable is
+  `pg-functions://postgres/public/custom_access_token_hook`. Called directly on the hosted database
+  with synthetic events (stable function, no writes): an email code sign-in and its refresh return
+  the claims unchanged (`{"claims": ...}`, the shape Auth expects); a password sign-in, a refresh
+  of a password session, and `amr` given as plain strings all return
+  `{"error": {"http_code": 403, "message": "password_sign_in_disabled"}}`; a malformed `user_id`
+  raises an SQL error, which Auth treats as a failed hook (no token). An email code on an Apple or
+  Google account needs identity rows, which the hosted project has none of; it is covered locally.
+  Local and hosted Auth are both `v2.197.0`. Local re-run: pgTAP 400 of 400; integration 37 of 37
+  (the four pre-fix session checks need the hook off and a restart; not re-run).
+- **`password_requirements`.** It was declared only because it is in the `supabase init`
+  template. The hosted API reports no value, so the diff called it local-only and the push would
+  have sent it. Commenting it out removes it from the diff; locally `""` is already the default.
+- **Template bodies are not in the diff.** `config diff` compares subjects only (changing the body
+  file leaves the diff unchanged). `config push` (CLI 2.119.0) does send each declared
+  `content_path` file as `mailer_templates_<name>_content` when it differs from the hosted body,
+  and lists it as `content` in its confirmation. Properties the diff calls unmanaged (provider
+  client ids, `rate_limit.email_sent`, network restrictions) are not pushed; empty env secrets are
+  not pushed. Invite, email change and reauthentication templates stay at the hosted defaults.
+- **Push in two runs.** First `supabase config push --project-ref picvoavfxnajfjkqawju < /dev/null`
+  (no affirmative answer, so the CLI shows each change and writes nothing). Then the same command
+  interactively, answering yes only if the confirmation lists the ten changes above plus the three
+  template bodies, and nothing reported as "forced" (undeclared properties written at defaults).
+  Never `--yes`. Same CLI version as the diff.
+- **Rollback (hook only; the migration stays).** Dashboard: Authentication, Auth Hooks, Customize
+  Access Token, off. Takes effect for the next token. Fallback: add
+  `[remotes.hosted.auth.hook.custom_access_token]` with `enabled = false`, `config diff` (only
+  the hook changes), `config push`. Afterwards `config diff` shows the hook `remote=false`. The
+  trigger and `pre_request` affect only password sessions and stay. While the hook is broken,
+  no one can sign in or refresh; the hosted project has 0 users today.
+- **Checks after step 2** (direct Auth API calls; the app is not pointed at the hosted project and
+  needs step 3). Built-in email reaches only project team addresses, about two an hour, so the
+  checks span more than an hour, or use admin `generate_link` codes (no email). Each creates a
+  hosted test account, so each needs Nemat's go-ahead.
+  1. New address: request a code (`/auth/v1/otp`); the confirmation email has a 6-digit code and
+     no link; `/auth/v1/verify` returns a session whose `amr` is `otp`.
+  2. Same address after 60 s: magic link email, same checks.
+  3. Refresh (`/auth/v1/token?grant_type=refresh_token`): 200, `amr` still `otp`; one product RPC
+     with the new token: 200.
+  4. Passwords: password sign-up stores no password (`encrypted_password` empty) and password
+     sign-in returns 400; a password set through `PUT /auth/v1/user` is not stored.
+  5. Wrong method: needs Apple or Google enabled on the hosted project (after their credentials),
+     or a database test inside a transaction that is rolled back.
+  6. Auth logs show no hook errors.
+- **Email copy decided (Nemat, 9 Oct):** the existing template stays as it is (heading, code,
+  one-hour expiry, "If you didn't ask for this code, you can ignore this email.") for the
+  confirmation, magic link and recovery emails.
+- **Open.** The default email change template (a link) is reachable by any signed-in session
+  through `PUT /auth/v1/user`; the app has no email change.
 
 ## Gates
 

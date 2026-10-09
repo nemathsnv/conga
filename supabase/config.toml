@@ -183,7 +183,9 @@ enable_manual_linking = false
 minimum_password_length = 6
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
-password_requirements = ""
+# Left undeclared on purpose: "" is already the default, and declaring it made `config push` send
+# it to the hosted project (where the API reports no value) although passwords are never stored.
+# password_requirements = ""
 
 # Configure passkey sign-ins.
 # [auth.passkey]
@@ -249,8 +251,8 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 # Email code sign-in (O-Email). A new account gets the confirmation email and a returning one
-# the magic link email; both carry the same 6-digit code and no link. Copy awaiting Nemat's
-# approval (docs/BETA-READINESS.md section 10).
+# the magic link email; both carry the same 6-digit code and no link. Copy approved by Nemat
+# on 9 Oct (docs/BETA-READINESS.md section 10).
 [auth.email.template.confirmation]
 subject = "Your Shortcut sign-in code"
 content_path = "./supabase/templates/sign_in_code.html"
