@@ -215,8 +215,8 @@ these settings (the integration test calls the same Auth endpoints the app calls
 > The code expires in one hour.
 > If you didn't ask for this code, you can ignore this email.
 
-**Hosted steps, in order, each waiting for Nemat's approval** (steps 1 and 2 done 9 Oct; SMTP for
-step 4 saved by Nemat; step 3 and the delivery check not run):
+**Hosted steps, in order, each waiting for Nemat's approval** (steps 1 and 2 done 9 Oct; step 4: SMTP
+saved by Nemat, delivery to Gmail checked; step 3 reviewed, not deployed):
 
 1. **Done 9 Oct (Nemat approved).** `supabase db push --dry-run`, then `supabase db push`: only
    `20261010000300_auth_hardening.sql`. Result below.
@@ -228,8 +228,10 @@ step 4 saved by Nemat; step 3 and the delivery check not run):
    email (on), 60 s and the expiry already match; Apple and Google stay off; pooler and storage
    unchanged. `auth.password_requirements` is no longer declared in `config.toml` (9 Oct), so it
    is not pushed. Preparation, rollback and checks: "Stage 2 preparation" below.
-3. `supabase functions deploy auth-signin-method` (no secrets of its own; `verify_jwt = false` from
-   `config.toml`).
+3. `supabase functions deploy auth-signin-method --project-ref picvoavfxnajfjkqawju` (no secrets of
+   its own; `verify_jwt = false` from `config.toml`). Always name the function: without a name the
+   CLI deploys every function, the Mux ones included. Never `--prune`. Review: "auth-signin-method
+   review" below.
 4. Resend SMTP on the hosted project (Nemat), then the email rate limit, then the delivery check.
 
 **Hosted step 1, 9 Oct** (`supabase db push --linked --yes`, exit 0; one migration, no seed, no
@@ -377,7 +379,66 @@ roles). All checks are read-only catalog queries and `supabase config diff` agai
   Auth with the hook on (no test accounts, by instruction). Until then it is not known that Auth
   calls the hook successfully: if it fails, every sign-in and refresh fails, and the rollback is
   the dashboard switch in "Stage 2 preparation". Next checks: the list there, once Nemat approves
-  test accounts; delivery by Resend to Gmail, Outlook, iCloud and a Bali address.
+  test accounts; delivery by Resend to Gmail, Outlook, iCloud and a Bali address. (Done for one
+  account and Gmail on 9 Oct: next block.)
+
+**Hosted email sign-in smoke test, 9 Oct (Nemat approved and ran it).**
+`scripts/hosted-auth-smoke.mjs`, run by Nemat in a terminal with Nemat's own address; the code was
+typed without echo, and no code, token, key or password was printed. Direct Auth API calls with
+the public anon key only. 13 of 13 checks passed:
+
+- New-account code requested (HTTP 200).
+- Resend delivered it to Gmail; Nemat confirmed sender `no-reply@auth.churntech.com` (Shortcut),
+  subject "Your Shortcut sign-in code", the approved wording, a 6-digit code and no link.
+- The code signed in (HTTP 200), so the access token hook ran and accepted the session: method
+  `otp`, role `authenticated`, `aal1`. User id `70046556-4209-4471-b5bb-a770aee12466`.
+- Refresh issued a new token (HTTP 200) still with method `otp`.
+- Product API: `get_onboarding_state` HTTP 200 through `pre_request` (age not confirmed, no beta
+  access, not waitlisted, no profile, not suspended).
+- Password sign-in refused (HTTP 400 `invalid_credentials`). A password set through
+  `PUT /auth/v1/user` (HTTP 200) was not stored and could not sign in (HTTP 400).
+- Signed out of every session (HTTP 204).
+
+**Database afterwards** (read-only; no email, hash or token printed): 1 auth user, Nemat's
+address; `encrypted_password` NULL; email confirmed; not anonymous, not SSO, no phone;
+`app_metadata` provider `email`. 1 identity in the project, `email`, for this user. 0 sessions and
+0 unrevoked refresh tokens; 0 MFA factors; no pending one-time tokens. 1 `accounts` row for this
+id: `active`, no cohort (set when an invite is redeemed), age and disclosure not yet confirmed,
+analytics id set. 0 profiles, 0 waitlist rows, 0 invites.
+
+**The test account stays** (Nemat's own address, id above). Deleting it needs Nemat's approval.
+
+**Not tested on the hosted project:** the returning-account (magic link) and recovery emails,
+the 60 s resend limit and a wrong code (all covered locally); delivery to Outlook, iCloud and a
+Bali address; Apple and Google sign-in, and an email code on an Apple or Google account (no
+provider credentials yet); the app itself against the hosted project.
+
+**auth-signin-method review, 9 Oct (not deployed).**
+
+- **Code.** `supabase/functions/auth-signin-method/index.ts`, unchanged since 6 Oct. One
+  dependency, `jsr:@supabase/supabase-js@2` (major version only, so the deploy bundles the newest
+  2.x; the other functions do the same). No `_shared` imports, no secrets of its own: it uses the
+  hosted defaults `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`. Not
+  deployed on the hosted project (no functions there).
+- **Before sign-in.** `verify_jwt = false` (`config.toml`), so no user token is needed; instead the
+  `apikey` header must equal the project's legacy anon key, otherwise 401. POST only; email
+  checked by pattern and length; any database error is a generic 500.
+- **Legacy anon key.** The hosted project still has the legacy `anon` and `service_role` keys
+  next to the new publishable and secret keys, and the app sends the legacy anon key. If legacy
+  keys are ever turned off, this function and the app have to move together (already listed
+  above).
+- **Service role.** Used only server-side, for one RPC, `signin_providers_for_email`: on the
+  hosted project owned by `postgres`, `SECURITY DEFINER`, `search_path=""`, executable only by
+  `service_role`; it returns the distinct identity providers for an address and nothing else.
+- **Enumeration.** Anyone with the anon key (it ships in the app) can ask whether any address has
+  an account and with which provider. Email sign-up itself does not reveal this (the code request
+  answers the same either way), so this function is the leak. E-Linked needs the answer.
+- **Abuse.** No rate limit in the function or in front of it; each call is one indexed query.
+  Floods cost Edge Function invocations (plan quota) and database time, and allow bulk
+  enumeration. A limit (per IP or per address) needs a decision; a CAPTCHA would need a board.
+- **Founder-only testing: safe to deploy.** The hosted project has one account (Nemat's), the
+  anon key has not shipped in any build, and the answer only covers addresses that exist. Before
+  outside testers (Gate 5): decide on a rate limit for this function.
 
 ## Gates
 
@@ -385,7 +446,12 @@ roles). All checks are read-only catalog queries and `supabase config diff` agai
   provisional stack on the iPhone spike evidence (`docs/DECISIONS.md`, 6 Oct). Closes only when Nemat
   approves it; the Android spike run (section 3) has not happened.
 - **Gate 2** (Nemat can sign up on iOS and Android): open. Depends on phase 2 on a real iPhone and a
-  real Android against the hosted project (sections 2 and 3).
+  real Android against the hosted project (sections 2 and 3). Done 9 Oct: hosted email sign-in
+  works through the Auth API (section 10). Still needed: `auth-signin-method` deployed; the app's
+  `.env` pointed at the hosted project; an invite code there (`invite_required` is on and the
+  hosted project has 0 invites; `LINKED=1 scripts/create-invite.sh`); a device build on a real
+  iPhone (paid Apple team, B-1 to B-4) and a real Android phone; Apple and Google credentials for
+  the hosted project; then Nemat signs up in the app with email, Apple and Google on both.
 - **Gate 5** (safety complete, before any outside tester): open. Depends on sections 3 (phase 5 on
   a device), 4 (guidelines), 7 (the web admin) and B-2.
 - **Gate 7** (the closed beta opens in Canggu): open. Depends on everything above.
