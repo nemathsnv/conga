@@ -33,7 +33,7 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | built, unverified | Migrations `20261006000100` to `20261010000200` applied; Edge Functions `send-push` and `web` deployed with their env; cron and Vault set; the app's `.env` pointed at it. Everything so far ran on the local stack. Checked on the hosted project on 9 Oct (section 8): none of the 12 migrations applied and no Edge Function deployed. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, Auth configuration (`config.toml` not pushed), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
 | Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. On 9 Oct the hosted `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` were the same pair as the spike's and the product's local `.env` (digest comparison), so the product needs its own Mux credentials; not rotated yet (section 8). | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (SPEC.md Section 22) | Supabase built-in, Resend or Postmark on the hosted project; deliverability to Bali addresses. | A code arrives within a minute on a real address; a waitlist admission email arrives. |
 
@@ -113,6 +113,39 @@ playback ids) and the project secrets were unchanged. Not checked: the function 
 calls between 6 and 9 Oct (dashboard, Edge Functions, Logs; the functions are gone, so the logs may
 only be in Logs Explorer). Mux tokens not rotated yet. The spike app's clean-up, upload and status
 calls no longer work against the hosted project; `spike/` is unchanged.
+
+## 9. Hosted database (9 Oct, Nemat approved)
+
+**Migrations applied to `picvoavfxnajfjkqawju`** (ap-southeast-1, Postgres 17.11) with
+`supabase db push --linked --yes`; all 12 recorded as applied, in order, no seed and no roles.
+
+- **Before.** Hosted database empty: no objects in `public`, 0 auth users, 0 buckets, no migration
+  table. `authenticator` settings were `session_preload_libraries=supautils, safeupdate`,
+  `statement_timeout=8s`, `lock_timeout=8s`. No backups and no point-in-time recovery on the project.
+- **After, compared with the local stack built from the same 12 files** (one read-only catalog
+  query on both): identical tables and RLS flags, functions (including body hashes, owner,
+  `search_path` and execute grants), policies, triggers, bucket, extensions, cron jobs, table and
+  schema grants, default privileges and the `authenticator` setting.
+  - 25 tables, all with RLS; 20 policies on `public` tables and 4 on `storage.objects`; no views.
+  - 154 functions, 150 `SECURITY DEFINER`, all owned by `postgres`, every definer one with a fixed
+    `search_path`; none executable by `PUBLIC`; `anon` can execute only `invite_preview`,
+    `pre_request`, `web_prompt`, `web_video`; 77 executable by `authenticated`; 77 service role only.
+  - 14 triggers in `public`; `on_auth_user_created` on `auth.users` and
+    `refuse_second_signin_method` on `auth.identities`, both enabled.
+  - Bucket `avatars` (public, 5 MB, JPEG, PNG, WebP). `pg_cron` (`pg_catalog`), `pg_net` (`public`).
+  - Cron: `send-push` every minute, `tonight-prompt` every 10 minutes, `purge-deleted-accounts`
+    daily 03:15 UTC (11:15 WITA); all active. `send-push` does nothing until the Vault secrets exist.
+  - `authenticator` now also has `pgrst.db_pre_request=public.pre_request`.
+  - Data: 1 `app_config` row, cohort `canggu`, place `canggu`; 0 invites, 0 prompts, 0 topics,
+    0 place neighbours, 0 accounts.
+- **Security advisor (hosted), 89 findings, no errors, nothing changed.** 77 `authenticated` and 4
+  `anon` `SECURITY DEFINER` functions executable (the app's RPC API by design; the four `anon` ones
+  return only an invite preview or live, visible videos); 5 tables with RLS and no policy
+  (deny-all by design, written only by definer functions); 2 `search_path` warnings on
+  `suspended_allowed_path` and `decline_reason_text` (immutable lookups, no table access); `pg_net`
+  registered in `public` (its functions live in schema `net`, which the API does not expose).
+- **Not done:** Edge Functions, secrets, Vault, Auth configuration, Mux. `spike/supabase/.temp`
+  was removed on 9 Oct so the spike is no longer linked to this project.
 
 ## Gates
 
