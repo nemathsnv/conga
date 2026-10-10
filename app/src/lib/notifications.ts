@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { registerPushToken, setTimezone } from './content';
+import { FOUNDER_BUILD } from './env';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -30,6 +31,8 @@ export async function requestPermissionAndRegister(): Promise<boolean> {
  * no-op, logged once. Tracked as a blocker in docs/BLOCKERS.md.
  */
 export async function registerTokenIfAllowed(): Promise<void> {
+  // The founder build has no push entitlement (free Personal Team), so no token can exist.
+  if (FOUNDER_BUILD) return;
   if (!(await permissionGranted())) return;
   const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
   if (!projectId) {

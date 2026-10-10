@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SignInCancelled, SignInMethodConflict, SignInNotConfigured, signInWithApple, signInWithGoogle } from '@/lib/auth';
 import { track } from '@/lib/analytics';
 import { avatarUrl } from '@/lib/api';
+import { FOUNDER_BUILD } from '@/lib/env';
 import { useSession } from '@/lib/session';
 import { Avatar, Button, Glass } from '@/ui/components';
 import { PromptBubbleIcon } from '@/ui/Icons';
@@ -108,7 +109,8 @@ export default function WelcomeScreen() {
           <Text style={s.sub}>Watch people respond, then add yours.</Text>
         </View>
         <View style={s.buttons}>
-          {Platform.OS === 'ios' ? [apple, google] : [google, apple]}
+          {/* The founder build cannot sign in with Apple (free Personal Team), so it shows no Apple button. */}
+          {FOUNDER_BUILD ? [google] : Platform.OS === 'ios' ? [apple, google] : [google, apple]}
           <Button title="Continue with email" variant="textOnDark" onPress={resume ?? onEmail} disabled={!!busy} style={{ height: 34 }} />
         </View>
         <Text style={s.footer}>By continuing you agree to the Terms and Community Guidelines.</Text>

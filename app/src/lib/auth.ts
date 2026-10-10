@@ -6,7 +6,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
 import { signinProviders } from './api';
-import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from './env';
+import { FOUNDER_BUILD, GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from './env';
 import { parseSignInConflict, type SignInProvider } from './signinConflict';
 import { supabase } from './supabase';
 import { OTP_LENGTH } from './validation';
@@ -42,6 +42,8 @@ export class SignInNotConfigured extends Error {
 const APPLE_REDIRECT = 'shortcut://auth/callback';
 
 export async function signInWithApple(): Promise<void> {
+  // The founder build has no Sign in with Apple entitlement (free Personal Team).
+  if (FOUNDER_BUILD) throw new SignInNotConfigured('apple');
   if (Platform.OS === 'ios') {
     const rawNonce = randomNonce();
     const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
