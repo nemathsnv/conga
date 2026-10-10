@@ -523,6 +523,30 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
   (no invite exists). The free profile expires after 7 days; rebuild with the script.
 - **Going back to the regular project:** `ios/` now holds the founder project; run
   `npx expo prebuild --clean` with the normal `app/.env`.
+- **Founder onboarding and first suggestion, verified 10 Oct** (read-only queries on the hosted
+  project, after Nemat finished onboarding in the Release build; nothing changed):
+  - 1 auth user, 1 identity (`email`), 1 `accounts` row, 1 profile, all Nemat's: username
+    `nemathsnv`, no photo, profile created 05:53 UTC. Account `active`, cohort `canggu`, not
+    deleted; `has_beta_access` true. 1 session, method `otp`; password still NULL.
+  - 18+ recorded at 05:43 UTC.
+  - Invite: the project's only invite, team-created (no inviter), cohort `canggu`, created 05:52
+    and redeemed by Nemat 05:53 UTC, not cancelled, valid to 17 Oct. No unused invites.
+  - Suggestion: 1 in total, Nemat's, created 05:54 UTC, status `in_review` (not reviewed, no
+    decline reason, no prompt), attribution on, no place (global). Text "hey" (3 characters, a
+    test). No duplicates. 0 prompts, 0 responses, 0 follows.
+  - **Found:** Nemat's waitlist row (joined 05:43 UTC, before the invite existed) is still there
+    and not admitted. `redeem_invite` does not touch the waitlist, so a member who joined the
+    waitlist first and then redeemed an invite stays in the team's waitlist queue. The app is not
+    affected (`has_beta_access` comes first in `resolveStep`). Whether redeeming should close the
+    waitlist entry is a decision for Nemat; nothing changed.
+- **Suggestion review (team).** `scripts/moderate.sh` (with `LINKED=1` for the hosted project,
+  through the Supabase CLI; the moderator name defaults to git `user.name`):
+  `suggestions` lists the queue (read-only); `approve <id> [keep-name] [note]` publishes it at
+  once as a live prompt (global, as this one has no place), notifies the author and logs the
+  action; `decline <id> <reason> [note]` sets `not_published` with one of the fixed reasons and
+  notifies the author. The three `mod_*` functions run only as `postgres` or `service_role` on
+  the hosted project. Nemat's suggestion id: `e789f8cd-0435-4ee3-a77c-f67c11dc18fc`; not
+  reviewed (approving "hey" would make it the first live prompt).
 
 ## Gates
 
