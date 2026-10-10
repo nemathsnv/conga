@@ -420,6 +420,16 @@ verify_jwt = false
 [functions.mux-webhook]
 verify_jwt = false
 
+# Signed-in callers only, checked inside the function (auth.getUser() with the caller's token,
+# then the profile or the response's author under RLS). The gateway check is off because the
+# hosted project signs tokens with asymmetric (ES256) keys, which the gateway's verify_jwt does
+# not support.
+[functions.mux-create-upload]
+verify_jwt = false
+
+[functions.mux-upload-status]
+verify_jwt = false
+
 [functions.send-push]
 verify_jwt = false
 
