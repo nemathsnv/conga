@@ -470,6 +470,60 @@ provider credentials yet); the app itself against the hosted project.
   and a function secret, then redeploy). Recommended: (a), checked with a rerun of the smoke test
   using the publishable key.
 
+## 11. Founder iPhone build (10 Oct, Nemat approved; free Personal Team, hosted project)
+
+A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for anyone else.
+
+- **Decisions (Nemat, 10 Oct).** The app uses the hosted project's publishable key (the hosted
+  `auth-signin-method` only accepts it, section 10). A founder-only build signed by Nemat's free
+  Personal Team, without Sign in with Apple and push, which a Personal Team cannot sign; the
+  production app keeps both.
+- **Switch.** `EXPO_PUBLIC_FOUNDER_BUILD=1`, set only by `app/scripts/founder-ios.sh` from the
+  git-ignored `app/.env.founder` (hosted URL, `sb_publishable_` key, Personal Team
+  `BP7TM32HCQ`, `EXPO_PUBLIC_DEV_TOOLS=1` for the Me tab's Sign out). The script loads only that
+  file (`EXPO_NO_DOTENV=1`). With the switch on: bundle id `app.shortcut.founder`; the
+  `withoutPersonalTeamCapabilities` plugin removes `aps-environment` and
+  `com.apple.developer.applesignin` (Expo applies the expo-notifications and
+  expo-apple-authentication plugins whenever they are installed); Welcome shows Google and email
+  only; `signInWithApple` throws "not configured"; no push token is registered; the build
+  (`app.config.ts`) and the app start (`supabase.ts`) refuse anything but a hosted
+  `*.supabase.co` URL with a publishable key, so it cannot fall back to localhost.
+- **Production unchanged.** With the switch unset, the introspected Expo config is identical to
+  the commit before (bundle id `app.shortcut`, both entitlements, all plugins). Typecheck, lint,
+  Jest 54 of 54.
+- **Publishable key, checked before the build** with the app's supabase-js (no sign-in, no
+  email): Auth settings (email on, Apple and Google off), `auth-signin-method`
+  (`{"providers": []}` for an unknown address), `invite_preview` through PostgREST and
+  `pre_request`, RLS (anon sees no `accounts` rows), the public avatars URL.
+- **Signing.** `expo run:ios` cannot create a Personal Team profile (it does not pass
+  `-allowProvisioningUpdates`), so the script builds with `xcodebuild -allowProvisioningUpdates`
+  and installs and launches with `devicectl`. Xcode had to be signed in to the Apple ID first
+  (it was not: "No Accounts"). CocoaPods needs a UTF-8 locale; the script sets one.
+- **Debug build (dev client).** Installed on Nemat's iPhone 17 Pro and launched against a founder
+  Metro on port 8082 (port 8081 was held by a Metro from 7 Oct serving the local-stack `app/.env`;
+  it was left running, and the founder build must not be opened against it). Metro served
+  `EXPO_PUBLIC_FOUNDER_BUILD=1` and the hosted URL. Nemat saw Welcome, tapped Google (logged
+  "google sign-in is not configured for this build", as expected without Google credentials),
+  then signed in by email code: 18+ passed, the app stopped at the invite step. Hosted database
+  afterwards (read-only): the same single user and identity, last sign-in 05:43 UTC, one session
+  with method `otp` (the hook accepted it), password still NULL, `age_confirmed_at` set through
+  the product API, 0 invites.
+- **Release build (standalone).** Installed over the Debug build and launched; JS bundled in, no
+  Metro. Signed `Apple Development`, team `BP7TM32HCQ`, `app.shortcut.founder`; entitlements only
+  `application-identifier`, `team-identifier` and `get-task-allow`. `main.jsbundle`: the hosted
+  URL and one publishable key; no JWT (so no legacy anon or service role key), no secret key, no
+  `service_role`, no LAN or local-stack address (the `sb_secret_`, `localhost` and `127.0.0.1`
+  strings are supabase-js and React Native library text).
+- **Seen on the device log:** supabase-js warns "WebCrypto API is not supported. Code challenge
+  method will default to use plain instead of sha256" when a code is requested (the client is
+  set to PKCE; React Native has no WebCrypto). Not founder-specific; email codes still work.
+  Worth a look before outside testers.
+- **Not working in this build, by design or setup:** Apple sign-in (no entitlement), Google
+  sign-in (no credentials), push, posting video (no Mux on the hosted project), the invite step
+  (no invite exists). The free profile expires after 7 days; rebuild with the script.
+- **Going back to the regular project:** `ios/` now holds the founder project; run
+  `npx expo prebuild --clean` with the normal `app/.env`.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
@@ -477,11 +531,12 @@ provider credentials yet); the app itself against the hosted project.
   approves it; the Android spike run (section 3) has not happened.
 - **Gate 2** (Nemat can sign up on iOS and Android): open. Depends on phase 2 on a real iPhone and a
   real Android against the hosted project (sections 2 and 3). Done 9 Oct: hosted email sign-in
-  works through the Auth API (section 10); `auth-signin-method` deployed 10 Oct. Still needed: the
-  key decision for the app (section 10); the app's `.env` pointed at the hosted project; an invite code there (`invite_required` is on and the
-  hosted project has 0 invites; `LINKED=1 scripts/create-invite.sh`); a device build on a real
-  iPhone (paid Apple team, B-1 to B-4) and a real Android phone; Apple and Google credentials for
-  the hosted project; then Nemat signs up in the app with email, Apple and Google on both.
+  works through the Auth API (section 10); `auth-signin-method` deployed 10 Oct; on 10 Oct the
+  founder iPhone build (section 11) signed Nemat in by email code in the app, through 18+, up to
+  the invite step. Still needed: an invite code on the hosted project (`invite_required` is on,
+  0 invites; `LINKED=1 scripts/create-invite.sh`); a build signed by the paid Apple team with
+  Sign in with Apple (B-1 to B-4) and a real Android phone; Apple and Google credentials for the
+  hosted project; then Nemat signs up in the app with email, Apple and Google on both.
 - **Gate 5** (safety complete, before any outside tester): open. Depends on sections 3 (phase 5 on
   a device), 4 (guidelines), 7 (the web admin) and B-2.
 - **Gate 7** (the closed beta opens in Canggu): open. Depends on everything above.
