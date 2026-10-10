@@ -33,7 +33,7 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets, `auth-signin-method` (section 10, hosted step 3), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets (`auth-signin-method` deployed 10 Oct, section 10), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
 | Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. On 9 Oct the hosted `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` were the same pair as the spike's and the product's local `.env` (digest comparison), so the product needs its own Mux credentials; not rotated yet (section 8). | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. 9 Oct: domain `auth.churntech.com` verified in Resend and SMTP saved in the hosted dashboard by Nemat (sender `no-reply@auth.churntech.com`, name Shortcut); no email delivered or checked yet. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
@@ -198,8 +198,10 @@ these settings (the integration test calls the same Auth endpoints the app calls
   day, so a flood can delay real sign-in codes. CAPTCHA would need a board.
 - Accounts started and never confirmed (code requested, or a password sign-up) stay in
   `auth.users` with an `accounts` row; nothing removes them.
-- `auth-signin-method` accepts only the legacy anon key, which the hosted project still issues and
-  the app uses. Moving the app to a publishable key needs this function changed and tested first.
+- `auth-signin-method` accepts only the key its runtime gets as `SUPABASE_ANON_KEY`. On the local
+  stack that is the legacy anon key; on the hosted project it is the publishable key
+  (`sb_publishable_...`, found 10 Oct). So the app has to send the publishable key to the hosted
+  project, or the function has to change (decision pending, below).
 - The hook is in every sign-in: if it errors, nobody can sign in. It is small and tested; the order
   below matters.
 - The email copy below was approved by Nemat on 9 Oct, as it stands in
@@ -216,7 +218,7 @@ these settings (the integration test calls the same Auth endpoints the app calls
 > If you didn't ask for this code, you can ignore this email.
 
 **Hosted steps, in order, each waiting for Nemat's approval** (steps 1 and 2 done 9 Oct; step 4: SMTP
-saved by Nemat, delivery to Gmail checked; step 3 reviewed, not deployed):
+saved by Nemat, delivery to Gmail checked; step 3 deployed 10 Oct):
 
 1. **Done 9 Oct (Nemat approved).** `supabase db push --dry-run`, then `supabase db push`: only
    `20261010000300_auth_hardening.sql`. Result below.
@@ -228,7 +230,8 @@ saved by Nemat, delivery to Gmail checked; step 3 reviewed, not deployed):
    email (on), 60 s and the expiry already match; Apple and Google stay off; pooler and storage
    unchanged. `auth.password_requirements` is no longer declared in `config.toml` (9 Oct), so it
    is not pushed. Preparation, rollback and checks: "Stage 2 preparation" below.
-3. `supabase functions deploy auth-signin-method --project-ref picvoavfxnajfjkqawju` (no secrets of
+3. **Done 10 Oct (Nemat approved).** `supabase functions deploy auth-signin-method --project-ref
+   picvoavfxnajfjkqawju` (no secrets of
    its own; `verify_jwt = false` from `config.toml`). Always name the function: without a name the
    CLI deploys every function, the Mux ones included. Never `--prune`. Review: "auth-signin-method
    review" below.
@@ -424,9 +427,9 @@ provider credentials yet); the app itself against the hosted project.
   `apikey` header must equal the project's legacy anon key, otherwise 401. POST only; email
   checked by pattern and length; any database error is a generic 500.
 - **Legacy anon key.** The hosted project still has the legacy `anon` and `service_role` keys
-  next to the new publishable and secret keys, and the app sends the legacy anon key. If legacy
-  keys are ever turned off, this function and the app have to move together (already listed
-  above).
+  next to the new publishable and secret keys, and the app sends the legacy anon key. (Wrong
+  assumption, corrected by the deployment below: the hosted runtime's `SUPABASE_ANON_KEY` is the
+  publishable key.)
 - **Service role.** Used only server-side, for one RPC, `signin_providers_for_email`: on the
   hosted project owned by `postgres`, `SECURITY DEFINER`, `search_path=""`, executable only by
   `service_role`; it returns the distinct identity providers for an address and nothing else.
@@ -440,6 +443,33 @@ provider credentials yet); the app itself against the hosted project.
   anon key has not shipped in any build, and the answer only covers addresses that exist. Before
   outside testers (Gate 5): decide on a rate limit for this function.
 
+**auth-signin-method deployed, 10 Oct (Nemat approved).**
+
+- **Before.** Branch `phase-7-beta` at `49e4d03`, clean; linked to `picvoavfxnajfjkqawju`;
+  `index.ts` unchanged since 6 Oct (the reviewed file); `verify_jwt = false` in `config.toml`; no
+  functions on the hosted project.
+- **Deploy.** `supabase functions deploy auth-signin-method --project-ref picvoavfxnajfjkqawju`:
+  one function bundled and deployed (703 kB). Hosted functions afterwards: only
+  `auth-signin-method`, `ACTIVE`, version 1, `verify_jwt` false. No Mux or other function deployed.
+- **Refused as intended:** no `apikey` (401), a wrong `apikey` (401), the key only as a bearer
+  token (401), `GET` (405).
+- **Found: the legacy anon key is refused too (401).** Compared by digest (no values printed):
+  the hosted runtime's `SUPABASE_ANON_KEY` equals the project's publishable key, not the legacy
+  anon JWT the app sends. The app's E-Linked check would therefore fail against the hosted
+  project with its current key.
+- **With the publishable key** (equally public): a malformed address 400 `bad_request`; an unknown
+  address 200 `{"providers": []}`; Nemat's address 200 `{"providers": ["email"]}`, also upper-cased
+  with spaces. The response has no other field. So the service role lookup works.
+- **Logs.** The function writes no logs of its own; the request body (the address) goes only to
+  the database lookup. The platform's request logs were not inspected. No key, token or address
+  is in this record or the report.
+- **Decision needed (Nemat) before the app points at the hosted project:** (a) the app's hosted
+  `.env` uses the publishable key as `EXPO_PUBLIC_SUPABASE_ANON_KEY` (no code change; supabase-js
+  2.117 accepts it; Auth, PostgREST, Storage and signed-in function calls with the publishable
+  key are not yet tested), or (b) change the function to accept the legacy anon key too (code
+  and a function secret, then redeploy). Recommended: (a), checked with a rerun of the smoke test
+  using the publishable key.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
@@ -447,8 +477,8 @@ provider credentials yet); the app itself against the hosted project.
   approves it; the Android spike run (section 3) has not happened.
 - **Gate 2** (Nemat can sign up on iOS and Android): open. Depends on phase 2 on a real iPhone and a
   real Android against the hosted project (sections 2 and 3). Done 9 Oct: hosted email sign-in
-  works through the Auth API (section 10). Still needed: `auth-signin-method` deployed; the app's
-  `.env` pointed at the hosted project; an invite code there (`invite_required` is on and the
+  works through the Auth API (section 10); `auth-signin-method` deployed 10 Oct. Still needed: the
+  key decision for the app (section 10); the app's `.env` pointed at the hosted project; an invite code there (`invite_required` is on and the
   hosted project has 0 invites; `LINKED=1 scripts/create-invite.sh`); a device build on a real
   iPhone (paid Apple team, B-1 to B-4) and a real Android phone; Apple and Google credentials for
   the hosted project; then Nemat signs up in the app with email, Apple and Google on both.
