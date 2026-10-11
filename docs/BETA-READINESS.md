@@ -9,7 +9,8 @@ in Canggu") are all open and are Nemat's decisions. Nothing below is marked done
 simulator" is not "verified on a device".
 
 Status words: **open** (nothing done), **built, unverified** (code exists, the check has not been
-run on a device), **needs input** (waits on something outside the repository).
+run on a device), **partly verified** (some of the check has run on a device; the rest is listed),
+**needs input** (waits on something outside the repository).
 
 ## 1. Code remaining
 
@@ -34,21 +35,22 @@ new feature work after phase 7.
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
 | Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: `send-push` and `web` and the `send-push` Vault secrets (deployed: `auth-signin-method` 10 Oct, section 10; `mux-webhook`, `mux-create-upload`, `mux-upload-status` 10 and 11 Oct, section 12), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
-| Mux credentials for the hosted project | done 10 Oct; spike tokens not yet revoked | Token and webhook secret in the function env; uploads minted server-side only. Since 10 Oct the hosted project uses its own "Shortcut Beta" Mux environment and token (section 12); the spike pair is no longer on the hosted project but is still valid in Mux and still in the local `supabase/functions/.env`. | A posted response goes live through the hosted stack. |
+| Mux credentials for the hosted project | done 10 Oct; check passed 11 Oct on the founder iPhone (section 12); spike tokens not yet revoked | Token and webhook secret in the function env; uploads minted server-side only. Since 10 Oct the hosted project uses its own "Shortcut Beta" Mux environment and token (section 12); the spike pair is no longer on the hosted project but is still valid in Mux and still in the local `supabase/functions/.env`. | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. 9 Oct: domain `auth.churntech.com` verified in Resend and SMTP saved in the hosted dashboard by Nemat (sender `no-reply@auth.churntech.com`, name Shortcut); no email delivered or checked yet. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
 ## 3. Real-device verification
 
-No phase 2 to 7 build has run on a physical phone. The only real-device runs are the phase 1 spike's
-(a throwaway app in `spike/`) on an iPhone 17 Pro, `spike/REPORT.md`. Android has never been run at
-all (no device, no emulator), for the spike or the app.
+The real-device runs so far, all on Nemat's iPhone 17 Pro: the phase 1 spike (a throwaway app in
+`spike/`), `spike/REPORT.md`; the founder build against the hosted project, onboarding on 10 Oct
+(section 11) and the first video recorded, uploaded, published and played on 11 Oct (section 12).
+Android has never been run at all (no device, no emulator), for the spike or the app.
 Each phase report lists what was seen on the iPhone 17 simulator and what was not.
 
 | Phase | Status | Not yet run anywhere |
 | --- | --- | --- |
 | 1 Video spike (`spike/REPORT.md`) | iPhone run on a device; Android open | The spike checklist (`spike/CHECKLIST.md`) on a real mid-range Android over Bali mobile data, needed for Gate 1. |
 | 2 Foundations (`docs/PHASE-2-REPORT.md`) | built, unverified | Google sign-in; Apple sign-in on a device; the invite link redeemed after sign-in; the image picker; keyboard behaviour; Android entirely. |
-| 3 Core loop (`docs/PHASE-3-REPORT.md`) | built, unverified | Recording, posting and playback on a phone over mobile data; B-1. |
+| 3 Core loop (`docs/PHASE-3-REPORT.md`) | partly verified (founder iPhone, 11 Oct, section 12) | Done: record, upload, publish and play one response on the founder iPhone build against the hosted project. Still to run: the same over Bali mobile data (the network was not confirmed); a second account seeing and playing it; Android; B-1. |
 | 4 Conversation (`docs/PHASE-4-REPORT.md`) | built, unverified | Pushes end to end (B-2); the second notification ask on a device. |
 | 5 Safety (`docs/PHASE-5-REPORT.md`) | built, unverified | Report, block and delete end to end; re-authentication with Apple and Google; account deletion with the email code; enforcement notices by push; link previews and opening the app from a link (B-3). |
 | 6 Places and suggestions (`docs/PHASE-6-REPORT.md`) | built, unverified | Recording and uploading a first-response draft; the header Next buttons on C-Write and C-Scope (covered by the dev-menu button on the simulator); the pin label on Home and in the player; P-Unfollow; SR-None's suggest link; pushes for the new kinds. |
@@ -570,8 +572,8 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
   after signing 401; the raw body is what is verified; no secret fails closed; only non-publishing
   event types were signed). On the hosted project, with and without the secret: unsigned, malformed,
   forged and stale requests 401, `GET` 405. The Shortcut Beta webhook points at
-  `/functions/v1/mux-webhook`. The Mux dashboard shows no test-event option, so **a genuine
-  delivery is not verified yet**; it will be on the first upload.
+  `/functions/v1/mux-webhook`. The Mux dashboard shows no test-event option; the first genuine
+  deliveries arrived with the first upload on 11 Oct (below).
 - **`mux-create-upload` and `mux-upload-status`** deployed 11 Oct. Before: `deno check` and
   `deno lint` clean; run locally against hosted Auth with invalid tokens only, 12 of 12 (no token,
   garbage, the publishable key, a forged ES256 token: 401, before any Mux call). After: the four
@@ -586,8 +588,50 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
   featured, team-created. The only database change was `prompts` 0 to 1; `prompt_in_feed` is true
   for Nemat; the suggestion "hey" is untouched (`in_review`). A Canggu pin needs the prompt tied to
   the `canggu` place, which the script does with a second argument; this one is global.
-- **Awaiting:** the iPhone test (record, upload, processing, publish, play) with the founder
-  Release build (no rebuild needed) and, with it, the first genuine webhook delivery.
+- **Founder iPhone video upload and playback: verified 11 Oct.** Nemat ran it on the iPhone 17 Pro
+  with the founder Release build (no rebuild): recorded, uploaded, published and played the
+  response, and played it again after reopening the app. The backend was then checked read-only
+  (SQL `select`s, Mux API `GET`s, the Supabase function and gateway logs; nothing written, no
+  credential or address printed):
+  - **Response** `5b321c24-1e1e-4393-9ae1-e6503903430d`: `live`, kind `response`, Nemat's account
+    (the project's only one), prompt `ddd5a383-be11-475f-9576-0a6db79cabe3`, 9,911 ms, no caption,
+    not deleted. Times (UTC): Post tapped 08:02:21.4, Mux asset created 08:02:25, `live_at`
+    08:02:29.8 (about 8.4 s). The prompt has exactly this one response.
+  - **Mux, Shortcut Beta:** exactly 1 upload (`ka5YEhFH6gsMlReKkWOrfWN2xPkSKxceKqvzAqZxIs00`,
+    `asset_created`) and 1 asset (`L7KxG29AtA7rEZ2JXF02QWw3GcR12F00NK3A1eTsu02UVc`, `ready`,
+    9.91 s, 1080×1920 at 30 fps, 9:16, `basic`, no errors). One public playback id
+    (`8UqSCXiojU36lJn802TM00UF6ehuCB5Q5NF8kZh502J6JU`); its HLS manifest returns HTTP 200.
+    The asset, upload and playback ids match the response row; `passthrough` is Nemat's id.
+  - **Spike environment untouched:** the same 7 assets, all `ready`, all created 6 Oct, ids
+    matching the spike's own 6 Oct logs.
+  - **Webhook:** 4 signed deliveries from Mux (us-east-1), all HTTP 200, so all passed the
+    signature check (anything else is a 401): upload created, upload asset created, asset
+    created, and `video.asset.ready`. Only the ready delivery did work (4.1 s): its
+    `mark_response_live` call returned 200. No failed deliveries, so no retries.
+  - **Which caller set `live` is undetermined.** Both paths reached the database successfully:
+    the webhook's `mark_response_live` call reached the gateway at 08:02:28.750 (Virginia, 1,202 ms
+    round trip to the Singapore database), and the app's single `mux-upload-status` check called it
+    at 08:02:29.633 (Singapore, 245 ms). The function only updates a row that is still
+    `processing`, both calls return the same result, and nothing records which one made the change.
+    The timing leans towards the app's check (`live_at` is 170 ms after its call), which is not
+    proof. The webhook path alone setting a response `live` is therefore still unverified.
+  - **No duplicates and no unexpected database changes.** Every table matches the 10 Oct baseline
+    (section 11) plus what this test adds: 1 response, 14 analytics events in the flow's order
+    (record, disclosure, publish, notification ask, view), the disclosure acknowledgement, and the
+    notification ask `accepted` (0 push tokens, as the founder build registers none). Suggestion,
+    invite and waitlist rows unchanged since 10 Oct.
+  - **No errors.** From 07:55 UTC every function and gateway call returned 200 or 204, with no
+    error-level function logs. The 401s at 07:50 were the no-token checks from the deployment. The
+    only Postgres error in the window is a mistyped column in one of the verification queries
+    (08:08, a failed `select`). Functions and bundles unchanged: the same 4, no deployment.
+  - **Seen while checking:** `mux-upload-status` took 5 s because it pre-warms the video before
+    answering, and the webhook pre-warmed the same video again, so the app waited about 3 s longer
+    than it needed to. The app made no API calls after 08:03:11, so the server logs neither show
+    nor rule out a cold relaunch before the replay; the replay after reopening is Nemat's
+    observation on the device.
+  - **Not verified by this test:** the webhook alone setting a response `live`; an asset that
+    errors at Mux; a second account seeing and playing the response, and replies; Bali mobile
+    data; Android; B-1; the items below. No gate changes.
 - **Open before outside testers:** the upload id is not checked or encoded before it goes into
   the Mux API path in `mux-upload-status`; uploads are not bound to their author (the
   `passthrough` user id is set but never compared); deleted or removed videos stay playable at
@@ -602,7 +646,9 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
   provisional stack on the iPhone spike evidence (`docs/DECISIONS.md`, 6 Oct). Closes only when Nemat
-  approves it; the Android spike run (section 3) has not happened.
+  approves it; the Android spike run (section 3) has not happened. 11 Oct: the founder iPhone build
+  took the first response through expo-camera and Mux on the hosted project (section 12); that
+  is iPhone evidence only and does not close the gate.
 - **Gate 2** (Nemat can sign up on iOS and Android): open. Depends on phase 2 on a real iPhone and a
   real Android against the hosted project (sections 2 and 3). Done 9 Oct: hosted email sign-in
   works through the Auth API (section 10); `auth-signin-method` deployed 10 Oct; on 10 Oct the
