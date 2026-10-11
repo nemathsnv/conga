@@ -642,6 +642,41 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
   spike token; decide about the spike's 7 assets; give the local stack its own development token
   instead of the spike pair in `supabase/functions/.env`.
 
+## 13. Security stage 1 (11 Oct; local only, not deployed)
+
+Four audit findings fixed on branch `claude/shortcut-stage-1-security-c02c82`. Nothing hosted was
+touched: no migration pushed, no function deployed, no secret changed, no Mux call made (Mux is
+stubbed in every test, and the test stack has no Mux secrets).
+
+- **F1, direct reads of `responses`:** migration `20261011000100_responses_direct_read.sql`. Any
+  member could `GET /rest/v1/responses` and read every live row, including blocked members' and
+  their Mux upload and asset ids. Members now read only their own rows directly. The read functions
+  (feeds, players, profiles, web) are SECURITY DEFINER and unaffected; the app never reads the table.
+- **F3, upload ids and Mux URLs:** `_shared/mux.ts` accepts only 1 to 128 letters and digits as a
+  Mux id (`isMuxId`, `muxSegment`), `mux()` refuses any URL that is not `https://api.mux.com`, and
+  `prewarm` skips invalid playback ids. `mux-upload-status` answers 400 `invalid_upload_id` before
+  the database or Mux; a malformed asset id from Mux is never put in a path.
+- **F13, ownership in `mux-upload-status`:** the lookup filters on `author_id` as well as RLS.
+- **F12, webhook signature:** `verifyMuxSignature` compares the HMAC bytes in constant time and
+  requires exactly 64 hex characters; accepted and rejected signatures are otherwise unchanged.
+- **Structure:** `mux-upload-status` and `mux-webhook` moved their code to `handler.ts` so tests can
+  import it; `index.ts` only serves it. The responses and status codes the app sees are unchanged.
+- **Checks (isolated local stack, a separate project id and ports):** pgTAP 436/436 (400 before,
+  36 new in `0008_security_stage1.sql`; 12 of them fail on the old policy); Deno unit 15/15 and
+  integration 19/19 (`supabase/functions/_tests/`; with the old policy the 2 F1 HTTP tests fail,
+  and without the author filter as well the F13 live-upload test fails); the same cases through
+  the local gateway and edge runtime; `deno check` and `deno lint` clean; app typecheck, lint and
+  Jest 54/54; `scripts/auth-integration.mjs` 37/37. Not run: anything on the hosted project, a device,
+  or real Mux.
+- **To deploy (needs Nemat's approval):** `supabase db push --dry-run`, then `supabase db push`
+  (the one migration); then `supabase functions deploy mux-upload-status`, `mux-webhook` and
+  `mux-create-upload` (it shares `_shared/mux.ts`), never `--prune`. Then the founder iPhone
+  record, upload, publish and play check again, and the 401 and 400 checks on the hosted functions.
+- **Still open from section 12:** uploads not bound to their author (`passthrough`); deleted videos
+  still playable at Mux; no limit on upload URLs; errored assets stay `processing`; the database
+  accepts any upload id string. Same shape as F1 on other tables: `profiles` and `follows` are
+  readable directly by any member (`true`), and `comments` wherever `deleted_at` is null.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
