@@ -9,8 +9,23 @@ function authHeader(): string {
   return "Basic " + btoa(`${id}:${secret}`);
 }
 
+// Mux object ids (uploads, assets, playback ids) are letters and digits only.
+const MUX_ID = /^[A-Za-z0-9]{1,128}$/;
+
+export function isMuxId(value: unknown): value is string {
+  return typeof value === "string" && MUX_ID.test(value);
+}
+
+/** A Mux id as one URL path segment. Throws on anything else, so no input can change the path. */
+export function muxSegment(id: unknown): string {
+  if (!isMuxId(id)) throw new Error("invalid_mux_id");
+  return encodeURIComponent(id);
+}
+
 export async function mux<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(MUX_API + path, {
+  const url = new URL(MUX_API + path);
+  if (url.origin !== MUX_API) throw new Error("invalid_mux_path");
+  const res = await fetch(url, {
     ...init,
     headers: { Authorization: authHeader(), "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
@@ -44,6 +59,7 @@ export function json(data: unknown, status = 200): Response {
  * makes the author's first play, and the first viewer's, warm.
  */
 export async function prewarm(playbackId: string): Promise<void> {
+  if (!isMuxId(playbackId)) return;
   try {
     const base = `https://stream.mux.com/${playbackId}.m3u8`;
     const master = await (await fetch(base)).text();
@@ -57,4 +73,31 @@ export async function prewarm(playbackId: string): Promise<void> {
   } catch {
     // Warming is best effort.
   }
+}
+
+/** Compares two byte strings in time that depends only on their length, not their contents. */
+export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+const WEBHOOK_TOLERANCE_S = 300;
+
+/**
+ * Checks a Mux-Signature header (t=<unix seconds>,v1=<hex HMAC-SHA256 of "t.body">) against the
+ * raw request body. False without a secret, outside 300 s of now, or on any mismatch.
+ */
+export async function verifyMuxSignature(header: string, raw: string, secret: string | undefined, nowMs = Date.now()): Promise<boolean> {
+  if (!secret) return false;
+  const t = /t=(\d+)/.exec(header)?.[1];
+  const v1 = /v1=([a-f0-9]+)/.exec(header)?.[1];
+  if (!t || !v1 || v1.length !== 64) return false;
+  if (Math.abs(nowMs / 1000 - Number(t)) > WEBHOOK_TOLERANCE_S) return false;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const expected = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${raw}`)));
+  const given = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) given[i] = parseInt(v1.slice(i * 2, i * 2 + 2), 16);
+  return timingSafeEqual(expected, given);
 }

@@ -12,6 +12,7 @@ Postgres, Auth, Storage and Edge Functions for Shortcut. Everything here is repr
 | `seed.sql` | Local development seed only (test invite codes). Never applied to the hosted project. |
 | `tests/` | pgTAP tests. `supabase test db` runs them against the local stack. |
 | `functions/` | Edge Functions (Deno). `auth-signin-method` backs the E-Linked check; `mux-create-upload`, `mux-upload-status` and `mux-webhook` carry video; `send-push` drains the push outbox. |
+| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network) and `integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
 | `templates/` | Auth email templates. `sign_in_code.html` carries the 6-digit code and no link; it is used for the confirmation (new account), magic link (returning account) and recovery emails. |
 | `.env.example` | Names of the provider secrets the CLI needs. Copy to `.env` (git-ignored). |
 
@@ -31,6 +32,15 @@ supabase start            # starts Postgres, Auth, Storage, Mailpit and the Edge
 supabase test db          # pgTAP tests
 supabase db reset         # rebuild the local database from migrations + seed
 scripts/create-invite.sh  # create a test invite code
+deno test --allow-env supabase/functions/_tests/mux_test.ts   # Mux helpers and webhook signatures
+```
+
+The integration tests need the local stack's URL and keys (from `supabase status -o env`) as
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`, and refuse any host but
+`127.0.0.1` or `localhost`:
+
+```bash
+deno test --allow-env --allow-net supabase/functions/_tests/integration_test.ts
 ```
 
 Email codes sent locally land in Mailpit at http://127.0.0.1:54324.
