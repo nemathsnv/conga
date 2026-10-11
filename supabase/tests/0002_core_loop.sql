@@ -6,6 +6,12 @@ select plan(31);
 delete from public.responses;
 delete from public.prompts;
 
+-- Fixture lookup by upload id, read as the table owner: members can no longer read other people's
+-- responses straight from the table (20261011000100), and these tests look fixtures up while
+-- acting as someone else. Rolled back with the transaction.
+create function pg_temp.response_id(p_upload text) returns uuid language sql stable security definer set search_path = '' as $$ select id from public.responses where mux_upload_id = p_upload $$;
+grant execute on function pg_temp.response_id(text) to authenticated;
+
 insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
   ('a1111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'lena@example.com', '{}', '{}', now(), now()),
   ('b2222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'adam@example.com', '{}', '{}', now(), now()),
@@ -60,7 +66,7 @@ select is((public.get_profile('b2222222-2222-2222-2222-222222222222'))->>'follow
 select is(jsonb_array_length(public.follow_list('b2222222-2222-2222-2222-222222222222', 'followers')), 1, 'followers list');
 
 -- Player order: entry first, then unseen followed, then newer.
-select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%'), (select id from public.responses where mux_upload_id = 'up-maya')))->'responses'->0->'author'->>'username', 'testmaya', 'entry response comes first');
+select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%'), pg_temp.response_id('up-maya')))->'responses'->0->'author'->>'username', 'testmaya', 'entry response comes first');
 select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%')))->'responses'->0->'author'->>'username', 'testadam', 'without an entry, unseen followed people come first');
 
 -- Posting: disclosure first, one response per prompt, limits.
@@ -76,8 +82,8 @@ reset role;
 select is((public.mark_response_live('up-lena', 'as-lena', 'pb-lena', 5200))->>'status', 'live', 'mark_response_live');
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"b2222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
-select is((public.get_response((select id from public.responses where mux_upload_id = 'up-lena')))->>'playback_id', 'pb-lena', 'others see the live response with its playback id');
-select is((public.get_response((select id from public.responses where mux_upload_id = 'up-adam')))->>'is_own', 'true', 'own response is marked is_own');
+select is((public.get_response(pg_temp.response_id('up-lena')))->>'playback_id', 'pb-lena', 'others see the live response with its playback id');
+select is((public.get_response(pg_temp.response_id('up-adam')))->>'is_own', 'true', 'own response is marked is_own');
 reset role;
 
 select * from finish();

@@ -6,6 +6,12 @@ select plan(99);
 delete from public.responses;
 delete from public.prompts;
 
+-- Fixture lookup by upload id, read as the table owner: members can no longer read other people's
+-- responses straight from the table (20261011000100), and these tests look fixtures up while
+-- acting as someone else. Rolled back with the transaction.
+create function pg_temp.response_id(p_upload text) returns uuid language sql stable security definer set search_path = '' as $$ select id from public.responses where mux_upload_id = p_upload $$;
+grant execute on function pg_temp.response_id(text) to authenticated;
+
 insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
   ('a1111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'lena@example.com', '{}', '{}', now(), now()),
   ('b2222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'adam@example.com', '{}', '{}', now(), now()),
@@ -57,7 +63,7 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->>'count', '1', 'the live reply is in the room');
 select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->'replies'->0->'author'->>'username', 'testlena', 'room lists the reply');
-select is((public.get_video((select id from public.responses where mux_upload_id = 'up-lena-r1')))->'context'->>'reply_to_is_root', 'true', 'a reply to the root says so');
+select is((public.get_video(pg_temp.response_id('up-lena-r1')))->'context'->>'reply_to_is_root', 'true', 'a reply to the root says so');
 select is((public.get_profile('a1111111-1111-1111-1111-111111111111'))->>'reply_count', '1', 'profile counts replies');
 select is(jsonb_array_length(public.profile_responses('a1111111-1111-1111-1111-111111111111')), 0, 'replies are not in the Responses grid');
 select is(jsonb_array_length(public.profile_replies('a1111111-1111-1111-1111-111111111111')), 1, 'replies are in the Replies grid');
@@ -68,7 +74,7 @@ reset role;
 -- Maya replies to Lena's reply: flat room, "Replying to Lena".
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated"}', true);
-select is((public.post_reply((select id from public.responses where mux_upload_id = 'up-lena-r1'), 'up-maya-r1', null, 8000))->>'root_response_id', 'd4444444-4444-4444-4444-444444444444', 'a reply to a reply stays in the root''s room');
+select is((public.post_reply(pg_temp.response_id('up-lena-r1'), 'up-maya-r1', null, 8000))->>'root_response_id', 'd4444444-4444-4444-4444-444444444444', 'a reply to a reply stays in the root''s room');
 reset role;
 select public.mark_response_live('up-maya-r1', 'as-maya-r1', 'pb-maya-r1', 8000);
 set local role authenticated;
@@ -76,7 +82,7 @@ select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-1111111
 select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->>'count', '2', 'two replies in the room');
 select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->'replies'->1->>'reply_to_name', 'Lena Hart', 'a reply to a reply carries "Replying to Lena"');
 select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->'replies'->0->>'reply_to_name', null, 'a reply to the root carries no "Replying to"');
-select is((public.get_video((select id from public.responses where mux_upload_id = 'up-maya-r1')))->'context'->'root'->'author'->>'username', 'testadam', 'a reply to a reply knows its root ("In replies to Adam Novak")');
+select is((public.get_video(pg_temp.response_id('up-maya-r1')))->'context'->'root'->'author'->>'username', 'testadam', 'a reply to a reply knows its root ("In replies to Adam Novak")');
 select is((select count(*)::int from public.activity where recipient_id = 'a1111111-1111-1111-1111-111111111111' and kind = 'video_reply'), 1, 'Lena gets the video_reply row for Maya''s reply');
 reset role;
 select is((select public.push_text(o) from public.push_outbox o where kind = 'video_reply' and recipient_id = 'a1111111-1111-1111-1111-111111111111'), 'Maya Lindqvist replied to your reply with a video', 'push text for a reply to a reply');
@@ -86,7 +92,7 @@ select is((select public.push_text(o) from public.push_outbox o where kind = 'vi
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 select throws_ok($$ select public.post_comment('d4444444-4444-4444-4444-444444444444', repeat('x', 301)) $$, 'P0001', 'invalid_comment', 'comments stop at 300 characters');
-select throws_ok($$ select public.post_comment((select id from public.responses where mux_upload_id = 'up-lena-r1'), 'hi') $$, 'P0001', 'response_not_found', 'video replies have no comments');
+select throws_ok($$ select public.post_comment(pg_temp.response_id('up-lena-r1'), 'hi') $$, 'P0001', 'response_not_found', 'video replies have no comments');
 select is((public.post_comment('d4444444-4444-4444-4444-444444444444', '  Pererenan at sunrise, yes.  '))->>'body', 'Pererenan at sunrise, yes.', 'post_comment trims and returns the card');
 select is((public.post_comment('d4444444-4444-4444-4444-444444444444', 'The rice fields are disappearing though.'))->>'is_author', 'false', 'a commenter is not the Author');
 reset role;
