@@ -33,8 +33,8 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: Edge Functions deployed with their env (Mux functions only after dedicated product Mux credentials), the `send-push` Vault secrets (`auth-signin-method` deployed 10 Oct, section 10), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
-| Mux credentials for the hosted project | needs input | Token and webhook secret in the function env; uploads minted server-side only. On 9 Oct the hosted `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` were the same pair as the spike's and the product's local `.env` (digest comparison), so the product needs its own Mux credentials; not rotated yet (section 8). | A posted response goes live through the hosted stack. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: `send-push` and `web` and the `send-push` Vault secrets (deployed: `auth-signin-method` 10 Oct, section 10; `mux-webhook`, `mux-create-upload`, `mux-upload-status` 10 and 11 Oct, section 12), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Mux credentials for the hosted project | done 10 Oct; spike tokens not yet revoked | Token and webhook secret in the function env; uploads minted server-side only. Since 10 Oct the hosted project uses its own "Shortcut Beta" Mux environment and token (section 12); the spike pair is no longer on the hosted project but is still valid in Mux and still in the local `supabase/functions/.env`. | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. 9 Oct: domain `auth.churntech.com` verified in Resend and SMTP saved in the hosted dashboard by Nemat (sender `no-reply@auth.churntech.com`, name Shortcut); no email delivered or checked yet. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
 ## 3. Real-device verification
@@ -111,7 +111,8 @@ deleted with `supabase functions delete`; afterwards the function list was empty
 `404 NOT_FOUND`, the Mux asset list was unchanged (the same 7 spike assets, same ids, status and
 playback ids) and the project secrets were unchanged. Not checked: the function invocation logs for
 calls between 6 and 9 Oct (dashboard, Edge Functions, Logs; the functions are gone, so the logs may
-only be in Logs Explorer). Mux tokens not rotated yet. The spike app's clean-up, upload and status
+only be in Logs Explorer). The hosted Mux secrets were replaced with a separate product environment's
+token on 10 Oct (section 12); the spike token itself is not revoked yet. The spike app's clean-up, upload and status
 calls no longer work against the hosted project; `spike/` is unchanged.
 
 ## 9. Hosted database (9 Oct, Nemat approved)
@@ -519,8 +520,8 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
   set to PKCE; React Native has no WebCrypto). Not founder-specific; email codes still work.
   Worth a look before outside testers.
 - **Not working in this build, by design or setup:** Apple sign-in (no entitlement), Google
-  sign-in (no credentials), push, posting video (no Mux on the hosted project), the invite step
-  (no invite exists). The free profile expires after 7 days; rebuild with the script.
+  sign-in (no credentials), push. (The invite step and video were missing on 10 Oct; an invite was
+  redeemed the same day, and Mux is on the hosted project since 11 Oct, section 12.) The free profile expires after 7 days; rebuild with the script.
 - **Going back to the regular project:** `ios/` now holds the founder project; run
   `npx expo prebuild --clean` with the normal `app/.env`.
 - **Founder onboarding and first suggestion, verified 10 Oct** (read-only queries on the hosted
@@ -547,6 +548,55 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
   notifies the author. The three `mod_*` functions run only as `postgres` or `service_role` on
   the hosted project. Nemat's suggestion id: `e789f8cd-0435-4ee3-a77c-f67c11dc18fc`; not
   reviewed (approving "hey" would make it the first live prompt).
+
+## 12. Video on the hosted project (Mux, 10 and 11 Oct, Nemat approved each step)
+
+- **Separate Mux environment.** Nemat created a "Shortcut Beta" environment and a Mux Video
+  Read + Write token in it. Checked read-only with the Mux API, no values printed: the first token
+  turned out to be in the spike environment (it saw the spike's 7 assets) and was not used; the
+  replacement sees 0 assets, shares none with the spike token, and the spike environment still
+  has its 7 assets. Both credentials sit in git-ignored, mode-600 files
+  (`supabase/.env.mux-hosted`, `supabase/.env.mux-webhook`).
+- **Hosted secrets.** `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` replaced (10 Oct, done by Nemat):
+  they match the new token by digest and not the spike pair; the other 7 secrets unchanged, 9 in
+  total. `MUX_WEBHOOK_SECRET` added from its file (10 Oct): 10 secrets, the original 9 unchanged,
+  the new one matches by digest.
+- **`verify_jwt = false`** for `mux-create-upload` and `mux-upload-status` (`efc3b65`): the hosted
+  project signs user tokens with ES256, which the gateway's check does not support; both functions
+  check the caller themselves (`auth.getUser()`, then a profile or the response's author under
+  RLS).
+- **`mux-webhook`** deployed 10 Oct (`verify_jwt` false). Before: run locally in Deno, 11 of 11
+  (no or malformed or wrong signature 401; timestamps over 300 s old or ahead 401; body changed
+  after signing 401; the raw body is what is verified; no secret fails closed; only non-publishing
+  event types were signed). On the hosted project, with and without the secret: unsigned, malformed,
+  forged and stale requests 401, `GET` 405. The Shortcut Beta webhook points at
+  `/functions/v1/mux-webhook`. The Mux dashboard shows no test-event option, so **a genuine
+  delivery is not verified yet**; it will be on the first upload.
+- **`mux-create-upload` and `mux-upload-status`** deployed 11 Oct. Before: `deno check` and
+  `deno lint` clean; run locally against hosted Auth with invalid tokens only, 12 of 12 (no token,
+  garbage, the publishable key, a forged ES256 token: 401, before any Mux call). After: the four
+  functions `auth-signin-method`, `mux-create-upload`, `mux-upload-status`, `mux-webhook`, all
+  `ACTIVE`, `verify_jwt` false; both new ones 401 without a valid token; the 10 secrets, the
+  database and the other two functions' bundles unchanged; Shortcut Beta 0 assets, spike 7.
+- **Function versions** move up by one on every secret change, with unchanged bundle hashes and
+  timestamps (platform behaviour; no code redeployed).
+- **First live prompt** (11 Oct 07:54 UTC, `scripts/create-prompt.sh` with `LINKED=1`):
+  `ddd5a383-be11-475f-9576-0a6db79cabe3`, "What's one underrated place in Canggu everyone should
+  know about?" (exact text checked), `live`, global (no place, so no place notification), not
+  featured, team-created. The only database change was `prompts` 0 to 1; `prompt_in_feed` is true
+  for Nemat; the suggestion "hey" is untouched (`in_review`). A Canggu pin needs the prompt tied to
+  the `canggu` place, which the script does with a second argument; this one is global.
+- **Awaiting:** the iPhone test (record, upload, processing, publish, play) with the founder
+  Release build (no rebuild needed) and, with it, the first genuine webhook delivery.
+- **Open before outside testers:** the upload id is not checked or encoded before it goes into
+  the Mux API path in `mux-upload-status`; uploads are not bound to their author (the
+  `passthrough` user id is set but never compared); deleted or removed videos stay playable at
+  Mux (nothing deletes assets, including the 30-day purge); no limit on upload URLs per member;
+  an asset that errors at Mux leaves its response `processing`; the webhook's signature
+  comparison is not constant-time.
+- **Still to do in Mux (Nemat):** revoke the extra token created in the spike environment and the
+  spike token; decide about the spike's 7 assets; give the local stack its own development token
+  instead of the spike pair in `supabase/functions/.env`.
 
 ## Gates
 
