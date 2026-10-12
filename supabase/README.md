@@ -11,8 +11,8 @@ Postgres, Auth, Storage and Edge Functions for Shortcut. Everything here is repr
 | `migrations/` | Ordered SQL migrations. The schema of record. |
 | `seed.sql` | Local development seed only (test invite codes). Never applied to the hosted project. |
 | `tests/` | pgTAP tests. `supabase test db` runs them against the local stack. |
-| `functions/` | Edge Functions (Deno). `auth-signin-method` backs the E-Linked check; `mux-create-upload`, `mux-upload-status` and `mux-webhook` carry video; `send-push` drains the push outbox. |
-| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network), `integration_test.ts` and `uploads_integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
+| `functions/` | Edge Functions (Deno). `auth-signin-method` backs the E-Linked check; `mux-create-upload`, `mux-upload-status` and `mux-webhook` carry video; `mux-cleanup` deletes and revokes videos at Mux; `send-push` drains the push outbox. |
+| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network), `integration_test.ts`, `uploads_integration_test.ts` and `cleanup_integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
 | `templates/` | Auth email templates. `sign_in_code.html` carries the 6-digit code and no link; it is used for the confirmation (new account), magic link (returning account) and recovery emails. |
 | `.env.example` | Names of the provider secrets the CLI needs. Copy to `.env` (git-ignored). |
 
@@ -42,6 +42,7 @@ The integration tests need the local stack's URL and keys (from `supabase status
 ```bash
 deno test --allow-env --allow-net supabase/functions/_tests/integration_test.ts
 deno test --allow-env --allow-net supabase/functions/_tests/uploads_integration_test.ts
+deno test --allow-env --allow-net supabase/functions/_tests/cleanup_integration_test.ts
 ```
 
 ## Video uploads
@@ -59,6 +60,51 @@ mints as it opens, so re-recording leaves unused URLs: at the 3-URL cap the olde
 only once Mux confirms (`begin_upload_cancellation`, `finish_upload_cancellation`). Cancelled URLs
 still count towards the hour and the day. `mark_response_live` takes the
 asset's Mux `passthrough` and leaves the video unchanged unless it is the author (`owner_mismatch`).
+
+## Deleting videos at Mux (security stage 3)
+
+Deleting, removing or purging a video hides it in the database at once (every read path,
+`video_visible`, now also needs a playback id). What has to change at Mux is queued in
+`mux_cleanup_jobs` by the same transaction (migration `20261012000200_video_deletion_cleanup.sql`)
+and done by the `mux-cleanup` Edge Function:
+
+| Event | At Mux |
+|---|---|
+| An author deletes or abandons a video, or replaces a draft or an upload | The asset is deleted (or the upload cancelled, if Mux has no asset yet) |
+| A moderator removes a video | Public playback is deleted now; the asset is deleted 30 days after the case closes (the removal, or the review decision; a pending review keeps it) |
+| A moderator restores it (or a review reverses it) | A new public playback id, while the asset is kept |
+| An account is deleted / restored by signing in | Playback off for all its videos / back on |
+| The purge (day 30) | Every asset of the account is deleted; a removed video keeps its retention |
+| A ready event for an upload no video took, or for a deleted video | The asset is deleted (an unused URL only once it has expired) |
+| The daily sweep finds an asset nothing uses | Deleted if the ledger proves whose it is; otherwise listed for review, never touched |
+
+Before any change the worker reads the object at Mux and checks that its passthrough and upload id
+are the recorded owner's; when a deletion is leased the database re-checks, under row locks, that
+no live, processing or draft video uses the asset and no retention applies. One job per asset runs
+at a time; failures retry after 1, 2, 4 … minutes (at most 6 hours), ten attempts, then `failed`.
+The purge makes tombstones of videos and comments that other people's replies point at, anonymises
+the account's moderation records (deleted 90 days later by `prune_moderation_records`) and records
+an account it cannot remove in `account_purge_failures` without stopping the others.
+
+The worker runs like `send-push`: pg_cron every minute (and a sweep daily) through pg_net, with two
+Vault secrets and one function secret. Until they exist nothing is called and jobs wait.
+
+```sql
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/mux-cleanup', 'mux_cleanup_url');
+select vault.create_secret('<a long random string>', 'mux_cleanup_key');
+```
+
+```bash
+supabase secrets set MUX_CLEANUP_KEY=<the same random string>
+supabase functions deploy mux-cleanup --no-verify-jwt
+```
+
+What the queue is doing, and retrying a failed job (service role, SQL editor):
+
+```sql
+select public.mux_cleanup_overview();      -- counts, due, stuck, failed, review, purge failures
+select public.mux_cleanup_retry('<job id>');
+```
 
 Email codes sent locally land in Mailpit at http://127.0.0.1:54324.
 
