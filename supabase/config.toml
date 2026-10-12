@@ -433,6 +433,10 @@ verify_jwt = false
 [functions.send-push]
 verify_jwt = false
 
+# pg_cron calls this through pg_net with MUX_CLEANUP_KEY instead of a user JWT.
+[functions.mux-cleanup]
+verify_jwt = false
+
 [functions.web]
 verify_jwt = false
 

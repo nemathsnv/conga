@@ -34,7 +34,7 @@ export async function handleUploadStatus(req: Request): Promise<Response> {
         console.error("owner_mismatch", uploadId);
       } else {
         responseStatus = data?.status ?? responseStatus;
-        await prewarm(playbackId);
+        if (responseStatus === "live" || responseStatus === "draft") await prewarm(playbackId);
       }
     }
     return json({ uploadStatus: upload.status, assetStatus: asset.status, playbackId, responseStatus, errors: asset.errors ?? null });

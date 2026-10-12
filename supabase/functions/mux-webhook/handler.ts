@@ -25,6 +25,7 @@ export async function handleMuxWebhook(req: Request): Promise<Response> {
     console.error("owner_mismatch", asset.upload_id);
     return json({ ok: true, ignored: "owner_mismatch" });
   }
-  await prewarm(playbackId);
+  // Only a video that plays is warmed; a deleted or removed one is queued for clean-up instead.
+  if (data?.status === "live" || data?.status === "draft") await prewarm(playbackId);
   return json({ ok: true, response: data });
 }
