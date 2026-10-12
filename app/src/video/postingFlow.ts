@@ -58,13 +58,13 @@ export async function prepareUpload<Row>(args: {
 }
 
 /**
- * The second line of the Upload failed banner (X-Upload-Failed). The board's line is kept for
- * every failure but the upload limits, which say what happened instead of "Check your connection."
+ * The second line of the Upload failed banner (X-Upload-Failed). The upload limits say what
+ * happened (wording approved by Nemat, 12 Oct); every other failure keeps the board's line.
  */
 export function uploadFailedDetail(reason: string | null): string {
   const r = reason ?? '';
-  if (r.includes('upload_limit_hour')) return "It's saved on this phone. You've reached the limit of 10 uploads an hour. Retry later.";
-  if (r.includes('upload_limit_day')) return "It's saved on this phone. You've reached the limit of 30 uploads a day. Retry later.";
-  if (r.includes('upload_limit_active')) return "It's saved on this phone. Uploading isn't available right now. Retry later.";
+  if (r.includes('upload_limit_hour')) return "You've reached the limit of 10 uploads per hour. Try again later.";
+  if (r.includes('upload_limit_day')) return "You've reached the limit of 30 uploads in 24 hours. Try again later.";
+  if (r.includes('upload_limit_active')) return "Uploading isn't available right now. Try again later.";
   return "It's saved on this phone. Check your connection.";
 }

@@ -3,7 +3,7 @@
 -- URLs); posting claims an upload once, and only the member it was minted for. Real concurrency
 -- (separate transactions) is covered by supabase/functions/_tests/uploads_integration_test.ts.
 begin;
-select plan(172);
+select plan(187);
 
 delete from public.responses;
 delete from public.prompts;
@@ -437,6 +437,45 @@ select is((public.publish_draft('5a000000-0000-0000-0000-000000000001'))->>'id',
 reset role;
 select is((select status from public.responses where mux_upload_id = 'upL3'), 'live', 'live, with the upload it already had');
 select is((select count(*)::int from public.video_uploads where account_id = 'a1111111-1111-1111-1111-111111111111'), 36, 'publishing took no URL and no quota');
+
+-- ===========================================================================
+-- 12. Safety review: an upload claimed by a response, a video reply or a draft is never cancelled
+-- ===========================================================================
+delete from public.video_uploads where account_id = 'b2222222-2222-2222-2222-222222222222';
+insert into public.suggestions (id, author_id, text) values ('5a000000-0000-0000-0000-000000000002', 'b2222222-2222-2222-2222-222222222222', 'Best warung for breakfast?');
+-- Adam's three oldest uploads go to a response, a video reply and a draft; three newer ones stay unused.
+insert into public.video_uploads (account_id, upload_id, status, created_at, expires_at)
+select 'b2222222-2222-2222-2222-222222222222', u, 'active', now() - interval '30 minutes', now() + interval '30 minutes' from unnest(array['upKResp', 'upKReply', 'upKDraft']) u;
+set local role authenticated;
+select pg_temp.act('b2222222-2222-2222-2222-222222222222');
+select is((public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upKResp', null, 5000))->>'status', 'processing', 'Adam''s response claims his oldest upload');
+select is((public.post_reply('ad000000-0000-0000-0000-000000000001', 'upKReply', null, 5000))->>'kind', 'reply', 'his video reply the next');
+select is((public.post_draft('5a000000-0000-0000-0000-000000000002', 'upKDraft', null, 9000))->>'status', 'draft', 'his draft the next');
+reset role;
+insert into public.video_uploads (account_id, upload_id, status, created_at, expires_at)
+select 'b2222222-2222-2222-2222-222222222222', 'upKNew' || i, 'active', now() - interval '20 minutes' + i * interval '1 minute', now() + interval '40 minutes' from generate_series(1, 3) i;
+select is(public.begin_upload_cancellation('b2222222-2222-2222-2222-222222222222'), '{"status": "cancelling", "upload_id": "upKNew1"}'::jsonb, 'at the cap the oldest unused upload is picked, not the older claimed ones');
+select lives_ok($$ select public.finish_upload_cancellation(u, 'cancelled') from unnest(array['upKResp', 'upKReply', 'upKDraft']) u $$, 'a cancelled outcome recorded against claimed uploads');
+select is((select array_agg(status order by upload_id) from public.video_uploads where upload_id in ('upKResp', 'upKReply', 'upKDraft')), array['claimed', 'claimed', 'claimed'], 'leaves the response''s, the reply''s and the draft''s uploads claimed');
+select is((select count(*)::int from public.responses where mux_upload_id in ('upKResp', 'upKReply', 'upKDraft') and status in ('processing', 'draft')), 3, 'and their videos untouched');
+select lives_ok($$ select public.finish_upload_cancellation(u, 'active') from unnest(array['upKResp', 'upKReply', 'upKDraft']) u $$, 'nor does an active outcome change them');
+select is((select count(*)::int from public.video_uploads where upload_id in ('upKResp', 'upKReply', 'upKDraft') and status = 'claimed'), 3, 'still claimed');
+-- Until Mux confirms, the picked upload still holds its slot: no fourth URL.
+set local role authenticated;
+select pg_temp.act('b2222222-2222-2222-2222-222222222222');
+select is(split_part(pg_temp.err('select public.reserve_video_upload()'), ':', 1), 'upload_limit_active', 'a cancellation not yet confirmed frees no slot');
+reset role;
+select lives_ok($$ select public.finish_upload_cancellation('upKNew1', 'active') $$, 'Mux did not cancel it');
+set local role authenticated;
+select pg_temp.act('b2222222-2222-2222-2222-222222222222');
+select is(split_part(pg_temp.err('select public.reserve_video_upload()'), ':', 1), 'upload_limit_active', 'a failed cancellation frees no slot');
+reset role;
+select is(public.begin_upload_cancellation('b2222222-2222-2222-2222-222222222222'), '{"status": "cancelling", "upload_id": "upKNew1"}'::jsonb, 'picked again on the next attempt');
+select lives_ok($$ select public.finish_upload_cancellation('upKNew1', 'cancelled') $$, 'Mux confirmed');
+set local role authenticated;
+select pg_temp.act('b2222222-2222-2222-2222-222222222222');
+select is(pg_temp.err('select public.reserve_video_upload()'), 'ok', 'only now is the slot free');
+reset role;
 
 select * from finish();
 rollback;

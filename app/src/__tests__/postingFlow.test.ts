@@ -84,16 +84,19 @@ describe('prepareUpload', () => {
 });
 
 describe('uploadFailedDetail (the Upload failed banner, X-Upload-Failed)', () => {
+  test('the limit lines make no claim about the recording being saved', () => {
+    for (const r of ['upload_limit_hour', 'upload_limit_day', 'upload_limit_active']) expect(uploadFailedDetail(r)).not.toMatch(/saved/i);
+  });
   test('the hourly limit says so', () => {
-    expect(uploadFailedDetail('upload_limit_hour')).toBe("It's saved on this phone. You've reached the limit of 10 uploads an hour. Retry later.");
+    expect(uploadFailedDetail('upload_limit_hour')).toBe("You've reached the limit of 10 uploads per hour. Try again later.");
   });
   test('the daily limit says so', () => {
-    expect(uploadFailedDetail('upload_limit_day')).toBe("It's saved on this phone. You've reached the limit of 30 uploads a day. Retry later.");
+    expect(uploadFailedDetail('upload_limit_day')).toBe("You've reached the limit of 30 uploads in 24 hours. Try again later.");
   });
   test('no free upload slot says so', () => {
-    expect(uploadFailedDetail('upload_limit_active')).toBe("It's saved on this phone. Uploading isn't available right now. Retry later.");
+    expect(uploadFailedDetail('upload_limit_active')).toBe("Uploading isn't available right now. Try again later.");
   });
-  test.each([null, 'mint_failed', 'interrupted', 'offline', 'upload_http_500', 'processing_timeout'])('%s keeps the board line', (reason) => {
+  test.each([null, 'mint_failed', 'interrupted', 'offline', 'upload_http_500', 'processing_timeout'])('%s keeps the board line unchanged', (reason) => {
     expect(uploadFailedDetail(reason)).toBe("It's saved on this phone. Check your connection.");
   });
 });
