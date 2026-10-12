@@ -36,7 +36,7 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (14 migrations applied; the 14th, `20261011000100`, on 12 Oct, section 13) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: `send-push` and `web` and the `send-push` Vault secrets (deployed: `auth-signin-method` 10 Oct, section 10; `mux-webhook`, `mux-create-upload`, `mux-upload-status` 10 and 11 Oct, section 12, redeployed 12 Oct, section 13), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (15 migrations applied; the 14th, `20261011000100`, on 12 Oct, section 13; the 15th, `20261012000100`, on 12 Oct, section 14) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: `send-push` and `web` and the `send-push` Vault secrets (deployed: `auth-signin-method` 10 Oct, section 10; `mux-webhook`, `mux-create-upload`, `mux-upload-status` 10 and 11 Oct, section 12, redeployed 12 Oct, sections 13 and 14), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
 | Mux credentials for the hosted project | done 10 Oct; check passed 11 Oct on the founder iPhone (section 12); spike tokens not yet revoked | Token and webhook secret in the function env; uploads minted server-side only. Since 10 Oct the hosted project uses its own "Shortcut Beta" Mux environment and token (section 12); the spike pair is no longer on the hosted project but is still valid in Mux and still in the local `supabase/functions/.env`. | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. 9 Oct: domain `auth.churntech.com` verified in Resend and SMTP saved in the hosted dashboard by Nemat (sender `no-reply@auth.churntech.com`, name Shortcut); no email delivered or checked yet. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
@@ -715,13 +715,13 @@ account created.
   not deployed.) Same shape as F1 on other tables: `profiles` and `follows` are
   readable directly by any member (`true`), and `comments` wherever `deleted_at` is null.
 
-## 14. Security stage 2: upload ownership and limits (built 12 Oct, local only, not deployed)
+## 14. Security stage 2: upload ownership and limits (built 12 Oct; deployed 12 Oct, Nemat approved)
 
 Branch `claude/shortcut-stage-2-upload-ownership-a8bab3`, on top of the deployed stage 1 head
 (`a50b71a`). Architecture approved in principle by Nemat (12 Oct); the refinements from the same
-day (abandoned URLs, no silent Post, the scope of the limits) are below. Nothing hosted was
-touched: no deployment, no hosted database or secret change, no Mux upload created, no asset
-deleted. The only hosted contact was three read-only Mux `GET`s (below).
+day (abandoned URLs, no silent Post, the scope of the limits) are below. Deployed to the hosted
+project on 12 Oct from `d5780b6` (one migration, three functions; "Deployment, 12 Oct" below). No
+Mux upload was created and no asset deleted; the app was not rebuilt.
 
 - **Ledger.** Migration `20261012000100_video_uploads.sql` adds `video_uploads`: every Mux upload
   URL, the account it was minted for, and what became of it: `reserved` (slot taken before Mux is
@@ -953,7 +953,7 @@ afterwards).
   entry and place follow; 26 analytics events. Mux Shortcut Beta: 1 asset, 1 upload, 0 live
   streams.
 
-**Hosted migration plan (needs Nemat's approval; nothing done):**
+**Hosted migration plan (approved by Nemat and carried out 12 Oct; see "Deployment, 12 Oct"):**
 
 1. Preflight, read-only: done 12 Oct (above). Repeat its checks immediately before deploying:
    hosted fingerprint still equal to `hosted.fp` of that run, one pending migration, deployed Mux
@@ -976,7 +976,66 @@ afterwards).
 The app changes need a new build to reach a phone; the server is compatible with the installed
 founder build without them.
 
-**Deployment risks:**
+**Deployment, 12 Oct (UTC; approved by Nemat).** Followed the plan above from `d5780b6` (clean
+tree). Read-only checks used the same method as the preflight (SQL through the Management API in a
+`READ ONLY` transaction, rolled back; Mux `GET`s; function downloads into a scratch folder).
+
+- **Before (10:36 to 10:37):** project `shortcut` (`picvoavfxnajfjkqawju`, `ACTIVE_HEALTHY`); 14
+  migrations; schema fingerprint unchanged since the preflight (555 objects); deployed Mux function
+  source byte-identical to `a50b71a`; founder row md5 `c9918f8241a2c45eefb106b5d0ec0a8f`; nothing in
+  progress (0 `processing` or `draft` rows; Mux's only upload `asset_created`, its only asset
+  `ready`); 10 secrets; functions `auth-signin-method` v3, `mux-create-upload` v2,
+  `mux-upload-status` v2, `mux-webhook` v3. Dry run: exactly `20261012000100_video_uploads.sql`, no
+  seeds, no roles.
+- **Migration, 10:37:27 to 10:37:29:** `supabase db push --linked --yes` (from a scratch folder
+  linked to the project, holding exactly the branch's migrations); exit 0, "Finished supabase db
+  push". Then: 15 migrations, latest `20261012000100`; the hosted fingerprint (581 objects) equal to
+  the local stack's tested post-migration schema, so exactly the intended changes and nothing else;
+  `video_uploads` has one row, the founder's upload `ka5YEhFH6gsMlReKkWOrfWN2xPkSKxceKqvzAqZxIs00`,
+  `claimed`, owned by the response's author, linked to response
+  `5b321c24-1e1e-4393-9ae1-e6503903430d`, `claimed_at` 11 Oct 08:02:21 UTC; founder row md5
+  unchanged; RLS on, no policy, no `select` for `anon` or `authenticated`; members can execute only
+  `reserve_video_upload` among the new functions.
+- **`mark_response_live` compatibility, without calling it:** the new signature is `(p_upload_id
+  text, p_asset_id text, p_playback_id text, p_duration_ms integer, p_passthrough text DEFAULT
+  NULL)`, executable only by `postgres` and `service_role`; PostgREST's schema-reload triggers
+  (`pgrst_ddl_watch`, `pgrst_drop_watch`) are enabled; a `POST /rest/v1/rpc/mark_response_live` as
+  `anon` with the four named arguments the stage 1 functions send answered 42501 "permission
+  denied for function mark_response_live" (resolved to the new function, nothing executed), where
+  a nonexistent function answers 404 PGRST202. The same probe: `reserve_video_upload` and
+  `activate_video_upload` 42501 for `anon`; `GET /rest/v1/video_uploads` as `anon` 42501.
+- **Functions, each by name with `--no-verify-jwt`, never `--prune`:** `mux-create-upload`
+  10:40:40 to 10:40:47 (v2 to v3), `mux-upload-status` 10:41:44 to 10:41:50 (v2 to v3),
+  `mux-webhook` 10:42:13 to 10:42:21 (v3 to v4). After each: `ACTIVE`, `verify_jwt` false, the
+  downloaded source byte-identical to the branch's files for that function, then its checks:
+  - `mux-create-upload`: 401 `unauthorized` with no token, a garbage token, the anon key and a
+    forged ES256 token (well-formed, signed with a key generated for the test); `GET` 405. The
+    ledger still 1 row afterwards.
+  - `mux-upload-status` (for the founder's upload id): 401 with no token, garbage, the anon key and
+    the forged ES256 token; a malformed upload id without a session 401 (authentication first).
+  - `mux-webhook`: `GET` 405; unsigned, malformed, forged, 400 s stale and uppercase `v1`
+    signatures all 401 `bad_signature`. No correctly signed request was sent.
+- **After (10:42 to 10:44):** secrets the same 10 names and digests; `auth-signin-method` still v3
+  with the same bundle hash; table counts identical except `video_uploads` 0 to 1; schema still
+  equal to the tested post-migration schema; founder row md5 unchanged; Mux the same 1 upload and
+  1 asset (ids, status, duration, playback id); `web_video` (anon) serves the founder response
+  `live` with playback id `8UqSCXiojU36lJn802TM00UF6ehuCB5Q5NF8kZh502J6JU`; its HLS manifest HTTP 200.
+- **No errors** in any deployment or check command. No rollback was needed or performed.
+- **Logs not checked:** the CLI has no logs command and no CLI access token is stored in a file, so
+  the function, gateway and Postgres logs for 10:36 to 10:45 UTC were not read. Nemat to check
+  Dashboard, Logs (Edge Functions and Postgres) for that window: expected are only the 401 and 405
+  answers above, the 42501 probes, and the migration.
+- **Side effects of the method:** each CLI connection refreshed the CLI's temporary login role
+  (`cli_login_postgres`), as for every linked command; nothing else was written. An earlier probe
+  aimed by mistake at the development URL in `app/.env` (a LAN address) never connected.
+- **Not verified on hosted:** a signed-in member minting, posting and playing a video through the
+  new code (needs a device run and creates a Mux upload: Nemat's separate go-ahead); abandoned-URL
+  cancellation against real Mux; a genuine signed `video.asset.ready` through the new webhook; the
+  app changes (they need a new build; the installed founder build is compatible but keeps the
+  silent-Post cases listed under the risks).
+
+**Deployment risks** (as assessed before deployment; the window between migration and functions
+was 3 min 18 s and no upload was in progress):
 
 - **The window between steps 2 and 3:** a URL minted by the stage 1 function (for example on Post
   Review just before the push) is unknown to the ledger, so Post fails with `upload_not_found`. On
@@ -1001,9 +1060,9 @@ founder build without them.
   a retirement adds a Mux read and cancel (each with a 15 s timeout) before the mint, only at the
   3-URL cap.
 
-**Not verified:** anything on the hosted project; a real Mux upload or cancellation through the new
-code (by decision, none was made; Mux's cancel was stubbed from its documented behaviour); the app
-changes on a device or simulator (Jest only); an Android run. Still open after stage 2: deleted
+**Not verified:** on the hosted project, what "Deployment, 12 Oct" lists; a real Mux upload or
+cancellation through the new code (by decision, none was made; Mux's cancel was stubbed from its
+documented behaviour); the app changes on a device or simulator (Jest only); an Android run. Still open after stage 2: deleted
 videos stay playable at Mux; errored assets stay `processing`; direct reads of `profiles`,
 `follows` and `comments` (section 13).
 
