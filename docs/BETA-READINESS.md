@@ -1130,6 +1130,16 @@ function, `MUX_API_BASE` in `_shared/mux.ts`, the pre-warm change in `mux-webhoo
   keeps the asset; account deletion revokes, recovery restores; per-account purge with tombstones
   and failure isolation; assets queued before rows go; ready events for untaken or deleted uploads;
   a daily sweep that queues ledger-proven orphans and only reports the rest).
+- **However an account is deleted** (the scheduled purge; an Auth user deleted in the Supabase
+  Dashboard, through the Admin API or in SQL, which cascades to `accounts`; or the `accounts` row
+  deleted directly), a `BEFORE DELETE` trigger on `accounts` (`accounts_before_delete`) runs
+  `prepare_account_removal` first: the account's assets, unfinished uploads and still-open upload
+  URLs are queued with its id as owner (the jobs outlive its rows and its upload ledger); the
+  tombstones other people's replies need are kept; its moderation records are anonymised by the
+  approved policy (no free text, moderator, account, target or reporter); reports it made against
+  others stay open, without the reporter; reports about it close. The purge only deletes the Auth
+  user (jobs and closures marked `account_purged`); other deletions are marked `account_removed`.
+  A failure in the trigger stops the deletion, so nothing is half removed.
 - **Schedules:** `mux-cleanup` every minute (drain, only when something is due), `mux-sweep` 04:45
   UTC, `prune-moderation-records` 03:30, `prune-mux-cleanup-jobs` 03:40, `purge-deleted-accounts`
   03:15 (unchanged). All exist after the migration, and do nothing at Mux while the switch is off.
@@ -1148,18 +1158,28 @@ function, `MUX_API_BASE` in `_shared/mux.ts`, the pre-warm change in `mux-webhoo
 | Duplicate and out-of-order jobs | Same target merges into one job; three workers at once act once per asset; a late answer from an expired lease is ignored. |
 
 **Local checks** (isolated stack `shortcut-s3`, ports 556xx; the default `shortcut` stack untouched;
-fake Mux everywhere; 12 Oct, final code):
+fake Mux everywhere; 12 Oct, final code including the account-deletion safeguard):
 
-- pgTAP **951/951**: 0001 to 0009 unmodified (623), `0010_video_deletion.sql` **328**.
+- pgTAP **986/986**: 0001 to 0009 unmodified (623), `0010_video_deletion.sql` **363** (section 7b:
+  an Auth user deleted outside the purge, and an `accounts` row deleted directly: anonymised
+  actions with no free text, the pending review closed, a report the account made on someone
+  else's video still open, reports about it closed and anonymised, video and comment tombstones
+  with other members' replies kept, every asset and the still-open upload URL queued with the
+  owner's id, an expired URL not queued, the worker leasing with that id, and the scheduled purge
+  keeping `account_purged`).
 - Deno unit **21/21** (`mux_test.ts`, unmodified) and **8/8** (`cleanup_unit_test.ts`: the
   `MUX_API_BASE` allow-list, the switches, the change guard, dry runs, every answer of the
   last-moment check, ownership).
 - Integration: stage 1 **20/20** and stage 2 **32/32** (both unmodified); stage 3
-  `cleanup_integration_test.ts` **23/23** on three consecutive runs (in-process worker, real
+  `cleanup_integration_test.ts` **24/24** on three consecutive runs (in-process worker, real
   sessions, stateful fake Mux: the scenarios above, off, dry runs by either switch, retries, dead
-  letter, ownership, purge, sweep, founder-like video untouched).
+  letter, ownership, purge, sweep, founder-like video untouched; and a member deleted through the
+  Admin API, i.e. by Supabase Auth itself as the Dashboard does: anonymised, tombstoned, his report
+  on another member's video still open, his assets deleted at the fake Mux after the ownership
+  check, the removed one kept for its 30 days, his open upload URL cancelled, the other member's
+  videos untouched).
 - **Scheduler path, end to end** (`scripts/scheduler-integration.sh`,
-  `scheduler_integration_test.ts`) **12/12** on four runs: pg_cron → `run_mux_cleanup` → pg_net →
+  `scheduler_integration_test.ts`) **12/12** on six runs: pg_cron → `run_mux_cleanup` → pg_net →
   the real `mux-cleanup` in the local Edge runtime (through the gateway, as on hosted) → fake Mux
   over HTTP. Schedules present; missing secrets and switch off: no HTTP call; wrong key: 401,
   nothing done; unreachable worker: pg_net error, nothing changed, next run works; pg_cron firing on
@@ -1185,7 +1205,7 @@ fake Mux everywhere; 12 Oct, final code):
   stage 3 schema: `public` schema dump identical to stage 2's, the new cron jobs gone, 0001 to 0009
   pass 623/623. It refuses, changing nothing, once a tombstone or anonymised record exists (tested).
 
-**Hosted preflight (12 Oct, 14:47 to 14:55 UTC; read-only; nothing deployed or written).** SQL ran
+**First hosted preflight (12 Oct, 14:47 to 14:55 UTC; read-only; nothing deployed or written).** SQL ran
 through the Management API (`supabase db query --linked --project-ref`) inside `READ ONLY`
 transactions that were rolled back (`transaction_read_only` = `on` confirmed); Mux was read with
 `GET`s only, with the hosted "Shortcut Beta" token (no value printed; the spike environment not
@@ -1201,8 +1221,11 @@ link files were deleted afterwards; this worktree was never linked.
   and grants; columns; constraints; indexes; triggers including `auth.users` and
   `auth.identities`; cron jobs; extensions; schema and default privileges; the `authenticator`
   setting): hosted equal to the local stack built from the same 15 migrations (md5
-  `e7d34c921efad8726e47605abd4e64b4`). After the migration locally: 738 objects (md5
-  `b050f2f8413f8e3b5a048dcd467d87c2`): 626 unchanged, 27 changed (9 columns become nullable:
+  `e7d34c921efad8726e47605abd4e64b4`). After the migration (as it was then) locally: 738 objects
+  (md5 `b050f2f8413f8e3b5a048dcd467d87c2`): 630 unchanged (first reported as 626: the comparison
+  keyed objects by kind and name, which folded the six default-privilege lines, three object types
+  for each of `postgres` and `supabase_admin`, into two; the fingerprints hashed every line and were
+  right), 27 changed (9 columns become nullable:
   `responses.author_id`, `comments.author_id` and `body`, `moderation_actions.account_id`,
   `moderator` and `reason`, `reports.reporter_id` and `target_id`, `review_requests.account_id`; 4
   constraints: `comments_body_check` and three foreign keys to `on delete set null`; 14 function
@@ -1235,7 +1258,7 @@ link files were deleted afterwards; this worktree was never linked.
   30 days ago: none today, and none can be due within 30 days of deployment. Rehearsed on the local
   stack with the same data: running all five commands changed no row in any table and queued no
   HTTP request.
-- *Edge case found (not automatic).* Deleting an Auth user outside the purge (dashboard, admin API,
+- *Edge case found (not automatic; fixed since, see the account-deletion safeguard).* Deleting an Auth user outside the purge (dashboard, admin API,
   SQL) now sets moderation records' account, review requests' account and reports' reporter to null
   instead of cascading their deletion. The records keep their free-text reason and note
   (not anonymised); `prune_moderation_records` deletes such actions 90 days after they were
@@ -1244,9 +1267,38 @@ link files were deleted afterwards; this worktree was never linked.
 - *When the rollback becomes unavailable.* It refuses once any of these exist: a tombstone (a video
   or comment with no author), a moderation action with no account, moderator or reason, a review
   request with no account, a report with no reporter or target. They arise only from (1) the 03:15
-  purge removing an account (needs one deleted 30 or more days earlier), (2) an Auth user deleted
-  outside the purge who has moderation records or reports, or (3) manual SQL. Rolling back also
-  discards `mux_cleanup_jobs`; and once live, Mux deletions themselves cannot be undone.
+  purge removing an account (needs one deleted 30 or more days earlier), (2) an account deleted
+  outside the purge (Dashboard, Admin API, SQL) that has videos others replied to, comments others
+  replied to, moderation records or reports (since the safeguard these are anonymised, not
+  orphaned), or (3) manual SQL. Rolling back also discards `mux_cleanup_jobs`; and once live, Mux
+  deletions themselves cannot be undone.
+
+**Second hosted preflight, after the safeguard (12 Oct, 15:12 to 15:16 UTC; read-only, same method;
+nothing deployed or written).**
+
+- *Unchanged since the first:* hosted fingerprint 657 objects, `e7d34c921efad8726e47605abd4e64b4`,
+  equal to the tested stage 2 baseline; 15 migrations; 1 account (active, not deleted), 1 live
+  response, 0 comments, reports, moderation actions, review requests; ledger 1 `claimed`; outbox,
+  pg_net queue and Vault empty; cron `purge-deleted-accounts`, `send-push`, `tonight-prompt`, 0
+  failures in 24 h; functions `auth-signin-method` v3, `mux-create-upload` v3, `mux-upload-status`
+  v3, `mux-webhook` v4 (same bundle hashes); the same 10 secrets. Founder response
+  `md5(row_to_json)` `c9918f8241a2c45eefb106b5d0ec0a8f` (`md5(r::text)` `b34c6351…`), ledger
+  `md5(u::text)` `9726bb8fdf8d9eb0cb759d13ce59c8b6` (`md5(row_to_json)` `b3a49afe665431ac80aa1fac14aaddaa`).
+  Mux: the founder's asset alone (ready, one public playback id, passthrough the founder), its
+  upload, 0 live streams; HLS manifest 200.
+- *Pending:* `supabase db push --dry-run` from a clean copy of the committed branch (`e66e866`):
+  exactly `20261012000200_video_deletion_cleanup.sql`, byte-identical to the tested file; no seeds,
+  no roles.
+- *Expected after the push* (the local stack built from the same 15 migrations plus the revised
+  one): **741 objects, md5 `8d15eb8ec1900b44deaa7c5e6ff7be9e`**: 630 unchanged, 27 changed (9
+  columns made nullable, 4 constraints, 14 function bodies with grants unchanged), 84 added (3
+  tables, 21 functions, 30 columns, 17 constraints, 7 indexes, 2 triggers including
+  `accounts_before_delete`, 4 cron jobs), nothing removed; against the version reviewed in the
+  first preflight: + `accounts_before_delete()`, `prepare_account_removal(uuid, text)` and the
+  trigger, `purge_account` and the job-reason constraint changed. Cron afterwards:
+  `mux-cleanup`, `mux-sweep`, `prune-moderation-records`, `prune-mux-cleanup-jobs`,
+  `purge-deleted-accounts`, `send-push`, `tonight-prompt`. Rehearsed with the founder's rows: both
+  unchanged, switch `off`, 0 jobs, video live, and all five scheduled commands changed nothing.
 
 **Staged deployment plan** (each stage needs Nemat's separate go-ahead; none is approved):
 
@@ -1254,10 +1306,17 @@ link files were deleted afterwards; this worktree was never linked.
    exactly `20261012000200`; deployed `mux-webhook` and `mux-upload-status` byte-identical to
    `5fabfaf`; founder row md5; Mux asset and upload counts (`GET` only); 0 `deleted`, `removed` or
    `draft` rows and 0 deleted accounts (so the backfill queues nothing).
-1. *Database only (safe).* Push the migration. The switch is `off`, no secrets exist, no function
-   is deployed: nothing can reach Mux. Deletions hide videos in the app and web as today, and jobs
-   accumulate. Check: founder row unchanged and playing, `mux_cleanup_overview()` (mode off),
-   `cron.job` lists the new jobs. Rollback: the rollback file as a forward migration.
+1. *Database only (safe).* From a fresh scratch folder holding exactly the branch's migrations,
+   `config.toml` and templates: `supabase db push --linked --project-ref picvoavfxnajfjkqawju
+   --workdir <scratch> --dry-run` (exactly the one file), then the same with `--yes`. No seed, no
+   roles, no function, no secret, no Vault change. The switch is `off`, no secrets exist, no
+   worker is deployed: nothing can reach Mux. Deletions hide videos in the app and web as today,
+   and jobs accumulate. Checks: fingerprint 741 / `8d15eb8e…`; switch `off` (`changed_by`
+   `migration`); 0 jobs and 0 purge failures; the 7 cron jobs; founder hashes as above and playing;
+   Mux inventory unchanged; after a few minutes `mux-cleanup` runs succeed with no `pg_net`
+   request. Stop at once if any of these differs, the push errors, or an account becomes deleted
+   before the rollback window is decided. Rollback: the rollback file as a forward migration, while
+   no tombstone or anonymised record exists (no function to redeploy at this stage).
 2. *Worker configuration, still inert.* Deploy `mux-cleanup` (`--no-verify-jwt`) with
    `MUX_CLEANUP_KEY` and **`MUX_CLEANUP_MODE` unset (dry run)**; create the two Vault secrets
    (README). Redeploy `mux-webhook` and `mux-upload-status`. Checks: 401 without the key and with
