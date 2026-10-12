@@ -10,12 +10,23 @@
 --             it stays reserved if the Mux call's outcome is unknown, and keeps counting
 --   active    Mux created the upload and the URL was handed to its owner
 --   claimed   a response, video reply or draft took it (once; never reusable)
+--   cancelling an abandoned upload is being cancelled at Mux: no longer claimable, still holds
+--             its slot until Mux confirms
+--   cancelled Mux confirmed the cancellation (or that the upload had timed out): slot freed
 --   failed    Mux refused the request, so no upload exists; it does not count
 -- Expiry is a time, not a status: an active upload past expires_at can no longer be claimed.
 --
--- Limits per account (Nemat, 12 Oct): 10 uploads in any rolling hour, 30 in any rolling 24 hours,
--- at most 3 unused active URLs. Every reserved, active and claimed row counts towards the hour
--- and the day, whether or not it was ever used.
+-- Limits per account (Nemat, 12 Oct): 10 newly minted upload URLs in any rolling hour, 30 in any
+-- rolling 24 hours, at most 3 unused active URLs. They are anti-abuse limits on minting, for
+-- responses, video replies and drafts alike, not limits on how many videos or replies a person
+-- has; publishing an existing draft mints nothing and costs nothing. Every reserved, active,
+-- claimed, cancelling and cancelled row counts towards the hour and the day, used or not.
+--
+-- Abandoned uploads: Post Review mints a URL as it opens, so re-recording leaves the previous URL
+-- unused. When a member is at 3 unused URLs, mux-create-upload retires the oldest abandoned one
+-- (begin_upload_cancellation, then Mux, then finish_upload_cancellation) and only then mints. The
+-- app always claims an upload before it sends any bytes, so an unclaimed upload has no transfer
+-- from the app; Mux is asked first and the upload is cancelled only while it is still waiting.
 --
 -- Only mux-create-upload writes the ledger: the member's own session reserves a slot
 -- (reserve_video_upload), and the service role records Mux's answer (activate_video_upload,
@@ -25,7 +36,7 @@ create table public.video_uploads (
   id uuid primary key default gen_random_uuid(),
   account_id uuid not null references public.accounts (id) on delete cascade,
   upload_id text unique check (upload_id is null or char_length(upload_id) between 1 and 128),
-  status text not null default 'reserved' check (status in ('reserved', 'active', 'claimed', 'failed')),
+  status text not null default 'reserved' check (status in ('reserved', 'active', 'claimed', 'cancelling', 'cancelled', 'failed')),
   created_at timestamptz not null default now(),
   -- How long a reservation waits for Mux's answer; mux-create-upload gives Mux 15 s.
   reserved_until timestamptz not null default now() + interval '60 seconds',
@@ -33,8 +44,9 @@ create table public.video_uploads (
   expires_at timestamptz not null default now() + interval '3600 seconds',
   activated_at timestamptz,
   claimed_at timestamptz,
+  cancelled_at timestamptz,
   response_id uuid references public.responses (id) on delete set null,
-  constraint video_uploads_id_when_issued check ((status in ('active', 'claimed')) = (upload_id is not null))
+  constraint video_uploads_id_when_issued check ((status in ('active', 'claimed', 'cancelling', 'cancelled')) = (upload_id is not null))
 );
 comment on table public.video_uploads is 'Ledger of Mux upload URLs: who each was minted for, whether it was used, and the per-account limits (security stage 2).';
 create index video_uploads_account_created_idx on public.video_uploads (account_id, created_at desc);
@@ -53,6 +65,13 @@ select author_id, mux_upload_id, 'claimed', created_at, created_at, created_at +
 -- ---------------------------------------------------------------------------
 -- Minting (mux-create-upload)
 -- ---------------------------------------------------------------------------
+
+-- Whether a row takes one of the 3 unused-URL slots: an unexpired URL that is unused or still
+-- being cancelled, or a reservation still waiting for Mux.
+create or replace function public.video_upload_holds_slot(u public.video_uploads)
+returns boolean language sql stable set search_path = '' as $$
+  select (u.status in ('active', 'cancelling') and u.expires_at > now()) or (u.status = 'reserved' and u.reserved_until > now());
+$$;
 
 -- Takes one upload slot for the caller, or refuses. Called with the member's own session, so
 -- auth.uid() is the member and the pre_request gate applies. Limit errors carry the seconds until
@@ -76,7 +95,7 @@ begin
 
   select count(*)::int,
          (count(*) filter (where created_at > now() - interval '1 hour'))::int,
-         (count(*) filter (where (status = 'active' and expires_at > now()) or (status = 'reserved' and reserved_until > now())))::int
+         (count(*) filter (where public.video_upload_holds_slot(video_uploads)))::int
     into v_day, v_hour, v_active
     from public.video_uploads
    where account_id = v_uid and status <> 'failed' and created_at > now() - interval '24 hours';
@@ -94,8 +113,8 @@ begin
     raise exception 'upload_limit_hour' using errcode = 'P0001', detail = ceil(greatest(extract(epoch from v_wait - now()), 1))::text;
   end if;
   if v_active >= 3 then
-    select min(case when status = 'active' then expires_at else reserved_until end) into v_wait from public.video_uploads
-     where account_id = v_uid and ((status = 'active' and expires_at > now()) or (status = 'reserved' and reserved_until > now()));
+    select min(case when x.status = 'reserved' then x.reserved_until else x.expires_at end) into v_wait from public.video_uploads x
+     where x.account_id = v_uid and public.video_upload_holds_slot(x);
     raise exception 'upload_limit_active' using errcode = 'P0001', detail = ceil(greatest(extract(epoch from v_wait - now()), 1))::text;
   end if;
 
@@ -131,14 +150,63 @@ begin
 end;
 $$;
 
+-- Service role, when a member is refused for having 3 unused URLs: takes the member's oldest
+-- abandoned upload out of use and returns its id for mux-create-upload to cancel at Mux.
+-- Abandoned: unclaimed, unexpired and minted more than 15 s ago, so never a URL just handed to a
+-- screen that has only opened, nor to a simultaneous request. Out of use: status cancelling, so it
+-- can no longer be claimed; it still holds its slot until finish_upload_cancellation. Takes the
+-- same account lock as reserve_video_upload, so the database steps of minting and cancelling for
+-- one member never interleave; a row being claimed at that moment is skipped.
+-- Answers {"status": "free"} if a slot has meanwhile freed up, {"status": "none"} if nothing can
+-- be cancelled (every slot is a reservation, a recent URL or already being cancelled).
+create or replace function public.begin_upload_cancellation(p_account uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_held integer;
+  v_upload text;
+begin
+  perform 1 from public.accounts where id = p_account for no key update;
+  select count(*)::int into v_held from public.video_uploads u where account_id = p_account and public.video_upload_holds_slot(u);
+  if v_held < 3 then return jsonb_build_object('status', 'free'); end if;
+  update public.video_uploads
+     set status = 'cancelling'
+   where id = (select id from public.video_uploads
+                where account_id = p_account and status = 'active' and expires_at > now()
+                  and created_at < now() - interval '15 seconds'
+                order by created_at limit 1 for update skip locked)
+     and status = 'active'
+  returning upload_id into v_upload;
+  if v_upload is null then return jsonb_build_object('status', 'none'); end if;
+  return jsonb_build_object('status', 'cancelling', 'upload_id', v_upload);
+end;
+$$;
+
+-- Service role: the outcome at Mux. 'cancelled' (Mux confirmed it, or reported it timed out)
+-- frees the slot; 'active' (Mux had not cancelled it, for example it was no longer waiting) puts
+-- it back as it was. When the outcome is unknown nothing is called: the row stays cancelling,
+-- unclaimable and holding its slot until it expires.
+create or replace function public.finish_upload_cancellation(p_upload_id text, p_outcome text)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if p_outcome = 'cancelled' then
+    update public.video_uploads set status = 'cancelled', cancelled_at = now() where upload_id = p_upload_id and status = 'cancelling';
+  elsif p_outcome = 'active' then
+    update public.video_uploads set status = 'active' where upload_id = p_upload_id and status = 'cancelling';
+  else
+    raise exception 'invalid_outcome' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Claiming (posting)
 -- ---------------------------------------------------------------------------
 
 -- Atomically takes an active, unexpired upload minted for p_account. A second claim of the same
--- upload waits for the first transaction's row lock, then finds it claimed. Unknown ids and other
--- people's ids give the same error, so nothing reveals whether someone else's upload exists.
--- Internal: executable by no API role; called only by the posting functions below.
+-- upload waits for the first transaction's row lock, then finds it claimed; a claim racing a
+-- cancellation finds it cancelling (upload_cancelled), and the app mints a fresh one. Unknown ids
+-- and other people's ids give the same error, so nothing reveals whether someone else's upload
+-- exists. Internal: executable by no API role; called only by the posting functions below.
 create or replace function public.claim_video_upload(p_account uuid, p_upload_id text)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
@@ -154,6 +222,7 @@ begin
   select * into u from public.video_uploads where upload_id = p_upload_id;
   if not found or u.account_id <> p_account then raise exception 'upload_not_found' using errcode = 'P0001'; end if;
   if u.status = 'claimed' then raise exception 'upload_already_used' using errcode = 'P0001'; end if;
+  if u.status in ('cancelling', 'cancelled') then raise exception 'upload_cancelled' using errcode = 'P0001'; end if;
   raise exception 'upload_expired' using errcode = 'P0001';
 end;
 $$;
@@ -322,9 +391,14 @@ $$;
 revoke execute on function public.reserve_video_upload() from public, anon, authenticated;
 revoke execute on function public.activate_video_upload(uuid, text) from public, anon, authenticated;
 revoke execute on function public.fail_video_upload(uuid) from public, anon, authenticated;
+revoke execute on function public.begin_upload_cancellation(uuid) from public, anon, authenticated;
+revoke execute on function public.finish_upload_cancellation(text, text) from public, anon, authenticated;
+revoke execute on function public.video_upload_holds_slot(public.video_uploads) from public, anon, authenticated;
 revoke execute on function public.claim_video_upload(uuid, text) from public, anon, authenticated, service_role;
 revoke execute on function public.mark_response_live(text, text, text, integer, text) from public, anon, authenticated;
 grant execute on function public.reserve_video_upload() to authenticated;
 grant execute on function public.activate_video_upload(uuid, text) to service_role;
 grant execute on function public.fail_video_upload(uuid) to service_role;
+grant execute on function public.begin_upload_cancellation(uuid) to service_role;
+grant execute on function public.finish_upload_cancellation(text, text) to service_role;
 grant execute on function public.mark_response_live(text, text, text, integer, text) to service_role;

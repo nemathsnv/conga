@@ -3,7 +3,7 @@
 -- URLs); posting claims an upload once, and only the member it was minted for. Real concurrency
 -- (separate transactions) is covered by supabase/functions/_tests/uploads_integration_test.ts.
 begin;
-select plan(129);
+select plan(172);
 
 delete from public.responses;
 delete from public.prompts;
@@ -91,9 +91,14 @@ select is(has_function_privilege('anon', 'public.claim_video_upload(uuid, text)'
 select is(has_function_privilege('service_role', 'public.claim_video_upload(uuid, text)', 'execute'), false, 'nor by the service role (internal to the posting functions)');
 select is(has_function_privilege('authenticated', 'public.mark_response_live(text, text, text, integer, text)', 'execute'), false, 'members cannot mark videos live');
 select is(has_function_privilege('service_role', 'public.mark_response_live(text, text, text, integer, text)', 'execute'), true, 'the service role marks videos live');
+select is(has_function_privilege('authenticated', 'public.begin_upload_cancellation(uuid)', 'execute'), false, 'members cannot start a cancellation');
+select is(has_function_privilege('authenticated', 'public.finish_upload_cancellation(text, text)', 'execute'), false, 'nor record one');
+select is(has_function_privilege('anon', 'public.begin_upload_cancellation(uuid)', 'execute'), false, 'nor can anon');
+select is(has_function_privilege('service_role', 'public.begin_upload_cancellation(uuid)', 'execute') and has_function_privilege('service_role', 'public.finish_upload_cancellation(text, text)', 'execute'), true, 'the service role cancels abandoned uploads');
+select is(has_function_privilege('authenticated', 'public.video_upload_holds_slot(public.video_uploads)', 'execute'), false, 'the slot helper is internal');
 select is(to_regprocedure('public.mark_response_live(text, text, text, integer)'), null, 'the old four-argument signature is gone (no ambiguous overload)');
 select is((select count(*)::int from pg_proc where pronamespace = 'public'::regnamespace
-            and proname in ('reserve_video_upload', 'activate_video_upload', 'fail_video_upload', 'claim_video_upload', 'mark_response_live')
+            and proname in ('reserve_video_upload', 'activate_video_upload', 'fail_video_upload', 'claim_video_upload', 'mark_response_live', 'begin_upload_cancellation', 'finish_upload_cancellation')
             and (not prosecdef or proowner <> 'postgres'::regrole or not coalesce(proconfig @> array['search_path=""'], false))), 0,
           'the ledger functions are SECURITY DEFINER, owned by postgres, with an empty search_path');
 -- Guard for the future: any function that puts an upload id on a video must claim it.
@@ -344,6 +349,94 @@ select is((select count(*)::int from public.video_uploads where status = 'active
 select throws_ok($$ insert into public.video_uploads (account_id, status) values ('a1111111-1111-1111-1111-111111111111', 'active') $$, '23514', null, 'an active row needs an upload id');
 select throws_ok($$ insert into public.video_uploads (account_id, upload_id, status) values ('a1111111-1111-1111-1111-111111111111', 'upX', 'reserved') $$, '23514', null, 'a reserved row has none');
 select throws_ok($$ insert into public.video_uploads (account_id, upload_id, status) values ('a1111111-1111-1111-1111-111111111111', 'upX', 'expired') $$, '23514', null, 'expiry is a time, not a status');
+
+-- ===========================================================================
+-- 10. Abandoned uploads: retired only when unclaimed, one at a time, slot freed only on confirmation
+-- ===========================================================================
+delete from public.video_uploads where account_id in ('a1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222');
+-- Lena re-recorded twice: three unused URLs, oldest first. Adam has three of his own.
+insert into public.video_uploads (account_id, upload_id, status, created_at, expires_at) values
+  ('a1111111-1111-1111-1111-111111111111', 'upRe1', 'active', now() - interval '3 minutes', now() + interval '57 minutes'),
+  ('a1111111-1111-1111-1111-111111111111', 'upRe2', 'active', now() - interval '2 minutes', now() + interval '58 minutes'),
+  ('a1111111-1111-1111-1111-111111111111', 'upRe3', 'active', now() - interval '1 minute', now() + interval '59 minutes'),
+  ('b2222222-2222-2222-2222-222222222222', 'upAd1', 'active', now() - interval '10 minutes', now() + interval '50 minutes'),
+  ('b2222222-2222-2222-2222-222222222222', 'upAd2', 'active', now() - interval '10 minutes', now() + interval '50 minutes'),
+  ('b2222222-2222-2222-2222-222222222222', 'upAd3', 'active', now() - interval '10 minutes', now() + interval '50 minutes');
+set local role authenticated;
+select pg_temp.act('a1111111-1111-1111-1111-111111111111');
+select is(pg_temp.err('select public.reserve_video_upload()'), 'upload_limit_active:3420', 'a fourth re-record is refused while three URLs are unused');
+reset role;
+select is(public.begin_upload_cancellation('a1111111-1111-1111-1111-111111111111'), '{"status": "cancelling", "upload_id": "upRe1"}'::jsonb, 'the oldest unclaimed upload is taken out of use for cancelling');
+select is((pg_temp.upload('upRe1')).status, 'cancelling', 'it is marked cancelling');
+select is((pg_temp.upload('upAd1')).status, 'active', 'another member''s uploads are never touched');
+set local role authenticated;
+select pg_temp.act('a1111111-1111-1111-1111-111111111111');
+select is(pg_temp.err('select public.reserve_video_upload()'), 'upload_limit_active:3420', 'it keeps its slot until Mux confirms');
+select is(pg_temp.err($$ select public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upRe1', null, 5000) $$), 'upload_cancelled', 'and it can no longer be posted');
+reset role;
+select is(public.begin_upload_cancellation('a1111111-1111-1111-1111-111111111111'), '{"status": "cancelling", "upload_id": "upRe2"}'::jsonb, 'a concurrent request takes the next one, never the same');
+select lives_ok($$ select public.finish_upload_cancellation('upRe2', 'active') $$, 'Mux had not cancelled it');
+select is((pg_temp.upload('upRe2')).status, 'active', 'so it is back as it was');
+select lives_ok($$ select public.finish_upload_cancellation('upRe1', 'cancelled') $$, 'Mux confirmed the cancellation');
+select is((pg_temp.upload('upRe1')).status, 'cancelled', 'the upload is cancelled');
+select isnt((pg_temp.upload('upRe1')).cancelled_at, null, 'with the time');
+select lives_ok($$ select public.finish_upload_cancellation('upRe1', 'active') $$, 'a late or repeated outcome');
+select is((pg_temp.upload('upRe1')).status, 'cancelled', 'changes nothing');
+select is(pg_temp.err($$ select public.finish_upload_cancellation('upRe2', 'maybe') $$), 'invalid_outcome', 'only cancelled or active are outcomes');
+select lives_ok($$ select public.finish_upload_cancellation('upRe3', 'cancelled') $$, 'cancelled is recorded only for an upload being cancelled');
+select is((pg_temp.upload('upRe3')).status, 'active', 'an active upload is not cancelled by it');
+set local role authenticated;
+select pg_temp.act('a1111111-1111-1111-1111-111111111111');
+select is(pg_temp.err($$ select public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upRe1', null, 5000) $$), 'upload_cancelled', 'a cancelled upload can never be posted');
+insert into res values (10, (public.reserve_video_upload()->>'reservation_id')::uuid);
+select is((select count(*)::int from res where n = 10 and id is not null), 1, 'the freed slot can be used');
+select is(pg_temp.err('select public.reserve_video_upload()'), 'upload_limit_active:60', 'and the cap holds at three');
+reset role;
+select is((select count(*)::int from public.video_uploads where account_id = 'a1111111-1111-1111-1111-111111111111' and status <> 'failed' and created_at > now() - interval '1 hour'), 4, 'the cancelled one still counts towards the hour and the day');
+select is(public.begin_upload_cancellation('a1111111-1111-1111-1111-111111111111'), '{"status": "cancelling", "upload_id": "upRe2"}'::jsonb, 'the oldest unclaimed one again');
+select lives_ok($$ select public.finish_upload_cancellation('upRe2', 'active') $$, 'put back');
+
+-- Claimed, expired and reserved rows are never cancelled.
+set local role authenticated;
+select pg_temp.act('a1111111-1111-1111-1111-111111111111');
+select is((public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upRe2', null, 5000))->>'status', 'processing', 'Lena posts one of them');
+reset role;
+update public.video_uploads set expires_at = now() - interval '1 second' where upload_id = 'upRe3';
+insert into public.video_uploads (account_id, status) select 'a1111111-1111-1111-1111-111111111111', 'reserved' from generate_series(1, 2);
+select is(public.begin_upload_cancellation('a1111111-1111-1111-1111-111111111111'), '{"status": "none"}'::jsonb, 'with only reservations holding slots, nothing is cancelled');
+select is((pg_temp.upload('upRe2')).status, 'claimed', 'a claimed upload is never cancelled');
+select is((pg_temp.upload('upRe3')).status, 'active', 'nor an expired one (it no longer holds a slot)');
+update public.video_uploads set status = 'failed' where account_id = 'a1111111-1111-1111-1111-111111111111' and status = 'reserved';
+select is(public.begin_upload_cancellation('a1111111-1111-1111-1111-111111111111'), '{"status": "free"}'::jsonb, 'below the cap nothing is cancelled');
+select is((select count(*)::int from public.video_uploads where status = 'cancelling'), 0, 'and nothing is left cancelling');
+-- A row stuck cancelling (Mux's answer never came) holds its slot until it expires.
+update public.video_uploads set status = 'cancelling' where upload_id = 'upAd1';
+select is((select count(*)::int from public.video_uploads u where account_id = 'b2222222-2222-2222-2222-222222222222' and public.video_upload_holds_slot(u)), 3, 'an unconfirmed cancellation keeps its slot');
+update public.video_uploads set expires_at = now() - interval '1 second' where upload_id = 'upAd1';
+select is((select count(*)::int from public.video_uploads u where account_id = 'b2222222-2222-2222-2222-222222222222' and public.video_upload_holds_slot(u)), 2, 'until its hour is up');
+
+-- A URL minted in the last 15 seconds is not abandoned: it may belong to a screen that has just opened.
+delete from public.video_uploads where account_id = 'b2222222-2222-2222-2222-222222222222';
+insert into public.video_uploads (account_id, upload_id, status) select 'b2222222-2222-2222-2222-222222222222', 'upNew' || i, 'active' from generate_series(1, 3) i;
+select is(public.begin_upload_cancellation('b2222222-2222-2222-2222-222222222222'), '{"status": "none"}'::jsonb, 'three URLs minted moments ago: none is cancelled');
+update public.video_uploads set created_at = now() - interval '16 seconds' where upload_id = 'upNew2';
+select is(public.begin_upload_cancellation('b2222222-2222-2222-2222-222222222222'), '{"status": "cancelling", "upload_id": "upNew2"}'::jsonb, 'once one is older than 15 seconds it can be');
+
+-- ===========================================================================
+-- 11. Publishing an existing draft mints nothing and costs no quota
+-- ===========================================================================
+insert into public.prompts (id, text, status, published_at) values ('55555555-aaaa-aaaa-aaaa-555555555555', 'What''s one thing you miss from home?', 'live', now());
+update public.suggestions set status = 'live', prompt_id = '55555555-aaaa-aaaa-aaaa-555555555555' where id = '5a000000-0000-0000-0000-000000000001';
+insert into public.video_uploads (account_id, upload_id, status, created_at)
+select 'a1111111-1111-1111-1111-111111111111', 'upFull' || i, 'claimed', now() - interval '5 minutes' from generate_series(1, 30) i;
+select is((select count(*)::int from public.video_uploads where account_id = 'a1111111-1111-1111-1111-111111111111'), 36, 'Lena is past both limits');
+set local role authenticated;
+select pg_temp.act('a1111111-1111-1111-1111-111111111111');
+select is(pg_temp.err('select public.reserve_video_upload()'), 'upload_limit_day:86100', 'no new URL for her today');
+select is((public.publish_draft('5a000000-0000-0000-0000-000000000001'))->>'id', (select id::text from public.responses where mux_upload_id = 'upL3'), 'but her existing draft publishes');
+reset role;
+select is((select status from public.responses where mux_upload_id = 'upL3'), 'live', 'live, with the upload it already had');
+select is((select count(*)::int from public.video_uploads where account_id = 'a1111111-1111-1111-1111-111111111111'), 36, 'publishing took no URL and no quota');
 
 select * from finish();
 rollback;

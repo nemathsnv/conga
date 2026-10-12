@@ -152,3 +152,6 @@ drop function public.claim_video_upload(uuid, text);
 drop function public.reserve_video_upload();
 drop function public.activate_video_upload(uuid, text);
 drop function public.fail_video_upload(uuid);
+drop function public.begin_upload_cancellation(uuid);
+drop function public.finish_upload_cancellation(text, text);
+drop function public.video_upload_holds_slot(public.video_uploads);
