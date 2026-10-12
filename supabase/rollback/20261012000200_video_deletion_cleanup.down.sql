@@ -4,7 +4,9 @@
 -- Copy it to a new forward migration (supabase/migrations/<timestamp>_video_deletion_rollback.sql),
 -- push that, then redeploy mux-webhook and mux-upload-status from 5fabfaf and delete the
 -- mux-cleanup function (supabase functions delete mux-cleanup). The Vault secrets mux_cleanup_url
--- and mux_cleanup_key, and the MUX_CLEANUP_KEY function secret, can then be removed.
+-- and mux_cleanup_key, and the MUX_CLEANUP_KEY and MUX_CLEANUP_MODE function secrets, can then be
+-- removed. (Before rolling back, the worker can be stopped at once without any of this:
+-- select public.mux_cleanup_set_mode('off', '<who>').)
 --
 -- It restores the stage 2 definitions of every function stage 3 replaced (bodies copied verbatim
 -- from the migrations named above each), the NOT NULL columns and cascading foreign keys, and
@@ -23,7 +25,7 @@ do $$
 begin
   if exists (select 1 from public.responses where author_id is null)
      or exists (select 1 from public.comments where author_id is null or body is null)
-     or exists (select 1 from public.moderation_actions where account_id is null)
+     or exists (select 1 from public.moderation_actions where account_id is null or moderator is null or reason is null)
      or exists (select 1 from public.review_requests where account_id is null)
      or exists (select 1 from public.reports where reporter_id is null or target_id is null) then
     raise exception 'stage 3 rollback refused: tombstones or anonymised moderation records exist';
@@ -34,6 +36,7 @@ $$;
 select cron.unschedule('mux-cleanup');
 select cron.unschedule('mux-sweep');
 select cron.unschedule('prune-moderation-records');
+select cron.unschedule('prune-mux-cleanup-jobs');
 
 -- video_visible: as in 20261008000100_safety.sql
 create or replace function public.video_visible(r public.responses, p_viewer uuid)
@@ -242,6 +245,17 @@ begin
 end;
 $$;
 
+-- mod_review_queue: as in 20261008000100_safety.sql
+create or replace function public.mod_review_queue(p_limit integer default 100)
+returns jsonb language sql security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'action_id', rr.action_id, 'account', public.profile_card(rr.account_id), 'requested_at', rr.created_at,
+    'action', (select jsonb_build_object('kind', m.kind, 'target_kind', m.target_kind, 'target_id', m.target_id, 'reason', m.reason, 'note', m.note, 'moderator', m.moderator, 'created_at', m.created_at, 'restrict_until', m.restrict_until)
+                 from public.moderation_actions m where m.id = rr.action_id)
+  ) order by rr.created_at), '[]'::jsonb)
+  from (select * from public.review_requests where outcome is null order by created_at limit greatest(1, least(p_limit, 500))) rr;
+$$;
+
 -- mark_response_live: as in 20261012000100_video_uploads.sql
 create or replace function public.mark_response_live(p_upload_id text, p_asset_id text, p_playback_id text, p_duration_ms integer, p_passthrough text default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -282,7 +296,11 @@ $$;
 
 drop function public.mux_cleanup_claim(integer, integer);
 drop function public.mux_cleanup_finish(uuid, uuid, text, jsonb);
-drop function public.mux_cleanup_sweep(jsonb, integer);
+drop function public.mux_cleanup_sweep(jsonb, integer, boolean);
+drop function public.mux_cleanup_check(uuid, uuid);
+drop function public.mux_cleanup_set_mode(text, text);
+drop function public.prune_mux_cleanup_jobs();
+drop function public.mux_video_restorable(public.responses);
 drop function public.mux_cleanup_overview();
 drop function public.mux_cleanup_retry(uuid);
 drop function public.run_mux_cleanup(text);
@@ -294,6 +312,8 @@ drop function public.mux_asset_hold(text, text);
 drop function public.moderation_case_closed_at(uuid);
 drop function public.mux_forget_video(uuid, text, text, uuid, text);
 drop function public.mux_cleanup_enqueue(text, text, text, text, uuid, uuid, timestamptz);
+drop function public.mux_cleanup_mode();
+drop table public.mux_cleanup_settings;
 drop table public.mux_cleanup_jobs;
 drop table public.account_purge_failures;
 
@@ -308,6 +328,9 @@ alter table public.comments alter column author_id set not null;
 alter table public.moderation_actions drop constraint moderation_actions_account_id_fkey;
 alter table public.moderation_actions add constraint moderation_actions_account_id_fkey foreign key (account_id) references public.accounts (id) on delete cascade;
 alter table public.moderation_actions alter column account_id set not null;
+alter table public.moderation_actions drop constraint moderation_actions_named_unless_anonymized;
+alter table public.moderation_actions alter column moderator set not null;
+alter table public.moderation_actions alter column reason set not null;
 alter table public.moderation_actions drop column anonymized_at;
 alter table public.review_requests drop constraint review_requests_account_id_fkey;
 alter table public.review_requests add constraint review_requests_account_id_fkey foreign key (account_id) references public.accounts (id) on delete cascade;
