@@ -1067,7 +1067,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built and finalised 12 Oct; local only, not deployed)
+## 15. Security stage 3: video deletion and the account purge (built and finalised 12 Oct; hosted preflight 12 Oct, read-only; not deployed)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -1184,6 +1184,69 @@ fake Mux everywhere; 12 Oct, final code):
 - **Rollback rehearsal:** `supabase/rollback/20261012000200_video_deletion_cleanup.down.sql` on the
   stage 3 schema: `public` schema dump identical to stage 2's, the new cron jobs gone, 0001 to 0009
   pass 623/623. It refuses, changing nothing, once a tombstone or anonymised record exists (tested).
+
+**Hosted preflight (12 Oct, 14:47 to 14:55 UTC; read-only; nothing deployed or written).** SQL ran
+through the Management API (`supabase db query --linked --project-ref`) inside `READ ONLY`
+transactions that were rolled back (`transaction_read_only` = `on` confirmed); Mux was read with
+`GET`s only, with the hosted "Shortcut Beta" token (no value printed; the spike environment not
+used); function sources downloaded into a scratch folder. Side effect, as for every linked CLI
+command: the CLI's temporary login role (`cli_login_postgres`) was refreshed. The scratch folders'
+link files were deleted afterwards; this worktree was never linked.
+
+- *Scope.* Branch clean, `5fabfaf` an ancestor (9 stage 3 commits). `supabase db push --dry-run`
+  from a clean copy of the branch's migrations: exactly `20261012000200_video_deletion_cleanup.sql`,
+  no seeds, no roles. Hosted has the 15 migrations to `20261012000100`.
+- *Schema.* A fingerprint of 657 objects (every `public` function with definition, owner,
+  `SECURITY DEFINER`, `search_path` and grants; policies on `public` and `storage`; tables with RLS
+  and grants; columns; constraints; indexes; triggers including `auth.users` and
+  `auth.identities`; cron jobs; extensions; schema and default privileges; the `authenticator`
+  setting): hosted equal to the local stack built from the same 15 migrations (md5
+  `e7d34c921efad8726e47605abd4e64b4`). After the migration locally: 738 objects (md5
+  `b050f2f8413f8e3b5a048dcd467d87c2`): 626 unchanged, 27 changed (9 columns become nullable:
+  `responses.author_id`, `comments.author_id` and `body`, `moderation_actions.account_id`,
+  `moderator` and `reason`, `reports.reporter_id` and `target_id`, `review_requests.account_id`; 4
+  constraints: `comments_body_check` and three foreign keys to `on delete set null`; 14 function
+  bodies, each with owner, definer, `search_path` and grants unchanged), 81 added (tables
+  `mux_cleanup_jobs`, `mux_cleanup_settings`, `account_purge_failures`, RLS on, no grants to `anon`
+  or `authenticated`; 19 functions, none executable by `anon` or `authenticated`; 30 columns, 17
+  constraints, 7 indexes, 1 trigger, 4 cron jobs), nothing removed.
+- *Functions.* Deployed `auth-signin-method` v3, `mux-create-upload` v3, `mux-upload-status` v3,
+  `mux-webhook` v4; the three Mux functions' source byte-identical to `5fabfaf`. No `mux-cleanup`.
+  Secrets: the same 10 names as after stage 2; no `MUX_CLEANUP_*`. Vault: no secrets at all.
+- *Data.* 1 auth user, account and profile (the founder: active, not deleted); 1 response (live);
+  0 comments, likes, reports, moderation actions, review requests; 1 suggestion; ledger 1
+  (`claimed`); push outbox 0 unsent; pg_net queue 0; 30 analytics events. Cron: `send-push`,
+  `tonight-prompt`, `purge-deleted-accounts`, active, 0 failed runs in 24 h.
+- *Founder.* Response `5b321c24-…`: `live`, author = ledger owner, ledger `claimed` and linked;
+  `md5(row_to_json(r)::text)` = `c9918f8241a2c45eefb106b5d0ec0a8f`, identical to stage 2's record
+  (`md5(r::text)` = `b34c6351f772039177c9c5dab03cc82d`); ledger `md5(u::text)` =
+  `9726bb8fdf8d9eb0cb759d13ce59c8b6`. Mux: 1 asset (the founder's, `ready`, one public playback id
+  `8UqSC…6JU`, passthrough = the founder, upload id matching), 1 upload (`asset_created`), 0 live
+  streams; HLS manifest 200.
+- *Automatic changes once the migration is in (switch off).* The migration itself writes one
+  settings row (`off`), four cron rows, and a backfill that queues nothing on this data (0 deleted
+  or removed videos with assets, 0 deleted accounts). Afterwards, on schedule:
+  `mux-cleanup` (every minute) and `mux-sweep` (04:45) return at once while the switch is off (no
+  HTTP call; without Vault secrets they would not call either); `prune-mux-cleanup-jobs` (03:40)
+  can only delete finished jobs, of which there are none; `prune-moderation-records` (03:30) can
+  only delete moderation records with no account (impossible today: the column is NOT NULL until
+  the migration) and anonymised reports (the column is new); `purge-deleted-accounts` (03:15, an
+  existing job) runs the **new purge at its next run**, which acts only on accounts deleted more than
+  30 days ago: none today, and none can be due within 30 days of deployment. Rehearsed on the local
+  stack with the same data: running all five commands changed no row in any table and queued no
+  HTTP request.
+- *Edge case found (not automatic).* Deleting an Auth user outside the purge (dashboard, admin API,
+  SQL) now sets moderation records' account, review requests' account and reports' reporter to null
+  instead of cascading their deletion. The records keep their free-text reason and note
+  (not anonymised); `prune_moderation_records` deletes such actions 90 days after they were
+  *created* (at once if older); such reports are never pruned; and the rollback is refused
+  afterwards. Reproduced locally. No such records exist on the hosted project.
+- *When the rollback becomes unavailable.* It refuses once any of these exist: a tombstone (a video
+  or comment with no author), a moderation action with no account, moderator or reason, a review
+  request with no account, a report with no reporter or target. They arise only from (1) the 03:15
+  purge removing an account (needs one deleted 30 or more days earlier), (2) an Auth user deleted
+  outside the purge who has moderation records or reports, or (3) manual SQL. Rolling back also
+  discards `mux_cleanup_jobs`; and once live, Mux deletions themselves cannot be undone.
 
 **Staged deployment plan** (each stage needs Nemat's separate go-ahead; none is approved):
 
