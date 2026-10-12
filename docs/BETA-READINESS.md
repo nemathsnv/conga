@@ -20,6 +20,8 @@ run on a device), **partly verified** (some of the check has run on a device; th
 | B-3 app-link wiring in the app | needs input, then code | `associatedDomains` and `intentFilters` in `app.config.ts`, `EXPO_PUBLIC_WEB_BASE_URL` set to the domain, the two association files served (see section 6). | Part of the B-3 check in section 6. |
 | Settings rows with no destination | needs input, then code | Community guidelines, Privacy policy, Terms, Help and feedback rows and the `A-Removed` guideline link are drawn and inactive; they are wired once the URLs or address exist (section 4). | Each row opens its document; `A-Removed` opens the guidelines. |
 | Moderation web admin | open | A small internal web admin over the `mod_*` functions (queues, actions, the log, suggestion review). The CLI `scripts/moderate.sh` is development-only. See section 7. | A moderator handles a report, a review request and a suggestion from the admin without the CLI. |
+| Post refused while creating the row (security stage 2 follow-up) | open | When the server refuses the post itself for a reason other than a restriction or a stale upload URL (for example `already_responded`, `prompt_not_found`, `video_not_found`), or the connection drops at that step, Post Review still only logs it: Post does nothing visible. Pre-existing; left out of stage 2 by decision (Nemat, 12 Oct). Needs a decided state or copy. | Each refusal shows something on Post Review or Home; nothing is silent. |
+| Restricted on Retry (security stage 2 follow-up) | open | A post that never got a row (an upload limit at Post) and is retried after the member has been restricted or suspended shows the Upload failed banner's generic line, not A-Restricted or LV-Suspended. Rare; left out of stage 2 by decision (Nemat, 12 Oct). | Retry by a restricted member opens A-Restricted; by a suspended one, LV-Suspended. |
 | App icon | needs input (branding) | The Expo template icon is development-only and must not go to outside testers or the stores (Nemat, 9 Oct). Replaced once the name and brand are approved (section 5). | The icon in `app/assets` is the approved one before any outside build. |
 
 Everything else in SPEC.md Sections 3 to 21 is built. No feature phase remains; Nemat asked for no
@@ -757,11 +759,14 @@ deleted. The only hosted contact was three read-only Mux `GET`s (below).
      answered without cancelling, the upload goes back to `active`, unfreed, and the mint is 429.
      If the cancel's outcome is unknown (timeout), it stays `cancelling`: unclaimable and holding
      its slot until its hour is up.
-  Claimed, processing and expired uploads are never candidates. **What "never an active
-  transfer" rests on:** Mux reports `waiting` while bytes are still arriving, so Mux cannot tell
-  an untouched URL from one being uploaded to. Every app version claims the upload (creates the
-  row) before it sends any bytes, so an unclaimed URL has no transfer from the app; the 15 s rule
-  also keeps a URL just handed to an opening screen out of reach.
+  Claimed, processing and expired uploads are never candidates.
+  **Mux's `waiting` status alone does not guarantee that zero bytes have been transferred.** Mux
+  reports `waiting` until an upload completes, so it cannot tell an untouched URL from one that is
+  receiving bytes, and its cancel succeeds on both. What protects real uploads is the
+  claim-before-upload contract: every app version creates the row (claims the upload) before it
+  sends any bytes, and a claimed upload is never a candidate. So the only uploads that can be
+  receiving bytes when cancelled are ones a client sends to without posting, which the app never
+  does. The 15 s rule also keeps a URL just handed to an opening screen out of reach.
   Delaying URL creation until Post was considered and not chosen: it would add a mint round trip
   to every Post (the spike's reason for minting on review), and the installed founder build would
   still mint on review, so the server would need this handling anyway.
@@ -792,24 +797,31 @@ deleted. The only hosted contact was three read-only Mux `GET`s (below).
     earlier that the server refuses (expired, retired as abandoned, used) is replaced once.
   - Retry on a post with no row mints, creates the row, then uploads; a failure keeps any row or
     URL obtained on the way, so Retry never creates a second row.
-  - The banner's second line, by reason: hourly limit "It's saved on this phone. You've reached
-    the limit of 10 uploads an hour. Retry later."; daily limit "It's saved on this phone. You've
-    reached the limit of 30 uploads a day. Retry later."; no free upload slot "It's saved on this
-    phone. Uploading isn't available right now. Retry later."; everything else keeps the board's
-    "It's saved on this phone. Check your connection." The title is the board's. **The three new
-    sentences are Claude's wording, for Nemat's approval;** they live in one function
-    (`uploadFailedDetail`).
+  - The banner's second line, by reason (wording approved by Nemat, 12 Oct): hourly limit "You've
+    reached the limit of 10 uploads per hour. Try again later."; daily limit "You've reached the
+    limit of 30 uploads in 24 hours. Try again later."; no free upload slot "Uploading isn't
+    available right now. Try again later." These make no claim that the recording is saved. Every
+    other failure keeps the board's line, "It's saved on this phone. Check your connection." The
+    title and Retry are the board's. One function holds the lines (`uploadFailedDetail`).
+  - Persistence of a failed post: the recording file is not deleted and the post is stored with
+    AsyncStorage, as for every failed post since phase 3. For the new "no row yet" failure this is
+    covered by Jest only (stored and reloaded); it has not been checked on a device across an app
+    restart.
 
 **Local checks** (isolated stack `shortcut-s2` on ports 554xx, so the default `shortcut` stack was
 not touched; Mux stubbed in every test; 12 Oct, final code):
 
-- pgTAP **608/608**: the 436 existing (0001 to 0008) plus 172 in `0009_video_uploads.sql`
+- pgTAP **623/623**: the 436 existing (0001 to 0008) plus 187 in `0009_video_uploads.sql`
   (privileges, account states, the three limits and their windows, `Retry-After` values, activation,
   claims on all four posting paths, cross-account refusal, reuse, expiry, the passthrough and ledger
   owner checks, account purge, constraints; abandoned-URL cancellation: oldest first, never claimed,
   expired, recent (15 s) or other members' uploads, a claim refused while cancelling, the slot
   freed only on confirmation, cancelled URLs still counted, an unconfirmed cancellation holding its
-  slot until expiry; publishing a draft at both limits takes no URL and no quota). The new suite
+  slot until expiry; publishing a draft at both limits takes no URL and no quota; section 12, the
+  final safety review: with the uploads claimed by a response, a video reply and a draft being the
+  oldest, the oldest *unused* one is picked; recording a cancelled or an active outcome against
+  each claimed upload changes nothing; a pending and a failed cancellation free no slot, and only
+  Mux's confirmation does). The new suite
   found one real bug while being written (an ambiguous name in the `Retry-After` query for the
   3-URL refusal), fixed. **Disclosed change to existing tests:** 0002, 0003 and 0005 posted with
   upload ids the server never minted, which stage 2 refuses, so those three files abort without the
@@ -835,9 +847,10 @@ not touched; Mux stubbed in every test; 12 Oct, final code):
     simultaneous posts of one upload give exactly one row;
   - plus cross-account, reuse, expiry, the day limit, every minting partial failure and the
     end-to-end iPhone path (mint, post, Mux ready, live, claimed). `deno check`, `deno lint` clean.
-- App: typecheck and lint clean, Jest **95/95** (54 existing, 41 new: `mintUpload`, `prepareUpload`
-  for normal posting, refusals, restrictions and stale-URL replacement, the banner sentence for each
-  reason, and a failed post with no row surviving a restart). The jest-expo preset prints "Cannot
+- App: typecheck and lint clean, Jest **96/96** (54 existing, 42 new: `mintUpload`, `prepareUpload`
+  for normal posting, refusals, restrictions and stale-URL replacement, the approved banner line for
+  each reason and that none claims the recording is saved, and a failed post with no row surviving
+  a restart). The jest-expo preset prints "Cannot
   log after tests are done" (ExpoModulesCoreJSLogger); it already does with only the 54 existing
   tests.
 - `scripts/auth-integration.mjs` **37/37** against the isolated stack.
@@ -870,12 +883,82 @@ abandoned URLs does not use storage.
   count in `reserve_video_upload` under a project-wide advisory lock, answered with 503) sized from
   the cohort and Mux's prices, plus a Mux billing alert.
 
+**Final safety review (12 Oct).**
+
+- *Claimed uploads cannot be cancelled.* `begin_upload_cancellation` only moves a row from
+  `active` to `cancelling` (selected and updated on `status = 'active'`, skipping rows another
+  transaction holds); claiming moves a row from `active` to `claimed` under the same row lock, so
+  whichever is first wins and the other finds nothing. `finish_upload_cancellation` only changes
+  rows that are `cancelling`. A claimed upload (response, video reply or draft) therefore never
+  becomes `cancelling` or `cancelled`, and is never sent to Mux's cancel. Tested in pgTAP (section
+  12) and Deno (a post and a mint at the same moment; a post arriving mid-cancellation).
+- *Failed cancellations never free slots.* `cancelling` holds a slot exactly like `active`; only
+  `finish_upload_cancellation(..., 'cancelled')` frees it, and the function calls it only when Mux
+  answers the cancel with `cancelled`, or a read shows the upload already `cancelled` or
+  `timed_out`. Every failure puts the upload back (`active`) or leaves it `cancelling` until it
+  expires. Tested for six failure modes (Deno) and in pgTAP.
+- *Contracts kept.* Claim-before-upload is unchanged in the app (the row is created, then
+  `putRecording`). The per-account lock, the atomic claim, the one-use upload id and the
+  passthrough check are unchanged. Cancelled URLs still count towards the hour and the day.
+- *Scope.* Against `a50b71a` the branch changes only stage 2 files: one migration, the three Mux
+  functions and `_shared/mux.ts`, their tests, the posting files in the app, the docs, and the
+  rollback script; existing tests change only by the disclosed fixture lines.
+
+**Hosted deployment preflight (12 Oct, read-only; nothing deployed or written).** Every SQL query
+ran through the Management API inside a `READ ONLY` transaction that was rolled back
+(`transaction_read_only` confirmed `on`); Mux was read with `GET`s only. The CLI's standard
+temporary login role (`cli_login_postgres`) had its short expiry refreshed by each CLI connection,
+as with every earlier linked command; no schema, data, secret or function changed (all re-checked
+afterwards).
+
+- **Pending migrations:** the hosted project has the 14 migrations `20261006000100` to
+  `20261011000100`. `supabase db push --linked --dry-run` with this branch: exactly one to push,
+  `20261012000100_video_uploads.sql`; no seeds, no roles.
+- **Schema identical to the tested base:** a fingerprint of 555 objects (every public function
+  definition with its owner and grants, policies on `public` and `storage`, tables with RLS flags
+  and grants, columns, constraints, triggers including `auth.users` and `auth.identities`, cron
+  jobs) is equal on the hosted project and on the local stack built from the same 14 migrations.
+- **What the migration changes** (the same fingerprint on the local stack before and after it):
+  550 of 555 objects untouched; no policy, trigger, cron job, existing table or column changes.
+  Added: the `video_uploads` table (11 columns, 7 constraints, RLS on, no policy) and the functions
+  `reserve_video_upload`, `activate_video_upload`, `fail_video_upload`, `claim_video_upload`,
+  `begin_upload_cancellation`, `finish_upload_cancellation`, `video_upload_holds_slot`. Changed
+  (bodies only; grants, SECURITY DEFINER and `search_path` identical to the hosted ones):
+  `post_response`, `post_reply`, `post_draft`, `retry_response_upload`. Replaced:
+  `mark_response_live(text, text, text, integer)` by the same name with a fifth argument
+  defaulting to null; on the hosted project the old one is executable only by `postgres` and
+  `service_role` and no SQL function calls it, and the deployed functions call it with named
+  arguments, which the new signature accepts (tested). None of the new names exists on the hosted
+  project yet.
+- **Founder response preserved:** the one hosted response `5b321c24-1e1e-4393-9ae1-e6503903430d`
+  (`live`, the founder prompt, upload `ka5YEhFH6gsMlReKkWOrfWN2xPkSKxceKqvzAqZxIs00`, asset
+  `L7KxG29AtA7rEZ2JXF02QWw3GcR12F00NK3A1eTsu02UVc`, playback
+  `8UqSCXiojU36lJn802TM00UF6ehuCB5Q5NF8kZh502J6JU`, 9,911 ms); row md5
+  `c9918f8241a2c45eefb106b5d0ec0a8f`, to compare after deployment. The migration does not write
+  `responses`; the rehearsal on the same schema with the same ids kept the row identical.
+- **Founder upload backfill:** the migration's backfill `SELECT`, run read-only on the hosted
+  project, yields exactly one row: that upload, `claimed`, owned by the response's author, linked
+  to the response, created 11 Oct 08:02:21 UTC (outside any 24-hour window, so no quota used).
+  The Mux asset's passthrough equals that author (compared by md5; no id printed).
+- **Edge Functions:** deployed `auth-signin-method` v3, `mux-create-upload` v2, `mux-upload-status`
+  v2, `mux-webhook` v3, all `ACTIVE`, `verify_jwt` false. The deployed source of the three Mux
+  functions (downloaded into a scratch folder) is byte-identical to `a50b71a`. On this branch each
+  bundle's local module graph is: `mux-create-upload` `index.ts` (changed), `handler.ts` (new),
+  `_shared/mux.ts` (changed), `_shared/supabase.ts` (unchanged); `mux-upload-status` and
+  `mux-webhook` `handler.ts` (changed), `index.ts`, `_shared/mux.ts` (changed),
+  `_shared/supabase.ts` (unchanged). No test file is in any bundle. `auth-signin-method`, `web` and
+  `send-push` are not redeployed. The remote import `jsr:@supabase/supabase-js@2` resolves at
+  deployment time, as in stage 1.
+- **Hosted data at preflight:** 1 account, profile, prompt, response, suggestion, invite, waitlist
+  entry and place follow; 26 analytics events. Mux Shortcut Beta: 1 asset, 1 upload, 0 live
+  streams.
+
 **Hosted migration plan (needs Nemat's approval; nothing done):**
 
-1. Preflight, read-only: hosted schema fingerprint equal to the local stack at `a50b71a` (14
-   migrations); deployed function source byte-identical to `a50b71a`; Mux Shortcut Beta asset and
-   upload lists; the founder response row and table counts recorded. Nemat not posting during the
-   window.
+1. Preflight, read-only: done 12 Oct (above). Repeat its checks immediately before deploying:
+   hosted fingerprint still equal to `hosted.fp` of that run, one pending migration, deployed Mux
+   function source byte-identical to `a50b71a`, the founder row md5, Mux asset and upload counts.
+   Nemat not posting during the window.
 2. `supabase db push --linked --dry-run`, expecting exactly `20261012000100_video_uploads.sql`; then
    `supabase db push --linked --yes`.
 3. Immediately, by name with `--no-verify-jwt`, never `--prune`: `mux-create-upload` first (until it
@@ -904,13 +987,11 @@ founder build without them.
   when an upload limit is reached, Post for a restricted member (A-Restricted does not open), and
   Post with a review-time URL that has expired or was retired (only if Post Review stayed open over
   an hour, or 3 more URLs were minted elsewhere meanwhile). All fixed in the next build.
-- **Copy for approval:** the three new banner sentences above.
 - **Draft failures surface on Home:** a draft that could not get a URL closes Post Review onto
   Your suggestions (as a successful save does); the banner is on Home, as it always has been for
   drafts.
-- **Still silent on Post, unchanged:** refusals while creating the row other than restrictions and
-  stale URLs (for example `already_responded`, `prompt_not_found`, `video_not_found`) and a network
-  error at that step. Pre-existing; not in this stage's scope. Worth a decision.
+- **Pre-beta follow-ups (section 1):** Post refused while creating the row, and restricted on
+  Retry. Not part of stage 2.
 - **Hourly limit and fast re-recording:** ten re-records in an hour now reach the hourly limit, with
   the accurate banner. That is the approved limit working as intended.
 - **Drafts while posting is paused:** `post_draft` still does not check the restriction (unchanged
