@@ -5,7 +5,7 @@
 -- cleanup_integration_test.ts. Inside one transaction now() does not move, so "later" is
 -- written as moving recorded times back.
 begin;
-select plan(243);
+select plan(328);
 
 delete from public.responses;
 delete from public.prompts;
@@ -130,7 +130,7 @@ declare v jsonb;
 begin
   update public.mux_cleanup_jobs set not_before = not_before + interval '1000 days'
    where status = 'pending' and not (action = p_action and (asset_id is not distinct from p_target or upload_id is not distinct from p_target));
-  v := public.mux_cleanup_claim(50, 120);
+  v := (public.mux_cleanup_claim(50, 120))->'jobs';
   update public.mux_cleanup_jobs set not_before = not_before - interval '1000 days'
    where status = 'pending' and not_before > now() + interval '900 days';
   return v;
@@ -157,7 +157,7 @@ select is(has_table_privilege('authenticated', 'public.account_purge_failures', 
 select is(has_function_privilege('authenticated', 'public.mux_cleanup_claim(integer, integer)', 'execute'), false, 'members cannot lease jobs');
 select is(has_function_privilege('anon', 'public.mux_cleanup_claim(integer, integer)', 'execute'), false, 'nor can anon');
 select is(has_function_privilege('authenticated', 'public.mux_cleanup_finish(uuid, uuid, text, jsonb)', 'execute'), false, 'members cannot record outcomes');
-select is(has_function_privilege('authenticated', 'public.mux_cleanup_sweep(jsonb, integer)', 'execute'), false, 'members cannot sweep');
+select is(has_function_privilege('authenticated', 'public.mux_cleanup_sweep(jsonb, integer, boolean)', 'execute'), false, 'members cannot sweep');
 select is(has_function_privilege('authenticated', 'public.mux_cleanup_retry(uuid)', 'execute'), false, 'members cannot retry jobs');
 select is(has_function_privilege('authenticated', 'public.mux_cleanup_overview()', 'execute'), false, 'members cannot see the overview');
 select is(has_function_privilege('authenticated', 'public.purge_deleted_accounts()', 'execute'), false, 'members cannot run the purge');
@@ -165,7 +165,7 @@ select is(has_function_privilege('authenticated', 'public.prune_moderation_recor
 select is(has_function_privilege('authenticated', 'public.run_mux_cleanup(text)', 'execute'), false, 'members cannot call the worker');
 select is(has_function_privilege('service_role', 'public.mux_cleanup_claim(integer, integer)', 'execute')
       and has_function_privilege('service_role', 'public.mux_cleanup_finish(uuid, uuid, text, jsonb)', 'execute')
-      and has_function_privilege('service_role', 'public.mux_cleanup_sweep(jsonb, integer)', 'execute')
+      and has_function_privilege('service_role', 'public.mux_cleanup_sweep(jsonb, integer, boolean)', 'execute')
       and has_function_privilege('service_role', 'public.mux_cleanup_overview()', 'execute')
       and has_function_privilege('service_role', 'public.mux_cleanup_retry(uuid)', 'execute'), true, 'the service role (the worker) can lease, record, sweep, see and retry');
 select is(has_function_privilege('service_role', 'public.mux_cleanup_enqueue(text, text, text, text, uuid, uuid, timestamptz)', 'execute')
@@ -173,11 +173,49 @@ select is(has_function_privilege('service_role', 'public.mux_cleanup_enqueue(tex
 select is(has_function_privilege('service_role', 'public.purge_account(uuid)', 'execute')
        or has_function_privilege('service_role', 'public.mux_asset_hold(text, text)', 'execute')
        or has_function_privilege('service_role', 'public.mux_playback_wanted(uuid, text)', 'execute'), false, 'the purge of one account and the hold rules are internal');
-select is((select count(*)::int from cron.job where jobname in ('mux-cleanup', 'mux-sweep', 'prune-moderation-records', 'purge-deleted-accounts') and active), 4, 'the drain, the sweep, the prune and the purge are scheduled');
+select is((select count(*)::int from cron.job where jobname in ('mux-cleanup', 'mux-sweep', 'prune-moderation-records', 'prune-mux-cleanup-jobs', 'purge-deleted-accounts') and active), 5, 'the drain, the sweep, the two prunes and the purge are scheduled');
+select is(has_function_privilege('authenticated', 'public.mux_cleanup_check(uuid, uuid)', 'execute') or has_function_privilege('authenticated', 'public.mux_cleanup_set_mode(text, text)', 'execute')
+       or has_function_privilege('anon', 'public.mux_cleanup_set_mode(text, text)', 'execute'), false, 'members cannot check jobs or turn the worker on');
+select is(has_function_privilege('service_role', 'public.mux_cleanup_check(uuid, uuid)', 'execute') and has_function_privilege('service_role', 'public.mux_cleanup_set_mode(text, text)', 'execute'), true, 'the service role can');
+select is(has_table_privilege('authenticated', 'public.mux_cleanup_settings', 'select') or has_table_privilege('authenticated', 'public.mux_cleanup_settings', 'update'), false, 'members cannot read or change the switch');
 select is((select count(*)::int from public.mux_cleanup_jobs), 0, 'nothing queued for live videos of active accounts');
 -- Without the Vault secrets the worker is never called.
 select lives_ok($$ select public.run_mux_cleanup('drain') $$, 'run_mux_cleanup without its secrets');
 select is(pg_temp.err($$ select public.run_mux_cleanup('purge') $$), 'invalid_mode', 'only drain and sweep');
+
+-- ===========================================================================
+-- 1b. The switch: off after the migration; nothing leased or called until it is turned on
+-- ===========================================================================
+select is(public.mux_cleanup_mode(), 'off', 'the worker is off after the migration');
+select is((public.mux_cleanup_overview())->>'mode', 'off', 'and the overview says so');
+select public.mux_cleanup_enqueue('delete_asset', 'orphan', 'asSwitch', 'upSwitch', null, 'a1111111-1111-1111-1111-111111111111');
+select is((public.mux_cleanup_claim(50, 120))->'jobs', '[]'::jsonb, 'off: a due job is not leased');
+select is((public.mux_cleanup_claim(50, 120))->>'mode', 'off', 'and the worker is told why');
+select vault.create_secret('http://127.0.0.1:1/functions/v1/mux-cleanup', 'mux_cleanup_url');
+select vault.create_secret('test-cleanup-key', 'mux_cleanup_key');
+create temp table q0 as select count(*)::int as n from net.http_request_queue;
+select public.run_mux_cleanup('drain');
+select public.run_mux_cleanup('sweep');
+select is((select count(*)::int from net.http_request_queue) - (select n from q0), 0, 'off: run_mux_cleanup calls nothing, even with its secrets');
+select is(pg_temp.err($$ select public.mux_cleanup_set_mode('on', 'nemat') $$), 'invalid_mode', 'the switch is off, dry_run or live');
+select is(pg_temp.err($$ select public.mux_cleanup_set_mode('live', ' ') $$), 'changed_by_required', 'and says who changed it');
+select is((public.mux_cleanup_set_mode('dry_run', 'nemat'))->>'mode', 'dry_run', 'the team turns on a dry run');
+select is((select changed_by from public.mux_cleanup_settings), 'nemat', 'recorded with who');
+select public.run_mux_cleanup('drain');
+select is((select count(*)::int from net.http_request_queue) - (select n from q0), 1, 'dry run: the worker is called when a job is due');
+select is((select headers->>'Authorization' from net.http_request_queue order by id desc limit 1), 'Bearer test-cleanup-key', 'with the key from Vault');
+select is((select convert_from(body, 'utf8')::jsonb from net.http_request_queue order by id desc limit 1), '{"mode": "drain"}'::jsonb, 'asking it to drain');
+select public.run_mux_cleanup('sweep');
+select is((select convert_from(body, 'utf8')::jsonb->>'mode' from net.http_request_queue order by id desc limit 1), 'sweep', 'and the daily sweep');
+select is(jsonb_array_length((public.mux_cleanup_claim(50, 120))->'jobs'), 1, 'dry run: the job is leased (to be read, not acted on)');
+select is(pg_temp.finish('delete_asset', 'asSwitch', 'release', '{"dry_run": true, "would": {"act": "delete"}}'), 'pending', 'the worker releases it with its plan');
+select is((pg_temp.job('delete_asset', 'asSwitch')).attempts, 0, 'a dry run uses no attempt');
+select is((pg_temp.job('delete_asset', 'asSwitch')).not_before, now() + interval '1 hour', 'and it is looked at again in an hour');
+select is((public.mux_cleanup_overview())->'dry_run_planned'->0->'plan'->'would'->>'act', 'delete', 'the overview lists what the dry run would do');
+select is((public.mux_cleanup_set_mode('live', 'nemat'))->>'mode', 'live', 'the team goes live');
+select is((pg_temp.job('delete_asset', 'asSwitch')).not_before, now(), 'jobs set aside by the dry run are due at once');
+select is(pg_temp.err($$ select public.mux_cleanup_finish(gen_random_uuid(), gen_random_uuid(), 'release', '{"not_before": "not a time"}') $$), 'ok', 'an unknown job is stale before its detail is read');
+delete from public.mux_cleanup_jobs where asset_id = 'asSwitch';
 
 -- ===========================================================================
 -- 2. An author's deletion is immediate (F5)
@@ -249,8 +287,12 @@ select is((pg_temp.job('delete_asset', 'asA1')).locked_until, now() + interval '
 select is(jsonb_array_length(pg_temp.claim_only('delete_asset', 'asA1')), 0, 'a running job is not leased twice');
 select is((public.mux_cleanup_finish((pg_temp.job('delete_asset', 'asA1')).id, gen_random_uuid(), 'done', '{}'))->>'status', 'stale', 'only the lease holder records the outcome');
 select is(pg_temp.err(format('select public.mux_cleanup_finish(%L, %L, %L)', (pg_temp.job('delete_asset', 'asA1')).id, (pg_temp.job('delete_asset', 'asA1')).lease_id, 'deleted')), 'invalid_outcome', 'outcomes are a fixed list');
-select is(pg_temp.finish('delete_asset', 'asA1', 'done', '{"outcome": "deleted"}'), 'done', 'the worker records the deletion');
+select is(((public.mux_cleanup_check((pg_temp.job('delete_asset', 'asA1')).id, (pg_temp.job('delete_asset', 'asA1')).lease_id))->>'hold'), null, 'checked again just before deleting: nothing holds it');
+select is((public.mux_cleanup_check((pg_temp.job('delete_asset', 'asA1')).id, gen_random_uuid()))->>'ok', 'false', 'a check without the lease is refused');
+select is(pg_temp.finish('delete_asset', 'asA1', 'done', '{"outcome": "deleted", "extra": "not kept"}'), 'done', 'the worker records the deletion');
 select is((pg_temp.job('delete_asset', 'asA1')).owner_id, null, 'a finished job no longer names the owner');
+select is((pg_temp.job('delete_asset', 'asA1')).response_id, null, 'nor the video');
+select is((pg_temp.job('delete_asset', 'asA1')).result, '{"outcome": "deleted"}'::jsonb, 'and keeps only its outcome');
 select is((select mux_asset_id from public.responses where id = 'ad000000-0000-0000-0000-000000000001'), null, 'the deleted video forgets its asset');
 select is((select mux_playback_id from public.responses where id = 'ad000000-0000-0000-0000-000000000001'), null, 'and its playback id');
 
@@ -288,7 +330,8 @@ select is((pg_temp.job('delete_asset', 'asA2late')).owner_id, 'b2222222-2222-222
 select is((pg_temp.job('delete_asset', 'asA2late')).upload_id, 'upA2', 'and upload');
 select is(pg_temp.claimed(pg_temp.claim_only('cancel_upload', 'upA3'), 'cancel_upload', 'upA3')->>'action', 'cancel_upload', 'another cancellation');
 select is(pg_temp.err($$ select pg_temp.finish('delete_asset', 'asA2late', 'found_asset', '{}') $$), 'ok', 'found_asset on a job that is not running changes nothing');
-select is(pg_temp.finish('cancel_upload', 'upA3', 'skipped', '{"outcome": "not_verified", "detail": "passthrough_mismatch"}'), 'skipped', 'an ownership mismatch is skipped');
+select is((public.mux_cleanup_check((pg_temp.job('cancel_upload', 'upA3')).id, (pg_temp.job('cancel_upload', 'upA3')).lease_id))->>'in_use', 'false', 'checked: no video that can still go live uses the upload');
+select is(pg_temp.finish('cancel_upload', 'upA3', 'failed', '{"outcome": "not_verified", "detail": "passthrough_mismatch"}'), 'failed', 'an ownership mismatch fails, for a person to look at');
 select is((pg_temp.job('cancel_upload', 'upA3')).last_error, 'passthrough_mismatch', 'with the reason');
 select is((pg_temp.job('cancel_upload', 'upA3')).owner_id, 'b2222222-2222-2222-2222-222222222222'::uuid, 'and the owner kept, for a retry');
 
@@ -321,10 +364,11 @@ select is((pg_temp.job('delete_asset', 'asL1')).not_before, now() + interval '30
 update public.review_requests set decided_at = now() - interval '31 days' where action_id = (select id from public.moderation_actions where target_id = 'a1000000-0000-0000-0000-000000000001');
 update public.mux_cleanup_jobs set not_before = now() where asset_id = 'asL1' and status = 'pending';
 select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asL1'), 'delete_asset', 'asL1')->>'reason', 'review_upheld', 'then the deletion is leased');
-select is(pg_temp.err($$ select public.mod_restore_video('a1000000-0000-0000-0000-000000000001', 'x', 'nemat') $$), 'video_unavailable', 'a restore while it is being deleted is refused');
+select is(pg_temp.err($$ select public.mod_restore_video('a1000000-0000-0000-0000-000000000001', 'x', 'nemat') $$), 'asset_being_deleted', 'a restore while it is being deleted is refused');
 select is(pg_temp.finish('delete_asset', 'asL1', 'done', '{"outcome": "deleted"}'), 'done', 'deleted at Mux');
 select is((select mux_asset_id from public.responses where id = 'a1000000-0000-0000-0000-000000000001'), null, 'the removed video forgets its asset');
-select is(pg_temp.err($$ select public.mod_restore_video('a1000000-0000-0000-0000-000000000001', 'x', 'nemat') $$), 'video_unavailable', 'and can no longer be restored');
+select is(pg_temp.err($$ select public.mod_restore_video('a1000000-0000-0000-0000-000000000001', 'x', 'nemat') $$), 'asset_deleted', 'and once it is gone, can no longer be restored');
+select is((select public.mux_video_restorable(r) from public.responses r where id = 'a1000000-0000-0000-0000-000000000001'), false, 'it is not restorable');
 select is((select status from public.responses where id = 'a1000000-0000-0000-0000-000000000001'), 'removed', 'it stays removed');
 
 -- Reversed on review: playback back, the asset kept.
@@ -341,7 +385,7 @@ select is((select status from public.responses where id = 'a1000000-0000-0000-00
 select is((public.web_video('a1000000-0000-0000-0000-000000000002'))->>'status', 'unavailable', 'but not shown until it has playback again');
 -- The old deletion comes due first: the video is in use, so it is skipped and the restore runs.
 update public.mux_cleanup_jobs set not_before = now() - interval '1 minute' where asset_id = 'asL2' and action = 'delete_asset';
-select is(pg_temp.claimed(public.mux_cleanup_claim(50, 120), 'sync_playback', 'asL2')->>'playback_wanted', 'true', 'the worker is told: playback on');
+select is(pg_temp.claimed((public.mux_cleanup_claim(50, 120))->'jobs', 'sync_playback', 'asL2')->>'playback_wanted', 'true', 'the worker is told: playback on');
 select is((pg_temp.job('delete_asset', 'asL2')).status, 'skipped', 'the deletion is skipped: the video is in use');
 select is(pg_temp.finish('sync_playback', 'asL2', 'done', '{"outcome": "restored", "playback_id": "pbL2new", "asset_status": "ready"}'), 'done', 'a new playback id at Mux');
 select is((select mux_playback_id from public.responses where id = 'a1000000-0000-0000-0000-000000000002'), 'pbL2new', 'recorded');
@@ -504,12 +548,13 @@ select is(pg_temp.jobs('asLR1') + pg_temp.jobs('asAR2'), 0, 'nothing of Lena''s 
 -- Moderation records: anonymised, kept 90 days.
 select is((select count(*)::int from public.moderation_actions where target_kind = 'video' and kind = 'remove' and account_id is null and anonymized_at = now()), 2, 'her two removals are kept, anonymised');
 select is((select count(*)::int from public.moderation_actions where anonymized_at is not null and (target_id is not null or note is not null)), 0, 'with no target and no note');
-select is((select count(*)::int from public.moderation_actions where anonymized_at is not null and reason = 'Spam.' and moderator = 'nemat'), 2, 'the reason and the moderator stay');
+select is((select count(*)::int from public.moderation_actions where anonymized_at is not null and reason is null and moderator is null), 2, 'without the free-text reason or the moderator');
+select is((select count(*)::int from public.review_requests rr join public.moderation_actions m on m.id = rr.action_id where m.anonymized_at is not null and (rr.account_id is not null or rr.decided_by is not null)), 0, 'decided reviews keep no account and no moderator');
 select is((select count(*)::int from public.review_requests where account_id is null and outcome is null), 0, 'her pending review is closed');
 select is((select reporter_id::text || status from public.reports where target_id = 'ad000000-0000-0000-0000-000000000004'), null, 'her report on Adam''s video has no reporter');
 select is((select status from public.reports where target_id = 'ad000000-0000-0000-0000-000000000004'), 'open', 'and is still open for the team');
-select is((select count(*)::int from public.reports where reporter_id = 'a1111111-1111-1111-1111-111111111111' and target_id is null and status = 'closed' and closed_by = 'account_purged'), 1, 'Lena''s report on Maya''s video is closed and points at nothing');
-select is((select count(*)::int from public.reports where reporter_id = 'b2222222-2222-2222-2222-222222222222' and target_id is null and status = 'closed'), 1, 'Adam''s report on Maya''s profile too');
+select is((select count(*)::int from public.reports where reporter_id is null and target_id is null and status = 'closed' and closed_by = 'account_purged' and anonymized_at is not null), 2, 'Lena''s report on her video and Adam''s on her profile are closed, with no reporter and no target');
+select is((select count(*)::int from public.reports where reporter_id in ('a1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222') and target_kind in ('video', 'profile') and status = 'closed'), 0, 'so they no longer link Lena or Adam to her');
 select is((select count(*)::int from public.reports where target_id = 'c3333333-3333-3333-3333-333333333333'
            or target_id in ('c3000000-0000-0000-0000-000000000003')), 0, 'no report names her or her videos');
 -- 90 days on.
@@ -562,6 +607,118 @@ select is(jsonb_array_length(pg_temp.claim_only('delete_asset', 'asStranger')), 
 select is(pg_temp.err(format('select public.mux_cleanup_retry(%L)', (pg_temp.job('delete_asset', 'asStranger')).id)), 'job_not_found', 'nor can it be retried into the queue');
 select is(pg_temp.err($$ select public.mux_cleanup_sweep('{}'::jsonb) $$), 'invalid_assets', 'the sweep takes a list');
 select is(jsonb_array_length((public.mux_cleanup_overview())->'review'), 2, 'the overview lists the two for review');
+
+-- ===========================================================================
+-- 8b. Ordering: the database decides at the last moment; a stale job exposes nothing
+-- ===========================================================================
+insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
+  ('b7777777-7777-7777-7777-777777777777', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'kim@example.com', '{}', '{}', now(), now());
+update public.accounts set age_confirmed_at = now(), public_disclosure_ack_at = now() where id = 'b7777777-7777-7777-7777-777777777777';
+insert into public.profiles (id, name, username) values ('b7777777-7777-7777-7777-777777777777', 'Kim Doe', 'testkim');
+insert into public.responses (id, prompt_id, author_id, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at) values
+  ('b7000000-0000-0000-0000-000000000001', '11111111-aaaa-aaaa-aaaa-111111111111', 'b7777777-7777-7777-7777-777777777777', 9000, 'live', 'upK1', 'asK1', 'pbK1', now()),
+  ('b7000000-0000-0000-0000-000000000002', '22222222-aaaa-aaaa-aaaa-222222222222', 'b7777777-7777-7777-7777-777777777777', 9000, 'live', 'upK2', 'asK2', 'pbK2', now()),
+  ('b7000000-0000-0000-0000-000000000003', '33333333-aaaa-aaaa-aaaa-333333333333', 'b7777777-7777-7777-7777-777777777777', 9000, 'live', 'upK3', 'asK3', 'pbK3', now()),
+  ('b7000000-0000-0000-0000-000000000004', '44444444-aaaa-aaaa-aaaa-444444444444', 'b7777777-7777-7777-7777-777777777777', 9000, 'live', 'upK4', 'asK4', 'pbK4', now()),
+  ('b7000000-0000-0000-0000-000000000005', '55555555-aaaa-aaaa-aaaa-555555555555', 'b7777777-7777-7777-7777-777777777777', 9000, 'live', 'upK5', 'asK5', 'pbK5', now());
+
+-- Delete, then account deletion and recovery: the deleted video is never turned back on.
+set local role authenticated;
+select pg_temp.act('b7777777-7777-7777-7777-777777777777');
+select lives_ok($$ select public.delete_video('b7000000-0000-0000-0000-000000000003') $$, 'Kim deletes K3');
+select lives_ok($$ select public.delete_account() $$, 'then her account');
+select is((public.get_onboarding_state())->>'has_profile', 'true', 'and signs back in');
+reset role;
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id = 'asK3' and action = 'sync_playback'), 0, 'recovery queues nothing for the deleted video');
+select is((pg_temp.job('delete_asset', 'asK3')).status, 'pending', 'its deletion still stands');
+select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asK3'), 'delete_asset', 'asK3')->>'reason', 'author_deleted', 'and goes ahead');
+select is(pg_temp.finish('delete_asset', 'asK3', 'done', '{"outcome": "deleted"}'), 'done', 'deleted');
+update public.mux_cleanup_jobs set status = 'done', owner_id = null, finished_at = now() where asset_id in ('asK1', 'asK2', 'asK4', 'asK5') and status = 'pending';
+
+-- Out of order: account deleted, recovered, then the video deleted, all before the worker runs.
+set local role authenticated;
+select pg_temp.act('b7777777-7777-7777-7777-777777777777');
+select lives_ok($$ select public.delete_account() $$, 'Kim deletes her account');
+select is((public.get_onboarding_state())->>'has_profile', 'true', 'signs back in');
+select lives_ok($$ select public.delete_video('b7000000-0000-0000-0000-000000000001') $$, 'and deletes K1');
+reset role;
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id = 'asK1' and status = 'pending'), 2, 'two jobs wait for K1: its playback and its deletion');
+select is(pg_temp.claimed(pg_temp.claim_only('sync_playback', 'asK1'), 'sync_playback', 'asK1')->>'action', 'sync_playback', 'the older, the playback job, is leased first');
+select is(jsonb_array_length(pg_temp.claim_only('delete_asset', 'asK1')), 0, 'the deletion waits for it (one job per asset)');
+select is((public.mux_cleanup_check((pg_temp.job('sync_playback', 'asK1')).id, (pg_temp.job('sync_playback', 'asK1')).lease_id))->>'wanted', 'false', 'checked now: K1 must not play');
+select is(pg_temp.finish('sync_playback', 'asK1', 'done', '{"outcome": "restored", "playback_id": "pbK1stale", "asset_status": "ready"}'), 'done', 'a worker that restored anyway (planned on old state)');
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id = 'asK1' and action = 'sync_playback' and result = '{"outcome": "restored", "recorded": false}'::jsonb), 1, 'is not recorded');
+select isnt((select mux_playback_id from public.responses where id = 'b7000000-0000-0000-0000-000000000001'), 'pbK1stale', 'the deleted video never gets the new playback id');
+select is((public.web_video('b7000000-0000-0000-0000-000000000001'))->>'status', 'unavailable', 'and stays unavailable');
+select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asK1'), 'delete_asset', 'asK1')->>'reason', 'author_deleted', 'then the deletion runs (it removes the stray id with the asset)');
+select is(pg_temp.finish('delete_asset', 'asK1', 'done', '{"outcome": "deleted"}'), 'done', 'deleted');
+
+-- Removal, restoration, removal: one playback job, which reads the state at the end.
+update public.mux_cleanup_jobs set status = 'done', owner_id = null, finished_at = now() where asset_id in ('asK2', 'asK4', 'asK5') and status = 'pending';
+select lives_ok($$ select public.mod_remove_video('b7000000-0000-0000-0000-000000000002', 'Spam.', 'nemat') $$, 'K2 is removed');
+update public.moderation_actions set created_at = now() - interval '40 days' where target_id = 'b7000000-0000-0000-0000-000000000002';
+select lives_ok($$ select public.mod_restore_video('b7000000-0000-0000-0000-000000000002', 'Mistake.', 'nemat') $$, 'restored');
+select lives_ok($$ select public.mod_remove_video('b7000000-0000-0000-0000-000000000002', 'Spam again.', 'nemat') $$, 'and removed again');
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id = 'asK2' and action = 'sync_playback' and status = 'pending'), 1, 'the three changes share one playback job');
+select is(pg_temp.claimed(pg_temp.claim_only('sync_playback', 'asK2'), 'sync_playback', 'asK2')->>'playback_wanted', 'false', 'which revokes: the last change was a removal');
+select is(pg_temp.finish('sync_playback', 'asK2', 'done', '{"outcome": "revoked", "revoked": ["pbK2"]}'), 'done', 'revoked');
+select is(jsonb_array_length(pg_temp.claim_only('delete_asset', 'asK2')), 0, 'the deletion is not due');
+select is((pg_temp.job('delete_asset', 'asK2')).not_before, now() + interval '30 days', '30 days from the second removal, not the first (40 days ago)');
+set local role authenticated;
+select pg_temp.act('b7777777-7777-7777-7777-777777777777');
+select lives_ok($$ select public.request_review((select id from public.moderation_actions where target_id = 'b7000000-0000-0000-0000-000000000002' and reason = 'Spam again.')) $$, 'Kim requests a review');
+reset role;
+select is((select (e->>'video_restorable')::boolean from jsonb_array_elements(public.mod_review_queue()) e where e->'action'->>'target_id' = 'b7000000-0000-0000-0000-000000000002'), true, 'the review queue shows the video can still be restored');
+select is(public.mux_asset_hold('asK2', 'upK2'), 'infinity'::timestamptz, 'and the review holds the asset');
+
+-- A review after the asset was permanently deleted: the reversal is refused, clearly.
+select lives_ok($$ select public.mod_remove_video('b7000000-0000-0000-0000-000000000005', 'Spam.', 'nemat') $$, 'K5 is removed');
+set local role authenticated;
+select pg_temp.act('b7777777-7777-7777-7777-777777777777');
+select lives_ok($$ select public.request_review((select id from public.moderation_actions where target_id = 'b7000000-0000-0000-0000-000000000005')) $$, 'Kim requests a review');
+reset role;
+insert into public.mux_cleanup_jobs (action, reason, status, dedupe_key, asset_id, upload_id, finished_at, result)
+values ('delete_asset', 'moderation_removed', 'done', 'done:asK5', 'asK5', 'upK5', now(), '{"outcome": "deleted"}');
+select is((select (e->>'video_restorable')::boolean from jsonb_array_elements(public.mod_review_queue()) e where e->'action'->>'target_id' = 'b7000000-0000-0000-0000-000000000005'), false, 'once its asset is deleted the queue says it cannot be restored');
+select is(pg_temp.err($$ select public.mod_decide_review((select id from public.moderation_actions where target_id = 'b7000000-0000-0000-0000-000000000005'), 'reversed', 'nemat') $$), 'asset_deleted', 'reversing it is refused');
+select is((select outcome from public.review_requests where action_id = (select id from public.moderation_actions where target_id = 'b7000000-0000-0000-0000-000000000005')), null, 'and the review stays pending for the moderator to decide');
+
+-- Recovery and a new deletion at the same time: a restore running when the account is deleted again.
+set local role authenticated;
+select pg_temp.act('b7777777-7777-7777-7777-777777777777');
+select lives_ok($$ select public.delete_account() $$, 'Kim deletes her account');
+reset role;
+select is(pg_temp.claimed(pg_temp.claim_only('sync_playback', 'asK4'), 'sync_playback', 'asK4')->>'playback_wanted', 'false', 'K4 is revoked');
+select is(pg_temp.finish('sync_playback', 'asK4', 'done', '{"outcome": "revoked", "revoked": ["pbK4"]}'), 'done', 'at Mux');
+set local role authenticated;
+select pg_temp.act('b7777777-7777-7777-7777-777777777777');
+select is((public.get_onboarding_state())->>'has_profile', 'true', 'she signs back in');
+reset role;
+select is(pg_temp.claimed(pg_temp.claim_only('sync_playback', 'asK4'), 'sync_playback', 'asK4')->>'playback_wanted', 'true', 'the restore is leased');
+set local role authenticated;
+select pg_temp.act('b7777777-7777-7777-7777-777777777777');
+select lives_ok($$ select public.delete_account() $$, 'and while it runs she deletes her account again');
+reset role;
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id = 'asK4' and status = 'pending'), 1, 'a revoke is queued behind the running restore');
+select is((public.mux_cleanup_check((pg_temp.job('sync_playback', 'asK4')).id, (select lease_id from public.mux_cleanup_jobs where asset_id = 'asK4' and status = 'running')))->>'wanted', 'false', 'the worker''s check after creating the id says: no longer wanted');
+select is((select public.mux_cleanup_finish(id, lease_id, 'done', '{"outcome": "restored", "playback_id": "pbK4new", "asset_status": "ready"}')->>'recorded' from public.mux_cleanup_jobs where asset_id = 'asK4' and status = 'running'), 'false', 'a restore finished anyway is not recorded');
+select is((select mux_playback_id from public.responses where id = 'b7000000-0000-0000-0000-000000000004'), null, 'K4 has no playback id');
+select is((public.web_video('b7000000-0000-0000-0000-000000000004'))->>'status', 'unavailable', 'and is not shown');
+select is(pg_temp.claimed(pg_temp.claim_only('sync_playback', 'asK4'), 'sync_playback', 'asK4')->>'playback_wanted', 'false', 'the queued revoke then removes any id at Mux');
+
+-- Duplicates: the same deletion queued twice is one job.
+select public.mux_cleanup_enqueue('delete_asset', 'orphan', 'asDup', 'upDup', null, 'a1111111-1111-1111-1111-111111111111');
+select public.mux_cleanup_enqueue('delete_asset', 'sweep', 'asDup', 'upDup', null, 'a1111111-1111-1111-1111-111111111111', now() + interval '1 day');
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id = 'asDup'), 1, 'one job');
+select is((pg_temp.job('delete_asset', 'asDup')).not_before, now() + interval '1 day', 'keeping the later time (a deletion is never brought forward)');
+
+-- Retention of the job log: finished jobs for 30 days; failures and review items until a person acts.
+update public.mux_cleanup_jobs set finished_at = now() - interval '31 days' where status in ('done', 'skipped', 'failed') or status = 'review';
+create temp table unresolved as select count(*)::int as n from public.mux_cleanup_jobs where status in ('failed', 'review');
+select cmp_ok(public.prune_mux_cleanup_jobs(), '>', 0, 'done and skipped jobs older than 30 days are deleted');
+select is((select count(*)::int from public.mux_cleanup_jobs where status in ('done', 'skipped')), 0, 'all of them');
+select is((select count(*)::int from public.mux_cleanup_jobs where status in ('failed', 'review')), (select n from unresolved), 'failed and review jobs are kept, however old');
+select cmp_ok((select n from unresolved), '>', 0, '(there are some)');
 
 -- ===========================================================================
 -- 9. The founder's video

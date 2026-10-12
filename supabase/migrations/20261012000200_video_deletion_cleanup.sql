@@ -59,7 +59,7 @@ create table public.mux_cleanup_jobs (
   updated_at timestamptz not null default now(),
   finished_at timestamptz,
   constraint mux_cleanup_jobs_target check (case action when 'cancel_upload' then upload_id is not null else asset_id is not null end),
-  constraint mux_cleanup_jobs_sync_response check (action <> 'sync_playback' or response_id is not null),
+  constraint mux_cleanup_jobs_sync_response check (action <> 'sync_playback' or response_id is not null or status = 'done'),
   constraint mux_cleanup_jobs_owner check (owner_id is not null or status in ('done', 'review')),
   constraint mux_cleanup_jobs_lease check ((status = 'running') = (lease_id is not null and locked_until is not null))
 );
@@ -72,6 +72,23 @@ create index mux_cleanup_jobs_asset_idx on public.mux_cleanup_jobs (asset_id);
 create trigger mux_cleanup_jobs_updated_at before update on public.mux_cleanup_jobs for each row execute function public.set_updated_at();
 alter table public.mux_cleanup_jobs enable row level security;
 revoke all on table public.mux_cleanup_jobs from anon, authenticated;
+
+-- The switch for the worker, off until the team turns it on (security stage 3 rollout):
+--   off      run_mux_cleanup calls nothing and no job is leased; jobs wait
+--   dry_run  the worker reads Mux and records what it would do, and changes nothing at Mux
+--   live     the worker acts
+-- The function also needs MUX_CLEANUP_MODE=live in its own environment to act: the stricter of
+-- the two applies, and an unset variable means dry_run.
+create table public.mux_cleanup_settings (
+  id boolean primary key default true check (id),
+  mode text not null default 'off' check (mode in ('off', 'dry_run', 'live')),
+  changed_at timestamptz not null default now(),
+  changed_by text not null default 'migration'
+);
+comment on table public.mux_cleanup_settings is 'One row: whether the Mux clean-up worker is off, in dry run, or live. Off after the migration.';
+insert into public.mux_cleanup_settings default values;
+alter table public.mux_cleanup_settings enable row level security;
+revoke all on table public.mux_cleanup_settings from anon, authenticated;
 
 -- Accounts the purge could not remove, and why. The purge retries them every day; the row goes
 -- once the account is purged.
@@ -104,10 +121,14 @@ alter table public.comments drop constraint comments_body_check;
 alter table public.comments add constraint comments_body_check check (body is null or char_length(btrim(body)) between 1 and 300);
 alter table public.comments add constraint comments_author_or_tombstone check ((author_id is not null and body is not null) or deleted_at is not null);
 
--- Moderation records outlive the account, without it: a purge anonymises them and
+-- Moderation records outlive the account, without it: a purge anonymises them (no account,
+-- target, moderator, reason or note: only what was done, to what kind of thing, and when) and
 -- prune_moderation_records deletes them 90 days later.
 alter table public.moderation_actions alter column account_id drop not null;
+alter table public.moderation_actions alter column moderator drop not null;
+alter table public.moderation_actions alter column reason drop not null;
 alter table public.moderation_actions add column anonymized_at timestamptz;
+alter table public.moderation_actions add constraint moderation_actions_named_unless_anonymized check ((moderator is not null and reason is not null) or anonymized_at is not null);
 alter table public.moderation_actions drop constraint moderation_actions_account_id_fkey;
 alter table public.moderation_actions add constraint moderation_actions_account_id_fkey foreign key (account_id) references public.accounts (id) on delete set null;
 alter table public.review_requests alter column account_id drop not null;
@@ -118,7 +139,7 @@ alter table public.reports alter column target_id drop not null;
 alter table public.reports add column anonymized_at timestamptz;
 alter table public.reports drop constraint reports_reporter_id_fkey;
 alter table public.reports add constraint reports_reporter_id_fkey foreign key (reporter_id) references public.accounts (id) on delete set null;
-comment on column public.moderation_actions.anonymized_at is 'Set when the account was purged: account, target and note removed; deleted 90 days later.';
+comment on column public.moderation_actions.anonymized_at is 'Set when the account was purged: account, target, moderator, reason and note removed; deleted 90 days later.';
 comment on column public.reports.anonymized_at is 'Set when the reporter or the reported account was purged; closed reports are deleted 90 days later.';
 
 -- ---------------------------------------------------------------------------
@@ -436,23 +457,37 @@ begin
 end;
 $$;
 
--- A removed video can be restored while its asset is kept. Once the asset is deleted, or while
--- the worker is deleting it, the restore is refused (video_unavailable).
+-- Whether a removed video can still be restored: its asset is kept, and no deletion of it is
+-- running or done. Shown to moderators in the review queue.
+create or replace function public.mux_video_restorable(r public.responses)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select r.status = 'removed'
+     and (r.mux_asset_id is not null or r.mux_upload_id is not null)
+     and not exists (select 1 from public.mux_cleanup_jobs j
+                      where j.action = 'delete_asset' and j.status in ('running', 'done')
+                        and (j.asset_id = r.mux_asset_id or j.upload_id = r.mux_upload_id));
+$$;
+
+-- A removed video can be restored while its asset is kept. Once the asset is permanently deleted
+-- the restore is refused (asset_deleted), and while the worker is deleting it too
+-- (asset_being_deleted): nothing can bring the video back.
 create or replace function public.mod_restore_video(p_video uuid, p_reason text, p_moderator text, p_note text default null)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   r public.responses%rowtype;
   v_action uuid;
 begin
-  -- The row lock orders this with mux_cleanup_claim, which locks the same row before it decides
-  -- whether the asset may be deleted.
+  -- The row lock orders this with mux_cleanup_claim and mux_cleanup_check, which lock the same
+  -- row before they decide whether the asset may be deleted.
   select * into r from public.responses where id = p_video and status = 'removed' for update;
   if not found then raise exception 'video_not_found' using errcode = 'P0001'; end if;
-  if (r.mux_asset_id is null and r.mux_upload_id is null)
-     or exists (select 1 from public.mux_cleanup_jobs j
-                 where j.action = 'delete_asset' and j.status in ('running', 'done')
-                   and (j.asset_id = r.mux_asset_id or j.upload_id = r.mux_upload_id)) then
-    raise exception 'video_unavailable' using errcode = 'P0001';
+  if exists (select 1 from public.mux_cleanup_jobs j
+              where j.action = 'delete_asset' and j.status = 'running'
+                and (j.asset_id = r.mux_asset_id or j.upload_id = r.mux_upload_id)) then
+    raise exception 'asset_being_deleted' using errcode = 'P0001';
+  end if;
+  if not public.mux_video_restorable(r) then
+    raise exception 'asset_deleted' using errcode = 'P0001';
   end if;
   v_action := public.mod_log(p_moderator, r.author_id, 'restore', 'video', r.id, p_reason, p_note, null);
   -- A video removed before Mux finished it goes back to processing and goes live when it is ready.
@@ -463,7 +498,8 @@ end;
 $$;
 
 -- Unchanged from phase 5, except that an upheld removal starts its 30-day retention from the
--- decision.
+-- decision, and that reversing a removal whose asset is gone is refused (asset_deleted, from
+-- mod_restore_video): the moderator sees video_restorable in the queue before deciding.
 create or replace function public.mod_decide_review(p_action uuid, p_outcome text, p_moderator text, p_note text default null)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
@@ -487,6 +523,20 @@ begin
   end if;
   perform public.mod_notify(m.account_id, 'review_outcome', m.id);
 end;
+$$;
+
+-- Unchanged from phase 5, except that a removed video's review says whether it can still be
+-- restored (video_restorable: false once its asset is permanently deleted).
+create or replace function public.mod_review_queue(p_limit integer default 100)
+returns jsonb language sql security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'action_id', rr.action_id, 'account', public.profile_card(rr.account_id), 'requested_at', rr.created_at,
+    'action', (select jsonb_build_object('kind', m.kind, 'target_kind', m.target_kind, 'target_id', m.target_id, 'reason', m.reason, 'note', m.note, 'moderator', m.moderator, 'created_at', m.created_at, 'restrict_until', m.restrict_until)
+                 from public.moderation_actions m where m.id = rr.action_id),
+    'video_restorable', (select public.mux_video_restorable(v) from public.moderation_actions m join public.responses v on v.id = m.target_id
+                          where m.id = rr.action_id and m.kind = 'remove' and m.target_kind = 'video')
+  ) order by rr.created_at), '[]'::jsonb)
+  from (select * from public.review_requests where outcome is null order by created_at limit greatest(1, least(p_limit, 500))) rr;
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -546,15 +596,39 @@ $$;
 -- The worker's side (service role only; supabase/functions/mux-cleanup)
 -- ---------------------------------------------------------------------------
 
--- Leases up to p_limit due jobs. One claimer at a time (an advisory lock), and never two jobs for
--- one asset at once, so a revoke and a restore of the same video cannot overlap. A deletion is
--- re-checked here, under the locks of every row that uses the asset: if the asset is in use or
--- its moderation case is open the job is skipped; if a retention applies it is rescheduled for
--- its end (no attempt used). Jobs whose worker died (lease expired) go back to the queue.
+create or replace function public.mux_cleanup_mode()
+returns text language sql stable security definer set search_path = '' as $$
+  select coalesce((select mode from public.mux_cleanup_settings), 'off');
+$$;
+
+-- The team's switch (service role, SQL editor): off, dry_run or live, with who changed it.
+-- Going live puts the jobs a dry run set aside back in the queue at once.
+create or replace function public.mux_cleanup_set_mode(p_mode text, p_by text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  if p_mode is null or p_mode not in ('off', 'dry_run', 'live') then raise exception 'invalid_mode' using errcode = 'P0001'; end if;
+  if p_by is null or btrim(p_by) = '' then raise exception 'changed_by_required' using errcode = 'P0001'; end if;
+  -- (A where clause: the API's safeupdate refuses an update without one.)
+  update public.mux_cleanup_settings set mode = p_mode, changed_at = now(), changed_by = p_by where id;
+  if p_mode = 'live' then
+    update public.mux_cleanup_jobs set not_before = now() where status = 'pending' and (result->>'dry_run') = 'true' and not_before > now();
+  end if;
+  return jsonb_build_object('mode', p_mode, 'changed_by', p_by);
+end;
+$$;
+
+-- Leases up to p_limit due jobs: {"mode", "jobs": [...]}. Nothing is leased while the switch is
+-- off. One claimer at a time (an advisory lock), and never two jobs for one asset at once, so a
+-- revoke and a restore of the same video cannot overlap. A deletion is checked here, under the
+-- locks of every row that uses the asset: if the asset is in use or its moderation case is open
+-- the job is skipped; if a retention applies it is rescheduled for its end (no attempt used). The
+-- worker checks again (mux_cleanup_check) immediately before it changes anything at Mux. Jobs
+-- whose worker died (lease expired) go back to the queue.
 create or replace function public.mux_cleanup_claim(p_limit integer default 10, p_lease_seconds integer default 120)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   j public.mux_cleanup_jobs%rowtype;
+  v_mode text;
   v_hold timestamptz;
   v_out jsonb := '[]'::jsonb;
   v_assets text[] := '{}';
@@ -568,6 +642,8 @@ begin
          finished_at = case when attempts >= max_attempts then now() end,
          last_error = 'lease_expired', lease_id = null, locked_until = null
    where status = 'running' and locked_until < now();
+  v_mode := public.mux_cleanup_mode();
+  if v_mode = 'off' then return jsonb_build_object('mode', v_mode, 'jobs', v_out); end if;
   for j in select * from public.mux_cleanup_jobs
             where status = 'pending' and not_before <= now()
             order by not_before, created_at
@@ -604,7 +680,34 @@ begin
     if j.asset_id is not null then v_assets := v_assets || j.asset_id; end if;
     if j.action = 'cancel_upload' then v_uploads := v_uploads || j.upload_id; end if;
   end loop;
-  return v_out;
+  return jsonb_build_object('mode', v_mode, 'jobs', v_out);
+end;
+$$;
+
+-- The worker calls this immediately before every change at Mux, so it acts on the database as it
+-- is now, not as it was when the job was leased: {"ok"} (the lease is still this worker's; it is
+-- extended), {"mode"} (the switch now), and for a deletion {"hold"} (as mux_asset_hold: null to
+-- go ahead), for a playback job {"wanted"}, for a cancellation {"in_use"} (a video that could
+-- still go live uses the upload).
+create or replace function public.mux_cleanup_check(p_job uuid, p_lease uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  j public.mux_cleanup_jobs%rowtype;
+begin
+  select * into j from public.mux_cleanup_jobs where id = p_job and status = 'running' and lease_id = p_lease for update;
+  if not found then return jsonb_build_object('ok', false); end if;
+  update public.mux_cleanup_jobs set locked_until = greatest(locked_until, now() + interval '120 seconds') where id = j.id;
+  if j.action = 'delete_asset' then
+    perform 1 from public.responses x
+     where x.mux_asset_id = j.asset_id or (j.upload_id is not null and x.mux_upload_id = j.upload_id)
+     for update;
+    return jsonb_build_object('ok', true, 'mode', public.mux_cleanup_mode(), 'hold', public.mux_asset_hold(j.asset_id, j.upload_id));
+  elsif j.action = 'sync_playback' then
+    perform 1 from public.responses x where x.id = j.response_id for update;
+    return jsonb_build_object('ok', true, 'mode', public.mux_cleanup_mode(), 'wanted', public.mux_playback_wanted(j.response_id, j.asset_id));
+  end if;
+  return jsonb_build_object('ok', true, 'mode', public.mux_cleanup_mode(),
+    'in_use', exists (select 1 from public.responses x where x.mux_upload_id = j.upload_id and x.status in ('live', 'processing', 'draft')));
 end;
 $$;
 
@@ -614,12 +717,19 @@ $$;
 --                sync_playback: {"revoked": [...]} the asset has no public playback id left
 --                (those listed were deleted now), so the video forgets its own;
 --                or {"playback_id": "...", "asset_status": "..."} the public playback id
---                the asset now has, recorded on the video if it still uses the asset.
+--                the asset now has, recorded only if the video should still play (re-checked
+--                here under its row lock; otherwise the job queued by the change revokes it).
 --   found_asset  cancel_upload: Mux had already made an asset ({"asset_id"}); a deletion is queued.
 --   retry        a temporary failure ({"error"}): back to pending after 1, 2, 4 ... minutes
 --                (at most 6 hours), or failed once attempts are used up.
---   skipped      nothing to do, or the ownership check failed ({"outcome", "detail"}).
---   failed       impossible to do (for example the asset to restore no longer exists).
+--   release      nothing was done (a dry run, or a retention found at the last check): back to
+--                pending at {"not_before"} (an hour by default), the attempt not counted, the
+--                plan kept in result.
+--   skipped      nothing to do (for example the asset must be kept).
+--   failed       not done and needs a person: the ownership check failed, or the asset to
+--                restore is gone. Never discarded automatically.
+-- A done job keeps only its action, reason, Mux ids, times and {"outcome"}; it is deleted after
+-- 30 days (prune_mux_cleanup_jobs). Failed and review jobs are never deleted automatically.
 create or replace function public.mux_cleanup_finish(p_job uuid, p_lease uuid, p_outcome text, p_detail jsonb default '{}'::jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -627,8 +737,9 @@ declare
   v_detail jsonb := coalesce(p_detail, '{}'::jsonb);
   v_playback text := v_detail->>'playback_id';
   v_ready boolean := (v_detail->>'asset_status') = 'ready';
+  v_recorded boolean;
 begin
-  if p_outcome not in ('done', 'found_asset', 'retry', 'skipped', 'failed') then raise exception 'invalid_outcome' using errcode = 'P0001'; end if;
+  if p_outcome not in ('done', 'found_asset', 'retry', 'release', 'skipped', 'failed') then raise exception 'invalid_outcome' using errcode = 'P0001'; end if;
   select * into j from public.mux_cleanup_jobs where id = p_job and status = 'running' and lease_id = p_lease for update;
   if not found then return jsonb_build_object('status', 'stale'); end if;
 
@@ -638,6 +749,14 @@ begin
            finished_at = case when attempts >= max_attempts then now() end,
            not_before = now() + least(interval '6 hours', interval '1 minute' * power(2, greatest(attempts - 1, 0))),
            last_error = left(coalesce(v_detail->>'error', 'error'), 500), lease_id = null, locked_until = null
+     where id = j.id returning * into j;
+    return jsonb_build_object('status', j.status, 'not_before', j.not_before);
+  end if;
+  if p_outcome = 'release' then
+    update public.mux_cleanup_jobs
+       set status = 'pending', attempts = greatest(attempts - 1, 0), lease_id = null, locked_until = null, last_error = null,
+           not_before = greatest(now(), coalesce((v_detail->>'not_before')::timestamptz, now() + interval '1 hour')),
+           result = v_detail
      where id = j.id returning * into j;
     return jsonb_build_object('status', j.status, 'not_before', j.not_before);
   end if;
@@ -652,12 +771,16 @@ begin
     end if;
     if v_playback is not null then
       if v_playback !~ '^[A-Za-z0-9]{1,128}$' then raise exception 'invalid_playback_id' using errcode = 'P0001'; end if;
-      -- A draft published while its playback was off became processing; it goes live now.
-      update public.responses
-         set mux_playback_id = v_playback,
-             status = case when status = 'processing' and v_ready then 'live' else status end,
-             live_at = case when status = 'processing' and v_ready then coalesce(live_at, now()) else live_at end
-       where id = j.response_id and mux_asset_id = j.asset_id and status in ('live', 'draft', 'processing');
+      perform 1 from public.responses where id = j.response_id for update;
+      v_recorded := public.mux_playback_wanted(j.response_id, j.asset_id);
+      if v_recorded then
+        -- A draft published while its playback was off became processing; it goes live now.
+        update public.responses
+           set mux_playback_id = v_playback,
+               status = case when status = 'processing' and v_ready then 'live' else status end,
+               live_at = case when status = 'processing' and v_ready then coalesce(live_at, now()) else live_at end
+         where id = j.response_id;
+      end if;
     end if;
   elsif p_outcome = 'found_asset' then
     if j.action <> 'cancel_upload' then raise exception 'invalid_outcome' using errcode = 'P0001'; end if;
@@ -666,11 +789,15 @@ begin
 
   update public.mux_cleanup_jobs
      set status = case when p_outcome in ('done', 'found_asset') then 'done' else p_outcome end,
-         finished_at = now(), result = v_detail, lease_id = null, locked_until = null,
+         finished_at = now(), lease_id = null, locked_until = null,
+         result = case when p_outcome in ('done', 'found_asset')
+                       then jsonb_build_object('outcome', coalesce(v_detail->>'outcome', p_outcome)) || case when v_recorded is false then '{"recorded": false}'::jsonb else '{}'::jsonb end
+                       else v_detail end,
          last_error = case when p_outcome in ('skipped', 'failed') then left(v_detail->>'detail', 500) end,
-         owner_id = case when p_outcome in ('done', 'found_asset') then null else owner_id end
+         owner_id = case when p_outcome in ('done', 'found_asset') then null else owner_id end,
+         response_id = case when p_outcome in ('done', 'found_asset') then null else response_id end
    where id = j.id returning * into j;
-  return jsonb_build_object('status', j.status);
+  return jsonb_build_object('status', j.status) || case when v_recorded is false then '{"recorded": false}'::jsonb else '{}'::jsonb end;
 end;
 $$;
 
@@ -682,7 +809,8 @@ $$;
 --   used by no video, from an upload in the ledger minted for the account its passthrough names:
 --     queued for deletion as an orphan;
 --   anything else (ownership unproven): recorded for review and never acted on automatically.
-create or replace function public.mux_cleanup_sweep(p_assets jsonb, p_min_age_seconds integer default 86400)
+-- With p_dry_run nothing is queued or recorded; the answer lists what would be.
+create or replace function public.mux_cleanup_sweep(p_assets jsonb, p_min_age_seconds integer default 86400, p_dry_run boolean default false)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   a jsonb;
@@ -694,9 +822,9 @@ declare
   r public.responses%rowtype;
   v_seen integer := 0;
   v_in_use integer := 0;
-  v_queued integer := 0;
-  v_review integer := 0;
   v_young integer := 0;
+  v_queue text[] := '{}';
+  v_review text[] := '{}';
 begin
   if jsonb_typeof(p_assets) <> 'array' then raise exception 'invalid_assets' using errcode = 'P0001'; end if;
   for a in select * from jsonb_array_elements(p_assets) loop
@@ -722,23 +850,26 @@ begin
      where (x.mux_asset_id = v_id or (v_upload is not null and x.mux_upload_id = v_upload)) and x.status in ('deleted', 'removed') and x.author_id is not null
      limit 1;
     if found then
-      perform public.mux_cleanup_enqueue('delete_asset', 'sweep', v_id, v_upload, r.id, r.author_id);
-      v_queued := v_queued + 1;
+      if not p_dry_run then perform public.mux_cleanup_enqueue('delete_asset', 'sweep', v_id, v_upload, r.id, r.author_id); end if;
+      v_queue := v_queue || v_id;
       continue;
     end if;
     select u.account_id into v_owner from public.video_uploads u where v_upload is not null and u.upload_id = v_upload;
     if v_owner is not null and v_pass = v_owner::text then
-      perform public.mux_cleanup_enqueue('delete_asset', 'orphan', v_id, v_upload, null, v_owner);
-      v_queued := v_queued + 1;
+      if not p_dry_run then perform public.mux_cleanup_enqueue('delete_asset', 'orphan', v_id, v_upload, null, v_owner); end if;
+      v_queue := v_queue || v_id;
     else
-      insert into public.mux_cleanup_jobs (action, reason, status, dedupe_key, asset_id, upload_id, result)
-      values ('delete_asset', 'orphan', 'review', 'review:' || v_id, v_id, v_upload,
-              jsonb_build_object('outcome', 'unverified_owner', 'detail', 'no ledger upload minted for this asset''s passthrough', 'created_at', v_created))
-      on conflict (dedupe_key) where status in ('pending', 'review') do nothing;
-      v_review := v_review + 1;
+      if not p_dry_run then
+        insert into public.mux_cleanup_jobs (action, reason, status, dedupe_key, asset_id, upload_id, result)
+        values ('delete_asset', 'orphan', 'review', 'review:' || v_id, v_id, v_upload,
+                jsonb_build_object('outcome', 'unverified_owner', 'detail', 'no ledger upload minted for this asset''s passthrough', 'created_at', v_created))
+        on conflict (dedupe_key) where status in ('pending', 'review') do nothing;
+      end if;
+      v_review := v_review || v_id;
     end if;
   end loop;
-  return jsonb_build_object('seen', v_seen, 'young', v_young, 'in_use', v_in_use, 'queued', v_queued, 'review', v_review);
+  return jsonb_build_object('seen', v_seen, 'young', v_young, 'in_use', v_in_use, 'queued', cardinality(v_queue), 'review', cardinality(v_review))
+      || case when p_dry_run then jsonb_build_object('dry_run', true, 'would_queue', to_jsonb(v_queue), 'would_review', to_jsonb(v_review)) else '{}'::jsonb end;
 end;
 $$;
 
@@ -746,10 +877,13 @@ $$;
 create or replace function public.mux_cleanup_overview()
 returns jsonb language sql stable security definer set search_path = '' as $$
   select jsonb_build_object(
+    'mode', public.mux_cleanup_mode(),
     'counts', coalesce((select jsonb_object_agg(k, n) from (select status || ':' || action as k, count(*) as n from public.mux_cleanup_jobs group by 1) c), '{}'::jsonb),
     'due', (select count(*) from public.mux_cleanup_jobs where status = 'pending' and not_before <= now()),
     'oldest_due_seconds', (select floor(extract(epoch from now() - min(not_before))) from public.mux_cleanup_jobs where status = 'pending' and not_before <= now()),
     'stuck', (select count(*) from public.mux_cleanup_jobs where status = 'running' and locked_until < now()),
+    'dry_run_planned', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'action', action, 'reason', reason, 'asset_id', asset_id, 'upload_id', upload_id, 'plan', result) order by updated_at desc)
+                                   from (select * from public.mux_cleanup_jobs where status = 'pending' and (result->>'dry_run') = 'true' order by updated_at desc limit 50) d), '[]'::jsonb),
     'failed', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'action', action, 'reason', reason, 'asset_id', asset_id, 'upload_id', upload_id, 'attempts', attempts, 'last_error', last_error, 'finished_at', finished_at) order by finished_at desc)
                           from (select * from public.mux_cleanup_jobs where status = 'failed' order by finished_at desc limit 50) f), '[]'::jsonb),
     'review', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'asset_id', asset_id, 'upload_id', upload_id, 'created_at', created_at, 'result', result) order by created_at)
@@ -772,9 +906,22 @@ exception when unique_violation then
 end;
 $$;
 
+-- Done and skipped jobs are kept 30 days, then deleted. Failed and review jobs are never deleted
+-- automatically: a person resolves them.
+create or replace function public.prune_mux_cleanup_jobs()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare
+  n integer;
+begin
+  delete from public.mux_cleanup_jobs where status in ('done', 'skipped') and finished_at < now() - interval '30 days';
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
 -- pg_cron -> pg_net -> mux-cleanup, as for send-push: two Vault secrets (mux_cleanup_url,
--- mux_cleanup_key); the same key is the function's MUX_CLEANUP_KEY. Without them nothing is
--- called and jobs wait. 'drain' runs only when something is due.
+-- mux_cleanup_key); the same key is the function's MUX_CLEANUP_KEY. Nothing is called while the
+-- switch is off or the secrets are missing; 'drain' runs only when something is due.
 create or replace function public.run_mux_cleanup(p_mode text default 'drain')
 returns void language plpgsql security definer set search_path = '' as $$
 declare
@@ -782,6 +929,7 @@ declare
   v_key text;
 begin
   if p_mode not in ('drain', 'sweep') then raise exception 'invalid_mode' using errcode = 'P0001'; end if;
+  if public.mux_cleanup_mode() = 'off' then return; end if;
   select decrypted_secret into v_url from vault.decrypted_secrets where name = 'mux_cleanup_url';
   select decrypted_secret into v_key from vault.decrypted_secrets where name = 'mux_cleanup_key';
   if v_url is null or v_key is null then return; end if;
@@ -807,9 +955,11 @@ $$;
 --  2. Its videos that other people's video replies point at, directly or through its own
 --     replies, become tombstones; the comments on them go, as with any deleted response.
 --  3. Its comments that other people's comments reply to become deleted-parent tombstones.
---  4. Moderation records: actions and decided reviews lose the account, target and note; pending
---     reviews close; reports it made lose the reporter; reports about it or its content close and
---     lose the target. All are deleted 90 days later (prune_moderation_records).
+--  4. Moderation records keep only what was done, to what kind of thing, and when: actions lose
+--     the account, target, moderator, reason (free text) and note; pending reviews close and
+--     decided ones lose the account and who decided; reports it made lose the reporter; reports
+--     about it or its content close and lose the target, the reporter and who closed them. All
+--     are deleted 90 days later (prune_moderation_records).
 --  5. The Auth user is deleted; the account, profile and everything else cascades.
 create or replace function public.purge_account(p_account uuid)
 returns boolean language plpgsql security definer set search_path = '' as $$
@@ -843,7 +993,7 @@ begin
      where p.author_id = p_account
   )
   select coalesce(array_agg(id), '{}') into v_videos from kept;
-  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = coalesce(closed_by, 'account_purged'), target_id = null, anonymized_at = v_now
+  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = 'account_purged', target_id = null, reporter_id = null, anonymized_at = v_now
    where target_kind = 'video' and target_id in (select id from public.responses where author_id = p_account);
   delete from public.comments where response_id = any (v_videos);
   delete from public.likes where target_kind = 'video' and target_id = any (v_videos);
@@ -865,18 +1015,18 @@ begin
      where p.author_id = p_account
   )
   select coalesce(array_agg(id), '{}') into v_comments from kept;
-  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = coalesce(closed_by, 'account_purged'), target_id = null, anonymized_at = v_now
+  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = 'account_purged', target_id = null, reporter_id = null, anonymized_at = v_now
    where target_kind = 'comment' and target_id in (select id from public.comments where author_id = p_account);
   delete from public.likes where target_kind = 'comment' and target_id = any (v_comments);
   update public.comments set author_id = null, body = null, deleted_at = coalesce(deleted_at, v_now), removed_action_id = null
    where id = any (v_comments);
 
   -- 4.
-  update public.moderation_actions set account_id = null, target_id = null, note = null, anonymized_at = v_now where account_id = p_account;
+  update public.moderation_actions set account_id = null, target_id = null, moderator = null, reason = null, note = null, anonymized_at = v_now where account_id = p_account;
   delete from public.review_requests where account_id = p_account and decided_at is null;
-  update public.review_requests set account_id = null where account_id = p_account;
+  update public.review_requests set account_id = null, decided_by = null where account_id = p_account;
   update public.reports set reporter_id = null, anonymized_at = coalesce(anonymized_at, v_now) where reporter_id = p_account;
-  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = coalesce(closed_by, 'account_purged'), target_id = null, anonymized_at = v_now
+  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = 'account_purged', target_id = null, reporter_id = null, anonymized_at = v_now
    where target_kind = 'profile' and target_id = p_account;
 
   -- 5.
@@ -945,6 +1095,7 @@ select public.mux_cleanup_enqueue('sync_playback', 'account_deleted', r.mux_asse
 select cron.schedule('mux-cleanup', '* * * * *', $$select public.run_mux_cleanup('drain')$$);
 select cron.schedule('mux-sweep', '45 4 * * *', $$select public.run_mux_cleanup('sweep')$$);
 select cron.schedule('prune-moderation-records', '30 3 * * *', $$select public.prune_moderation_records()$$);
+select cron.schedule('prune-mux-cleanup-jobs', '40 3 * * *', $$select public.prune_mux_cleanup_jobs()$$);
 
 revoke execute on function public.mux_cleanup_enqueue(text, text, text, text, uuid, uuid, timestamptz) from public, anon, authenticated, service_role;
 revoke execute on function public.mux_forget_video(uuid, text, text, uuid, text) from public, anon, authenticated, service_role;
@@ -953,9 +1104,14 @@ revoke execute on function public.mux_asset_hold(text, text) from public, anon, 
 revoke execute on function public.mux_playback_wanted(uuid, text) from public, anon, authenticated, service_role;
 revoke execute on function public.mux_sync_account_playback(uuid, text) from public, anon, authenticated, service_role;
 revoke execute on function public.purge_account(uuid) from public, anon, authenticated, service_role;
+revoke execute on function public.mux_cleanup_mode() from public, anon, authenticated, service_role;
+revoke execute on function public.mux_video_restorable(public.responses) from public, anon, authenticated, service_role;
 revoke execute on function public.mux_cleanup_claim(integer, integer) from public, anon, authenticated;
 revoke execute on function public.mux_cleanup_finish(uuid, uuid, text, jsonb) from public, anon, authenticated;
-revoke execute on function public.mux_cleanup_sweep(jsonb, integer) from public, anon, authenticated;
+revoke execute on function public.mux_cleanup_sweep(jsonb, integer, boolean) from public, anon, authenticated;
+revoke execute on function public.mux_cleanup_check(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.mux_cleanup_set_mode(text, text) from public, anon, authenticated;
+revoke execute on function public.prune_mux_cleanup_jobs() from public, anon, authenticated;
 revoke execute on function public.mux_cleanup_overview() from public, anon, authenticated;
 revoke execute on function public.mux_cleanup_retry(uuid) from public, anon, authenticated;
 revoke execute on function public.run_mux_cleanup(text) from public, anon, authenticated;
@@ -963,9 +1119,11 @@ revoke execute on function public.purge_deleted_accounts() from public, anon, au
 revoke execute on function public.prune_moderation_records() from public, anon, authenticated;
 grant execute on function public.mux_cleanup_claim(integer, integer) to service_role;
 grant execute on function public.mux_cleanup_finish(uuid, uuid, text, jsonb) to service_role;
-grant execute on function public.mux_cleanup_sweep(jsonb, integer) to service_role;
+grant execute on function public.mux_cleanup_sweep(jsonb, integer, boolean) to service_role;
+grant execute on function public.mux_cleanup_check(uuid, uuid) to service_role;
+grant execute on function public.mux_cleanup_set_mode(text, text) to service_role;
 grant execute on function public.mux_cleanup_overview() to service_role;
 grant execute on function public.mux_cleanup_retry(uuid) to service_role;
 -- Re-created above with create or replace: their grants are unchanged (members: delete_video,
 -- abandon_response, discard_draft, post_draft, retry_response_upload, delete_account,
--- get_onboarding_state; service role: mark_response_live; mod_*, video_visible: internal).
+-- get_onboarding_state; service role: mark_response_live, mod_*; video_visible: internal).
