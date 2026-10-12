@@ -1068,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run and a canary dry run against real Mux 12 Oct, Nemat approved each; clean-up off)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -1552,7 +1552,96 @@ recorded, posted and deleted on the iPhone (founder Release build from `ede68ed`
   the next scheduled run deletes the asset within a minute. The job is the only one in the queue;
   check again first, as anything queued meanwhile would run too.
 
-**Staged deployment plan** (each stage needs Nemat's separate go-ahead; steps 1 and 2 done 12 Oct, step 3's first verification done 12 Oct with the switch back to `off`, step 4A (canary dry run) done 12 Oct with the switch back to `off`, real deletion not approved):
+**First real Mux deletion (step 4B), 12 Oct (UTC; approved by Nemat: one irreversible deletion,
+job `45c34fbc-ef5c-46aa-9efa-d999bf1a3984`, asset `M00202rDaKgn4p02DcDE1hFmBzl00Ru2T00evvf00W02mJt2RA`,
+reply `6f600f9e-3559-4911-9ebf-13d9d3df509d`; nothing else).** From `d7c99b5` (clean tree; this
+worktree's branch moved to it). Same read-only method as before (Management API, `READ ONLY`
+transactions rolled back; Mux `GET`s with the Shortcut Beta token, and the spike token for the
+spike inventory). Only three writes were made: the function variable, the database switch with
+one drain, and both back. No secret value was printed or committed.
+
+- *Preflight (17:10:26 to 17:14:01):* 16 migrations, latest `20261012000200`; fingerprint 741 /
+  `8d15eb8ec1900b44deaa7c5e6ff7be9e`, line for line the step 4A record; switch `off` (17:00:12,
+  "step 4A canary dry run finished"); no `MUX_CLEANUP_MODE`. Queue: exactly one job, the canary,
+  `pending`, `delete_asset`, `author_deleted`, 0 attempts, asset, upload (`iEkMuSYo…9s`), reply and
+  owner (the founder) as approved, its dry-run plan `delete`; 0 executable others (no deletion,
+  cancellation, playback or orphan job of any status), 0 failed, review or purge failures. Reply
+  `deleted` (16:53:19), author the founder, its asset and upload the job's, no `removed_action_id`;
+  the only row using that asset or upload; hold `null`; 0 reports, moderation actions, review
+  requests; ledger `iEkMuSYo` `claimed` by the founder for the reply. Founder response `live`,
+  `md5(row_to_json)` `c9918f8241a2c45eefb106b5d0ec0a8f`, ledger `md5(u::text)`
+  `9726bb8fdf8d9eb0cb759d13ce59c8b6`, no job touching its asset, upload or row. Every table hash,
+  Vault (2 secrets, 15:49:18), pg_net (queue 0, responses 2), the 7 cron jobs (0 failures since
+  step 4A), the 11 secrets (names, digests and times) and the 5 functions (versions and bundles)
+  identical to the end of step 4A; deployed `mux-cleanup` (with `_shared/mux.ts`,
+  `_shared/supabase.ts`) byte-identical to the branch; `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` match
+  `.env.mux-hosted` and `MUX_CLEANUP_KEY` matches `.env.mux-cleanup` by digest. Mux, Shortcut Beta:
+  2 assets, the canary (`ready`, 6.01 s, upload id the job's, passthrough the founder, one public
+  playback id `wHPWZ…KM`, HLS 200) and the founder's (`L7KxG29…UVc`, `ready`, 9.91 s, public
+  playback `8UqSC…6JU`, HLS 200); 3 uploads (the canary's and the founder's `asset_created`, the
+  unclaimed `Tm01xbKS…` `waiting`); 0 live streams. Spike environment: 7 assets, 25 uploads
+  (inventory hash recorded). The webhook ignores every event except `video.asset.ready`, so Mux's
+  deletion event cannot change the database.
+- *Function variable, 17:14:04 to 17:14:07:* `supabase secrets set MUX_CLEANUP_MODE=live`. Checked at
+  17:14:35: 12 secrets, `MUX_CLEANUP_MODE` digest = sha256(`live`) (17:14:05), the other 11
+  unchanged (digests and times); every function up one version with an unchanged bundle
+  (`auth-signin-method` v5, `mux-cleanup` v2, `mux-create-upload` v5, `mux-upload-status` v6,
+  `mux-webhook` v7); `mux-cleanup` downloaded again, byte-identical; database switch still `off`,
+  1 executable job, pg_net queue 0.
+- *Activation, one drain (17:16:03 to 17:16:25):* timed to start just after the 17:16:00 cron tick.
+  One transaction re-checked every precondition (switch `off`; exactly one `pending` or `running`
+  job and it is the canary with the approved fields; reply `deleted`; hold `null`; founder `live`;
+  no job touching the founder; pg_net queue empty; any difference would have raised and rolled
+  back), then `mux_cleanup_set_mode('live', 'Nemat: stage 3 step 4B canary deletion (Claude Code)')`
+  and one `select public.run_mux_cleanup('drain')`; committed at **17:16:06.016** (the job's
+  `not_before` set to that moment, one pg_net request queued). No manual sweep; no other drain.
+- *The worker's result:* pg_net response 3, **HTTP 200**, not timed out, no error, body
+  `{"ok":true,"mode":"live","claimed":1,"done":1,"found_asset":0,"retry":0,"release":0,"skipped":0,
+  "failed":0,"stale":0,"unrecorded":0}`. The worker leased the job (attempt 1), read the asset
+  (`GET`), passed the ownership check, asked the database again (`mux_cleanup_check`: switch
+  `live`, hold `null`) and sent `DELETE /video/v1/assets/M00202rD…RA`. **Mux answered with a 2xx**:
+  the worker records `deleted` only when the response is ok (a 404 would have been
+  `already_gone`, any other status a retry). The exact code (Mux documents 204) is not stored in
+  the database; it is only in the function's invocation log. Job finished **17:16:10.996**:
+  `done`, `{"outcome": "deleted"}`, 1 attempt, no error; owner and response cleared (the minimal
+  record kept 30 days).
+- *Switch off, 17:16:17.928* (`mux_cleanup_set_mode('off', 'Nemat: stage 3 step 4B canary deletion
+  finished (Claude Code)')`), straight after the answer. **The database switch was `live` for 11.9 s.**
+  That call's own `mode` column still read `live` (`mux_cleanup_mode()` is evaluated in the
+  statement's snapshot), so the script sent the same call again at 17:16:21.374, which is the
+  `changed_at` now recorded; harmless, the switch was already `off`.
+- *Function variable unset, 17:16:43 to 17:16:46* (`supabase secrets unset MUX_CLEANUP_MODE`): 11
+  secrets, identical to the preflight (names, digests, times); functions up one more version,
+  bundles unchanged (`auth-signin-method` v6, `mux-cleanup` v3, `mux-create-upload` v6,
+  `mux-upload-status` v7, `mux-webhook` v8, all `ACTIVE`, `verify_jwt` false). The variable was
+  `live` for about 2 min 40 s, of which the database switch allowed changes for the 11.9 s above.
+  **Both switches non-live from 17:16:46** (database `off` checked 17:16:52).
+- *Scheduler:* `mux-cleanup` ran at 17:16:00 (before the activation) and 17:17:00 and 17:18:00 (after
+  the switch went `off`), each 2 to 3 ms, succeeded, no request. The only drain was the controlled one.
+- *Mux after (17:17:52, `GET`):* Shortcut Beta **1 asset** (from 2), the founder's: `ready`, 9.91 s,
+  upload `ka5YEhFH…`, passthrough the founder, public playback `8UqSC…6JU`. `GET` of the canary
+  asset **404**. Canary HLS (`wHPWZ…KM.m3u8`) **404** (`no-cache, no-store`, CDN `MISS`), so no
+  cached copy was being served by then; founder HLS **200**. Uploads 3, unchanged: the canary's
+  upload object remains at Mux (`asset_created`, pointing at the deleted asset; Mux keeps upload
+  records), `Tm01xbKS…` `waiting` (times out 17:38:28; not a target), the founder's. 0 live streams.
+  Spike environment: 7 assets and 25 uploads, inventory hash identical to the preflight.
+- *Database after (17:17):* switch `off`; fingerprint 741 / `8d15eb8e…`, line for line unchanged;
+  0 executable jobs, overview empty (no due, stuck, failed, review, dry-run or purge items). The
+  only data changes: the job (above), pg_net response 3, and the reply's `mux_asset_id` and
+  `mux_playback_id` cleared by `mux_cleanup_finish` (as designed for a deleted video; reply still
+  `deleted`, upload id kept; row `md5(row_to_json)` `88422a5a…` → `ee0ba987…`, `responses` hash
+  `edb1b2f6…` → `d0b2607e…`). Every other table hash identical (ledger 3 rows unchanged); founder
+  hashes unchanged, `live`; Vault unchanged; 0 deleted accounts, purge failures, moderation records.
+- *Capacity:* Shortcut Beta 1 asset, spike 7: 8 of the free plan's 10 if the cap is account-wide.
+- *Logs:* read the database's own (cron runs, pg_net response, job row, settings). Edge Function
+  invocation and console logs and the Postgres log not read (Dashboard sign-in needed). Nemat to look
+  at 17:16:06 to 17:16:11 UTC: expected one `POST` 200 to `mux-cleanup` with the log line
+  `{"job":"45c34fbc…","mode":"live","action":"delete_asset","reason":"author_deleted","attempt":1,
+  …,"outcome":"done","detail":{"outcome":"deleted"}}`, and shortly after, Mux's `video.asset.deleted`
+  webhook to `mux-webhook` answered 200 `ignored`. Mux's own request log is not available through the
+  API; the Mux dashboard should show the asset deleted at 17:16:10.
+
+**Staged deployment plan** (each stage needs Nemat's separate go-ahead; steps 1 and 2 done 12 Oct, step 3's first verification done 12 Oct with the switch back to `off`, step 4A (canary dry run) done 12 Oct with the switch back to `off`, step 4B (one real deletion, the canary) done 12 Oct with both switches back to non-live; the backlog and leaving clean-up on not approved):
 
 0. *Preflight, read-only.* Hosted fingerprint equal to the tested stage 2 schema; dry run lists
    exactly `20261012000200`; deployed `mux-webhook` and `mux-upload-status` byte-identical to
@@ -1585,10 +1674,16 @@ recorded, posted and deleted on the iPhone (founder Release build from `ede68ed`
 
 **Remaining risks:**
 
-- **Mux deletions cannot be undone**, and stage 4 is the first contact with real Mux; the playback-id
-  endpoints, the asset listing and its `upload_id`, `passthrough` and `created_at` fields are
-  implemented from Mux's documented API and exercised only against the fake. Stage 3 (dry run)
-  exists to check the reads first.
+- **Mux deletions cannot be undone.** Asset `DELETE`, the asset `GET` and its `upload_id` and
+  `passthrough` fields have now run against real Mux (step 4B). The playback-id `POST` and `DELETE`,
+  the upload `GET` and cancel `PUT`, and the listing past one page are still exercised only
+  against the fake.
+- **Clean-up is off, so deletions queue but do not reach Mux.** Until clean-up is left on, an
+  author's deleted video stays public at Mux by its playback id (hidden everywhere in the app and
+  web), and a removed video's playback is not revoked. Turning it on is a separate decision.
+- **Anything queued just after the activation transaction would have run too:** the precondition
+  check covers the queue up to the commit, not the second or so before the worker claims. Nothing
+  was (the queue holds only the canary's job).
 - **Windows of milliseconds remain** between the last check and Mux acting: a review requested in
   that instant, after a deletion's final check, does not stop it. A restore's new id is removed if
   the state changes meanwhile, but exists at Mux for that instant (it is never handed out).
@@ -1602,7 +1697,7 @@ recorded, posted and deleted on the iPhone (founder Release build from `ede68ed`
   script).
 - **`app/package-lock.json` out of sync** (above): a fresh `npm ci` fails on the deployed branch.
 
-**Verified on the hosted project** (12 Oct; steps 1 to 4A above): the migration and the schema it
+**Verified on the hosted project** (12 Oct; steps 1 to 4B above): the migration and the schema it
 produces; the worker deployed, its key and the Vault secrets; the worker's 401 and 405 answers;
 the scheduler with the switch `off` (no HTTP call) and in `dry_run` with no job due (no HTTP call);
 the hosted gateway passing pg_net's call to the worker with the Vault key (200); one dry-run sweep
@@ -1612,14 +1707,18 @@ video reply posted on the iPhone through the stage 2 ledger (owner, upload, pass
 five signed webhook deliveries answered 200, the author's deletion hiding it from every app read
 path and queuing exactly one `delete_asset` job with the right asset, upload and owner, and that
 job's dry run against real Mux (one `GET` of the asset, the ownership check on real `passthrough`
-and `upload_id` values passing, plan `delete`, recorded and kept for step 4B).
+and `upload_id` values passing, plan `delete`, recorded and kept for step 4B). Step 4B: both
+switches `live`, one drain through pg_cron's path (pg_net, gateway, worker), the last-moment check,
+one real asset `DELETE` answered 2xx, the job `done` exactly once, the deleted video forgetting its
+asset and playback id, the canary's HLS 404 and asset 404, both switches back to non-live, and the
+founder's asset, playback and HLS and the spike environment untouched.
 
-**Not verified:** any change at Mux (deleting an asset, creating or deleting a playback id,
-cancelling an upload: the first is the step 4B test); dry runs of a playback revocation or restore
+**Not verified:** other changes at Mux (creating or deleting a playback id, cancelling an upload);
+the exact HTTP status of the step 4B `DELETE` (2xx by the code path; only in the function log); dry runs of a playback revocation or restore
 and of an upload cancellation against real Mux (no such job has existed on hosted); a sweep that finds an orphan or an unknown asset; Mux listing beyond one
 page; the daily jobs (03:15 purge, 03:30 and 03:40 prunes, 04:45 sweep) on hosted, which have
 nothing to act on yet; the Edge Function, gateway and Postgres logs beyond the webhook invocations
-Nemat read for step 4A; which path set the reply `live`; Android. Still open:
+Nemat read for step 4A (step 4B's included); which path set the reply `live`; Android. Still open:
 errored assets stay `processing`; direct reads of `profiles`, `follows` and `comments`
 (section 13).
 
