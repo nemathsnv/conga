@@ -1067,175 +1067,171 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; local only, not deployed)
+## 15. Security stage 3: video deletion and the account purge (built and finalised 12 Oct; local only, not deployed)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
-(`5fabfaf`). Authorisation: local implementation and testing only. Nothing was deployed, no hosted
-query was run, no Mux asset was deleted, no upload was created, no credential changed.
+(`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
+deployment not approved.** Nothing was deployed, no hosted query was run, no real Mux asset or
+upload was created or deleted, no secret changed, nothing pushed, no production schedule enabled.
 
-**Retention decisions** (Nemat, Stage 3 brief, 12 Oct; recorded in `docs/DECISIONS.md`): immediate
-author deletion; moderation-removed videos kept privately until 30 days after the case closes;
-playback disabled during the 30-day account recovery window; minimal anonymised moderation records
-kept 90 days. The brief cites this file and Notion for them; neither copy existed on the deployed
-branch or was readable from the session, so the brief is the source.
+**Retention, finalised** (Nemat, 12 Oct; `docs/DECISIONS.md`):
+
+- A moderation case closes at the removal when no review is requested; at the decision when one is.
+- A review requested before the asset is permanently deleted suspends clean-up until the decision.
+- Private assets are kept for up to 30 days after the case closes, then deleted.
+- After permanent deletion a restore is refused: `mod_restore_video` and a reversing
+  `mod_decide_review` raise `asset_deleted` (`asset_being_deleted` while the worker is deleting it);
+  the review stays pending for the moderator to decide; `mod_review_queue` shows
+  `video_restorable` before they decide. The member can still request the review (the notice is
+  unchanged); there is no copy for "reversed, but the video is gone" (see risks).
+- After a purge, anonymised moderation records keep only what was done, to what kind of thing and
+  when, for 90 days from the purge: no free-text reason, note, moderator, account, target, reporter
+  or closer. Reports the purged account made against others keep their target (the case may still
+  be open) but not the reporter.
+- An author's deletion is effective even with open reports (the reports stay open).
+- Anonymised tombstones of responses, video replies and comments stay while other people's replies
+  need them.
+- Successful clean-up jobs are kept, minimal (action, reason, Mux ids, times, outcome; no owner, no
+  video), for 30 days; failed jobs and unproven orphans (`review`) are never discarded automatically.
 
 **What was built** (migration `20261012000200_video_deletion_cleanup.sql`, the `mux-cleanup`
-function, small changes to `mux-webhook` and `mux-upload-status`; the app is unchanged):
+function, `MUX_API_BASE` in `_shared/mux.ts`, the pre-warm change in `mux-webhook` and
+`mux-upload-status`; the app is unchanged):
 
-- **Queue** (`mux_cleanup_jobs`, RLS on, no policies, no member grants). The state changes enqueue
-  jobs in the same transaction, so a job exists exactly when its change committed: `delete_asset`,
-  `sync_playback` (make a video's public playback match the database), `cancel_upload`. One open job
-  per target (enqueueing again merges; a deletion keeps the later time, so a retention is never
-  shortened). `mux_cleanup_claim` leases jobs (120 s) under an advisory lock, never two for one
-  asset at once; a worker that dies loses its lease and the job is leased again; only the lease
-  holder can record an outcome. Retries after 1, 2, 4 … minutes (at most 6 hours), 10 attempts, then
-  `failed`; `mux_cleanup_retry` puts it back. `mux_cleanup_overview` shows counts, due, stuck,
-  failed, review items and purge failures. Driven by pg_cron every minute through pg_net with Vault
-  secrets, like `send-push`; nothing is called until the secrets exist.
-- **Ownership before destruction.** The worker reads the object at Mux first; an asset's
-  `passthrough` must be the recorded owner (the member the upload was minted for, stage 2) and its
-  `upload_id` the recorded upload; an upload's `new_asset_settings.passthrough` likewise. Otherwise
-  the job is `skipped` and nothing changes at Mux. When a deletion is leased, the database
-  re-checks under the row locks of every video using the asset (`mux_asset_hold`): any live,
-  processing or draft video (of any account, including one in its deletion window) keeps it; a
-  removal's retention reschedules it; an unexpired unused upload URL holds it until expiry. A
-  moderator's restore takes the same row locks and is refused (`video_unavailable`) while the
-  asset is being, or has been, deleted.
-- **F5.** `delete_video`, `abandon_response`, `discard_draft`, the draft a re-recording replaces and
-  the upload a retry replaces: asset deleted (or upload cancelled). `mod_remove_video`: public
-  playback deleted now, asset deleted 30 days after the case closes. `mod_restore_video` and a
-  reversed review: a new public playback id. `delete_account`: playback off for every video;
-  signing back in (`get_onboarding_state`): back on. Mux has no "disable" for a public playback id,
-  so disabling deletes it and restoring creates a new one; the URL changes, which the app does not
-  notice (it reads the id from the database). `video_visible` now also requires a playback id, so a
-  live video is never served with a dead id in the minute before a restore completes. Ready events
-  for deleted or removed videos are no longer pre-warmed.
-- **F6.** `purge_deleted_accounts` purges each account in its own subtransaction; one that fails is
-  recorded in `account_purge_failures` (retried daily) and no longer stops the others. A purged
-  account's video that other people's video replies point at, directly or through its own replies,
-  stays as a tombstone (`deleted`, no author, caption or Mux ids); replies keep their room and show
-  "Original response deleted" / "Replying to a deleted video" exactly as after an author's deletion.
-  The comments on a tombstone go, as with any deleted response. Likewise its comments that other
-  people replied to become deleted-parent rows (board LV-CommentDeleted) instead of taking other
-  people's replies with them through the cascade (the purge silently deleted those before).
-- **F7.** The purge queues every asset of the account (and unfinished uploads) before removing the
-  rows; jobs carry the Mux ids and the owner with no foreign keys, so they outlive the purge. A
-  removed video's job keeps its retention (the purge closes a case still open).
-- **F8.** A ready event for an upload no video took (never posted, or replaced by a retry) queues
-  its asset if the ledger owner matches the passthrough; one for a video deleted before Mux
-  finished records and queues it. The daily sweep lists Mux assets older than a day: unused ones
-  whose upload is in the ledger for the passthrough's account are queued; anything whose owner
-  cannot be proven is recorded as `review` and never acted on.
-- **Moderation records.** On purge: actions keep kind, target kind, reason, moderator and times and
-  lose the account, target and note; pending reviews close, decided ones lose the account; reports
-  the account made lose the reporter; reports about it or its content close and lose the target.
-  `prune_moderation_records` (daily) deletes them 90 days later (open reports stay until closed).
+- **Queue.** The state changes enqueue `delete_asset`, `sync_playback` and `cancel_upload` jobs in
+  the same transaction (one open job per target; enqueueing again merges; a deletion keeps the later
+  time). Leases of 120 s, one claimer at a time, never two jobs for one asset; dead workers' leases
+  expire; only the lease holder records an outcome; backoff 1, 2, 4 ... minutes to 6 hours, 10
+  attempts, then `failed`; `mux_cleanup_retry` re-queues. `mux_cleanup_overview` shows the switch,
+  counts, due, stuck, dry-run plans, failures, review items and purge failures.
+- **Two switches, both required for any change at Mux.** `mux_cleanup_settings.mode` in the
+  database (`off` after the migration; `mux_cleanup_set_mode(mode, who)`), and the function's
+  `MUX_CLEANUP_MODE` (unset means `dry_run`). The stricter applies. Off: `run_mux_cleanup` calls
+  nothing and no job is leased. Dry run: the worker reads Mux (GET only), records on each job what
+  it would do and releases it for an hour without using an attempt; the sweep queues and records
+  nothing and answers what it would. Every POST, PUT and DELETE to Mux goes through a per-job guard
+  that refuses outside live mode. Plus: no Vault secrets, no call; `MUX_API_BASE` (the fake-Mux
+  hook for tests) accepts only `http` to 127.0.0.1, localhost or host.docker.internal, so on a
+  hosted project it can only make Mux calls fail, never redirect them.
+- **Ownership before any change.** The worker reads the object first; an asset's `passthrough` must
+  be the recorded owner and its `upload_id` the recorded upload, an upload's passthrough likewise.
+  A mismatch fails the job for a person, with nothing changed.
+- **The database decides at the last moment** (`mux_cleanup_check`, called immediately before every
+  change, extending the lease): for a deletion, the hold (in use by any live, processing or draft
+  video; a removal's retention; an open review; an unexpired upload URL); for playback, whether the
+  video should play now; for a cancellation, whether a video that can still go live uses the
+  upload; and the switch. A restore checks again after Mux creates the playback id and deletes it at
+  once if the video was deleted, removed or its account deleted meanwhile; the database records a
+  restored id only if the video should still play (re-checked under its row lock). A moderator's
+  restore is refused while a deletion runs. So a stale job can delay a change but never hand out a
+  removed or deleted video: `video_visible` needs a playback id, and no path writes one for a video
+  that must not play.
+- **F5 to F8** as built on 12 Oct (author deletion deletes the asset; removal revokes playback and
+  keeps the asset; account deletion revokes, recovery restores; per-account purge with tombstones
+  and failure isolation; assets queued before rows go; ready events for untaken or deleted uploads;
+  a daily sweep that queues ledger-proven orphans and only reports the rest).
+- **Schedules:** `mux-cleanup` every minute (drain, only when something is due), `mux-sweep` 04:45
+  UTC, `prune-moderation-records` 03:30, `prune-mux-cleanup-jobs` 03:40, `purge-deleted-accounts`
+  03:15 (unchanged). All exist after the migration, and do nothing at Mux while the switch is off.
 
-**Interpretations to confirm (Nemat).** These are not in SPEC.md or the brief; each is a choice I
-made and can change:
+**Ordering, tested** (pgTAP 0010 section 8b, `cleanup_integration_test.ts`):
 
-1. *When a moderation case closes*: at the removal if no review is requested; at the review
-   decision if one is; never while a review is pending; at the purge for an account purged with
-   one pending. Consequence: a review requested more than 30 days after an unreviewed removal can
-   be decided, but a reversal can no longer restore the video (`video_unavailable`, the moderator
-   must decide "upheld" or handle it by hand).
-2. *90 days* counts from the purge, not from the action.
-3. *"Minimal"* keeps the moderator-written reason. It is free text and could name someone; say if
-   it should be dropped (or replaced by a category) at anonymisation.
-4. *Immediate author deletion applies even with open reports* on the video, so the evidence goes
-   with it (the reports stay open). The alternative, keeping a reported video's asset privately
-   while its reports are open, would change the decided rule.
-5. *Comment tombstones and report anonymisation* go slightly beyond "responses with replies"; both
-   stop the purge from deleting other members' content or keeping the purged account's id.
-6. *The job log* keeps finished jobs (asset ids, no owner) with no retention set; a rule is needed
-   with the rest of the data rules (section 4).
+| Sequence | Outcome |
+|---|---|
+| Delete, then account deletion and recovery | Recovery queues nothing for the deleted video; its deletion goes ahead. |
+| Account deletion, recovery and the video's deletion before the worker runs | The playback job reads "must not play"; a worker that restored anyway on the old state is not recorded; the deletion then removes the asset. |
+| Removal, review, reversal | Playback restored with a new id; the retention's deletion, when due, finds the video live and is skipped. |
+| Removal, restoration, removal | One playback job, which revokes (the last state); the retention runs from the second removal; no playback id is ever created. |
+| Review after permanent deletion | Queue shows `video_restorable: false`; reversal refused (`asset_deleted`); review stays pending. |
+| Late ready event after deletion | Asset recorded on the deleted video and queued; never pre-warmed; a second deletion finds it already gone. |
+| Clean-up and recovery at the same time | A restore queued during a running revoke waits for it (one job per asset), then runs; a restore running when the account is deleted again removes the id it created and records nothing. |
+| Duplicate and out-of-order jobs | Same target merges into one job; three workers at once act once per asset; a late answer from an expired lease is ignored. |
 
-**Local checks** (isolated stack `shortcut-s3` on ports 556xx; the default `shortcut` stack was not
-touched; Mux faked in every test; 12 Oct, final code):
+**Local checks** (isolated stack `shortcut-s3`, ports 556xx; the default `shortcut` stack untouched;
+fake Mux everywhere; 12 Oct, final code):
 
-- pgTAP **866/866**: the 623 existing (0001 to 0009, unmodified) plus 243 in
-  `0010_video_deletion.sql` (privileges and schedules; every enqueueing path; leasing, stale
-  leases, backoff, dead letter, retry; the one-job-per-asset rule; moderation retention with and
-  without a review, upheld and reversed, restore refused during and after deletion; account
-  deletion and restore, including a restore during a running revoke; ready events for unknown,
-  forged, deleted and removed uploads; the purge with reply chains, comment tombstones, anonymised
-  records, a failing account that does not stop another, the 29-day boundary, the 90-day prune;
-  the sweep's five outcomes and its idempotence; the founder's row unchanged).
-- Deno: unit **21/21**, stage 1 integration **20/20**, stage 2 `uploads_integration_test.ts`
-  **32/32**, all unmodified; new `cleanup_integration_test.ts` **17/17** on three consecutive runs,
-  over real sessions with a stateful fake Mux: author deletion (GET then DELETE, nothing else);
-  a waiting upload cancelled; an asset made before the ready event found and deleted, the late
-  event not pre-warmed; an unused URL's asset held until expiry, then deleted; moderation revoke,
-  restore with a new playback id, the retention's deletion skipped once restored; account deletion
-  and recovery; a restore queued behind a stalled revoke of the same video; three workers at once
-  deleting each of six assets exactly once; 503 and network-error retries with backoff; dead letter
-  and retry; passthrough and upload-id mismatches never changed; a purge with reply chains and a
-  comment thread; several accounts purged at once; the sweep; the founder-like video untouched
-  throughout. `deno check` and `deno lint` clean.
-- `scripts/auth-integration.mjs` **37/37** against the isolated stack.
-- App: not run; no app file changed on this branch.
-- **F6 reproduced, then fixed:** on the stage 2 schema, an account deleted 31 days ago whose
-  response has another member's reply makes `purge_deleted_accounts()` fail with
-  `responses_root_response_id_fkey`, and a second due account with nothing replied to is not purged
-  either (one statement). On stage 3 both are purged, the response is a tombstone, the reply is
-  live in its room, and both accounts' assets (not the replier's) are queued.
-- **Migration rehearsal:** the stack built with exactly the 15 hosted migrations and no seed, the
-  founder's response recreated with its real upload, asset and playback ids, duration and times and
-  its `claimed` ledger row, then only `20261012000200` applied with `supabase migration up`: the row's
-  md5 unchanged, 0 jobs queued, 0 purge failures, `web_video` live with the same playback id,
-  `mux_asset_hold` "infinity", a claim leases nothing, a sweep listing its asset counts it in use.
-- **Rollback rehearsal:** `supabase/rollback/20261012000200_video_deletion_cleanup.down.sql` (not a
-  migration) applied on top: `pg_dump` of the `public` schema identical to the stage 2 schema
-  (functions, constraints, grants), the three new cron jobs gone, and the unmodified 0001 to 0009
-  pass 623/623. It refuses to run once tombstones or anonymised records exist.
+- pgTAP **951/951**: 0001 to 0009 unmodified (623), `0010_video_deletion.sql` **328**.
+- Deno unit **21/21** (`mux_test.ts`, unmodified) and **8/8** (`cleanup_unit_test.ts`: the
+  `MUX_API_BASE` allow-list, the switches, the change guard, dry runs, every answer of the
+  last-moment check, ownership).
+- Integration: stage 1 **20/20** and stage 2 **32/32** (both unmodified); stage 3
+  `cleanup_integration_test.ts` **23/23** on three consecutive runs (in-process worker, real
+  sessions, stateful fake Mux: the scenarios above, off, dry runs by either switch, retries, dead
+  letter, ownership, purge, sweep, founder-like video untouched).
+- **Scheduler path, end to end** (`scripts/scheduler-integration.sh`,
+  `scheduler_integration_test.ts`) **12/12** on four runs: pg_cron → `run_mux_cleanup` → pg_net →
+  the real `mux-cleanup` in the local Edge runtime (through the gateway, as on hosted) → fake Mux
+  over HTTP. Schedules present; missing secrets and switch off: no HTTP call; wrong key: 401,
+  nothing done; unreachable worker: pg_net error, nothing changed, next run works; pg_cron firing on
+  its own deletes an asset (seen in `cron.job_run_details`); a 503 retried with backoff; three
+  concurrent calls delete each of five assets once; the Edge runtime killed mid-DELETE, the job
+  leased again after its lease ran out and done once; dry run through the whole path reads only;
+  the daily sweep queues a proven orphan, reports an unknown one, and the drain deletes only the
+  orphan.
+- `deno check` and `deno lint` clean (20 files). `scripts/auth-integration.mjs` **37/37**.
+- App (unchanged on this branch): `tsc` clean, `expo lint` clean, Jest **96/96**. Run with the main
+  checkout's `node_modules` (same `package.json` and lockfile as `5fabfaf`), because `npm ci` refuses
+  here: **`app/package-lock.json` is out of sync with `app/package.json` on the deployed branch**
+  (missing `react-native-gesture-handler` 3.3.0, `react-native-reanimated` 4.7.1 and others).
+  Pre-existing; not changed; needs fixing before the next app build.
+- **F6 reproduction** (stage 2 schema): a purge with another member's reply fails on
+  `responses_root_response_id_fkey` and blocks a second due account; stage 3 purges both.
+- **Migration rehearsal:** the 15 hosted migrations, no seed, the founder's response and ledger row
+  recreated with their real ids and times, then only `20261012000200`: both rows' md5 unchanged;
+  switch `off`; 0 jobs; `web_video` live with playback `8UqSC…6JU`; hold `infinity`; claim
+  `{"jobs": [], "mode": "off"}`; with Vault secrets present `run_mux_cleanup` queued no HTTP call; a
+  dry-run sweep listing its asset counts it `in_use`, would queue nothing.
+- **Rollback rehearsal:** `supabase/rollback/20261012000200_video_deletion_cleanup.down.sql` on the
+  stage 3 schema: `public` schema dump identical to stage 2's, the new cron jobs gone, 0001 to 0009
+  pass 623/623. It refuses, changing nothing, once a tombstone or anonymised record exists (tested).
 
-**Deployment plan (not carried out; needs Nemat's go-ahead):**
+**Staged deployment plan** (each stage needs Nemat's separate go-ahead; none is approved):
 
-1. Read-only preflight as for stage 2: hosted fingerprint equal to the tested stage 2 schema, one
-   pending migration in the dry run, deployed `mux-webhook` and `mux-upload-status` byte-identical to
-   `5fabfaf`, the founder row md5, Mux asset and upload counts. Also confirm on the hosted project:
-   0 `deleted`, `removed` or `draft` rows and 0 accounts with `deleted_at` (the backfill then queues
-   nothing).
-2. `supabase db push --linked --dry-run`, expecting exactly `20261012000200_video_deletion_cleanup.sql`;
-   then push. From this moment deletions hide videos as before and jobs accumulate; nothing is
-   called at Mux (no secrets yet).
-3. Deploy `mux-cleanup` (`--no-verify-jwt`), set `MUX_CLEANUP_KEY`, create the two Vault secrets.
-   Then redeploy `mux-webhook` and `mux-upload-status` (pre-warm change only; either order works).
-4. Checks: `mux-cleanup` answers 401 without the key and with the service key, 405 to GET;
-   `mux_cleanup_overview()` empty; the founder row unchanged and playing; one manual
-   `select public.run_mux_cleanup('sweep')` with the founder's asset reported `in_use` and no job
-   for it (the response body is in `net._http_response`).
-5. Rollback: the rollback file as a new forward migration, `supabase functions delete mux-cleanup`,
-   the two functions from `5fabfaf`, the secrets removed. Before any purge has run, nothing else.
+0. *Preflight, read-only.* Hosted fingerprint equal to the tested stage 2 schema; dry run lists
+   exactly `20261012000200`; deployed `mux-webhook` and `mux-upload-status` byte-identical to
+   `5fabfaf`; founder row md5; Mux asset and upload counts (`GET` only); 0 `deleted`, `removed` or
+   `draft` rows and 0 deleted accounts (so the backfill queues nothing).
+1. *Database only (safe).* Push the migration. The switch is `off`, no secrets exist, no function
+   is deployed: nothing can reach Mux. Deletions hide videos in the app and web as today, and jobs
+   accumulate. Check: founder row unchanged and playing, `mux_cleanup_overview()` (mode off),
+   `cron.job` lists the new jobs. Rollback: the rollback file as a forward migration.
+2. *Worker configuration, still inert.* Deploy `mux-cleanup` (`--no-verify-jwt`) with
+   `MUX_CLEANUP_KEY` and **`MUX_CLEANUP_MODE` unset (dry run)**; create the two Vault secrets
+   (README). Redeploy `mux-webhook` and `mux-upload-status`. Checks: 401 without the key and with
+   the service key, 405 to GET. The switch is still off: still nothing is called.
+3. *Dry run.* `select public.mux_cleanup_set_mode('dry_run', '<who>')`. The worker now reads Mux
+   (GET only) and records plans; one manual `select public.run_mux_cleanup('sweep')`. Review
+   `mux_cleanup_overview()` (`dry_run_planned`, `failed`, `review`) and the function logs for a few
+   days: expected plans only for videos deliberately deleted or removed; the founder's asset
+   `in_use`. Any `not_verified` failure is a stop.
+4. *Real deletion, authorised separately.* Set `MUX_CLEANUP_MODE=live` on the function, then
+   `select public.mux_cleanup_set_mode('live', '<who>')`. Suggested first: one test video Nemat
+   records and deletes on purpose, the overview and logs watched; then the backlog. To stop at once
+   at any time: `mux_cleanup_set_mode('off', '<who>')` (or unset the function's variable).
 
-**Deployment risks:**
+**Remaining risks:**
 
-- **Mux deletions are irreversible.** The protections are the ownership check, the in-use re-check
-  under locks and the founder-specific tests; but the first real deletion will be the first time
-  the worker runs against real Mux. Suggest the first one be a test video Nemat records and deletes
-  on purpose, with the overview watched.
-- **CDN caching.** Deleting a playback id or an asset at Mux stops new sessions; segments already
-  cached at the CDN or on a viewer's device may keep playing for a short while. The database stops
-  handing out the id at once (web included).
-- **Latency.** Revocation happens within about a minute (the cron), plus retries. Restores after
-  signing in or a moderator's restore take the same minute, during which the video is not shown
-  (counts on prompt cards may include it for that minute).
-- **Free-plan or rate limits at Mux.** A large purge queues many deletions; Mux 429s are retried with
-  backoff. Deleting assets frees the free plan's 10-asset cap (section 14), which helps.
-- **Missing secrets.** If the migration ships without the worker or its secrets, behaviour is
-  exactly today's (videos hidden in the app and web, still at Mux), and jobs wait.
-- **The sweep's grace period** is one day; an asset an older app build uploads without claiming
-  first would be found by the sweep only if its upload is in the ledger (stage 2 says every build
-  claims first).
-- **Installed founder build:** no app change; every member-facing function keeps its signature and
-  answers.
+- **Mux deletions cannot be undone**, and stage 4 is the first contact with real Mux; the playback-id
+  endpoints, the asset listing and its `upload_id`, `passthrough` and `created_at` fields are
+  implemented from Mux's documented API and exercised only against the fake. Stage 3 (dry run)
+  exists to check the reads first.
+- **Windows of milliseconds remain** between the last check and Mux acting: a review requested in
+  that instant, after a deletion's final check, does not stop it. A restore's new id is removed if
+  the state changes meanwhile, but exists at Mux for that instant (it is never handed out).
+- **CDN caching:** after revocation or deletion, segments already cached may play briefly.
+- **Latency:** about a minute (the cron) for revocation and restore; a restored video is hidden
+  until its new id exists.
+- **No copy for a reversed review whose video is gone**: the moderator must uphold or handle it by
+  hand; if "reversed, video not restored" should exist, it needs wording (and maybe a board).
+- **Mux rate limits** on a large purge: 429s are retried with backoff.
+- **The scheduler test replaces the local stack's Edge runtime** while it runs (documented in the
+  script).
+- **`app/package-lock.json` out of sync** (above): a fresh `npm ci` fails on the deployed branch.
 
-**Not verified:** anything on the hosted project; anything against real Mux (the worker's Mux calls,
-the playback-id endpoints, the asset listing and its `upload_id`/`passthrough`/`created_at` fields
-are implemented from Mux's documented API and exercised only against the fake); the pg_cron to
-pg_net to function path (the function was called in-process; `run_mux_cleanup` was only checked to
-call nothing without its secrets); a device run. Still open: errored assets stay `processing`;
-direct reads of `profiles`, `follows` and `comments` (section 13).
+**Not verified:** anything on the hosted project; anything against real Mux; the hosted gateway's
+behaviour with pg_net (locally the same gateway route was used); a device run; Android. Still open:
+errored assets stay `processing`; direct reads of `profiles`, `follows` and `comments`
+(section 13).
 
 ## Gates
 

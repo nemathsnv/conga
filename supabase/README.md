@@ -79,15 +79,28 @@ and done by the `mux-cleanup` Edge Function:
 | The daily sweep finds an asset nothing uses | Deleted if the ledger proves whose it is; otherwise listed for review, never touched |
 
 Before any change the worker reads the object at Mux and checks that its passthrough and upload id
-are the recorded owner's; when a deletion is leased the database re-checks, under row locks, that
-no live, processing or draft video uses the asset and no retention applies. One job per asset runs
-at a time; failures retry after 1, 2, 4 … minutes (at most 6 hours), ten attempts, then `failed`.
+are the recorded owner's, then asks the database again (`mux_cleanup_check`) immediately before
+acting: a deletion only if no live, processing or draft video uses the asset, no retention applies
+and no review is open; a playback id only while the video should play. One job per asset runs at
+a time; failures retry after 1, 2, 4 … minutes (at most 6 hours), ten attempts, then `failed`
+(never deleted automatically). Finished jobs are kept, minimal, for 30 days.
 The purge makes tombstones of videos and comments that other people's replies point at, anonymises
 the account's moderation records (deleted 90 days later by `prune_moderation_records`) and records
 an account it cannot remove in `account_purge_failures` without stopping the others.
 
+**Nothing changes at Mux unless both switches say live.** The database's switch is off after the
+migration; the function's `MUX_CLEANUP_MODE` means dry run unless it is exactly `live`.
+
+| Database switch | Function variable | What happens |
+|---|---|---|
+| `off` (after the migration) | any | Nothing is called; jobs wait |
+| `dry_run` | any | Mux is read (GET only); each job records what it would do |
+| `live` | unset or `dry_run` | Dry run |
+| `live` | `live` | The worker acts |
+
 The worker runs like `send-push`: pg_cron every minute (and a sweep daily) through pg_net, with two
-Vault secrets and one function secret. Until they exist nothing is called and jobs wait.
+Vault secrets and one function secret. Without them nothing is called either. Turning it on, one
+step at a time (see `docs/BETA-READINESS.md` section 15 for the checks between steps):
 
 ```sql
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/mux-cleanup', 'mux_cleanup_url');
@@ -95,8 +108,15 @@ select vault.create_secret('<a long random string>', 'mux_cleanup_key');
 ```
 
 ```bash
-supabase secrets set MUX_CLEANUP_KEY=<the same random string>
+supabase secrets set MUX_CLEANUP_KEY=<the same random string>     # MUX_CLEANUP_MODE left unset: dry run
 supabase functions deploy mux-cleanup --no-verify-jwt
+```
+
+```sql
+select public.mux_cleanup_set_mode('dry_run', '<who>');   -- reads only; check the plans
+-- only once real deletion is authorised: MUX_CLEANUP_MODE=live on the function, then
+select public.mux_cleanup_set_mode('live', '<who>');
+select public.mux_cleanup_set_mode('off', '<who>');       -- stops it at once, at any time
 ```
 
 What the queue is doing, and retrying a failed job (service role, SQL editor):
@@ -105,6 +125,10 @@ What the queue is doing, and retrying a failed job (service role, SQL editor):
 select public.mux_cleanup_overview();      -- counts, due, stuck, failed, review, purge failures
 select public.mux_cleanup_retry('<job id>');
 ```
+
+Locally, `scripts/scheduler-integration.sh` runs the whole scheduled path (pg_cron, pg_net, the
+function in the local Edge runtime) against a fake Mux; `MUX_API_BASE` points the function at the
+fake and accepts only a local `http` address.
 
 Email codes sent locally land in Mailpit at http://127.0.0.1:54324.
 
