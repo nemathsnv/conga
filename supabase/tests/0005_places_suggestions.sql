@@ -15,6 +15,9 @@ update public.accounts set age_confirmed_at = now(), public_disclosure_ack_at = 
 insert into public.profiles (id, name, username) values
   ('a1111111-1111-1111-1111-111111111111', 'Lena Hart', 'testlena'),
   ('b2222222-2222-2222-2222-222222222222', 'Adam Novak', 'testadam');
+-- Upload URLs minted for the posts below (security stage 2: posting claims a ledger upload).
+insert into public.video_uploads (account_id, upload_id, status) values
+  ('a1111111-1111-1111-1111-111111111111', 'up-draft', 'active');
 -- Lena is in the Canggu beta cohort; Adam is not in any cohort.
 update public.accounts set beta_cohort = 'canggu' where id = 'a1111111-1111-1111-1111-111111111111';
 

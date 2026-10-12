@@ -23,6 +23,10 @@ insert into public.profiles (id, name, username) values
   ('a1111111-1111-1111-1111-111111111111', 'Lena Hart', 'testlena'),
   ('b2222222-2222-2222-2222-222222222222', 'Adam Novak', 'testadam'),
   ('c3333333-3333-3333-3333-333333333333', 'Maya Lindqvist', 'testmaya');
+-- Upload URLs minted for the posts below (security stage 2: posting claims a ledger upload).
+insert into public.video_uploads (account_id, upload_id, status) values
+  ('a1111111-1111-1111-1111-111111111111', 'up-lena-r1', 'active'),
+  ('c3333333-3333-3333-3333-333333333333', 'up-maya-r1', 'active');
 
 select public.team_create_prompt('Be honest about the place you live.', null, (now() at time zone 'utc')::date);
 select public.team_create_prompt('Speak in every language you know.');
