@@ -1067,7 +1067,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built and finalised 12 Oct; hosted preflight 12 Oct, read-only; not deployed)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed 12 Oct, Nemat approved; worker not deployed, clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -1300,7 +1300,42 @@ nothing deployed or written).**
   `purge-deleted-accounts`, `send-push`, `tonight-prompt`. Rehearsed with the founder's rows: both
   unchanged, switch `off`, 0 jobs, video live, and all five scheduled commands changed nothing.
 
-**Staged deployment plan** (each stage needs Nemat's separate go-ahead; none is approved):
+**Database-only deployment, 12 Oct (UTC; approved by Nemat).** Followed step 1 of the plan below
+from `440056f` (clean tree; `supabase/` identical to the previewed `e66e866`). Read-only checks used
+the preflight method (Management API, `READ ONLY` transactions rolled back; Mux `GET`s only).
+
+- *Before (15:30 to 15:31):* `5fabfaf` an ancestor; hosted fingerprint 657 objects
+  `e7d34c921efad8726e47605abd4e64b4`, line for line the tested stage 2 baseline; 15 migrations;
+  founder response `md5(row_to_json)` `c9918f8241a2c45eefb106b5d0ec0a8f`, ledger `md5(u::text)`
+  `9726bb8fdf8d9eb0cb759d13ce59c8b6`, `live`; 0 deleted accounts, 0 deleted or removed videos, 0
+  moderation records or reports (nothing eligible for the purge or a prune); Vault empty; pg_net
+  queue and responses 0; functions `auth-signin-method` v3, `mux-create-upload` v3,
+  `mux-upload-status` v3, `mux-webhook` v4 (no `mux-cleanup`); 10 secrets, no `MUX_CLEANUP_*`;
+  Mux 1 asset (the founder's) and 1 upload. Dry run from a fresh copy of the committed branch:
+  exactly `20261012000200_video_deletion_cleanup.sql` (md5 `cafe15c06cb4d0990e411a7125121b98`,
+  byte-identical to the tested file), no seeds, no roles.
+- *Migration, 15:31:39 to 15:31:44:* `supabase db push --linked --project-ref picvoavfxnajfjkqawju
+  --workdir <scratch> --yes`; "Applying migration 20261012000200_video_deletion_cleanup.sql",
+  "Finished supabase db push", no error. Settings row written 15:31:43 (`off`, `migration`). No
+  function, secret, Vault or setting changed.
+- *After (15:32 to 15:37):* 16 migrations, latest `20261012000200`; fingerprint **741 objects,
+  `8d15eb8ec1900b44deaa7c5e6ff7be9e`**, line for line the tested stage 3 schema; switch `off`; 0
+  jobs, 0 purge failures; `accounts_before_delete` enabled; cron: `mux-cleanup` (* * * * *),
+  `mux-sweep` (45 4), `prune-moderation-records` (30 3), `prune-mux-cleanup-jobs` (40 3), and
+  `purge-deleted-accounts`, `send-push`, `tonight-prompt` with schedules and commands unchanged; all
+  active. Data identical to before in every compared table (accounts, auth users, profiles,
+  prompts, responses, video uploads and suggestions by row hash; comments, likes, follows,
+  reports, moderation actions, review requests, activity, push outbox, analytics events by count);
+  founder hashes as before, `live`; HLS manifest 200. Functions (versions and bundle hashes),
+  secrets (names and digests) and Vault (empty) unchanged; Mux the same 1 asset and 1 upload.
+- *Observed:* five scheduled `mux-cleanup` runs (15:32 to 15:36) and five `send-push` runs, all
+  succeeded; no pg_net request queued or answered; no job created; no Mux call (no worker exists).
+  The daily jobs (03:15 purge, 03:30 and 03:40 prunes, 04:45 sweep) have not run yet; on this data
+  they have nothing to act on (rehearsed).
+- *Rollback* remains available (no tombstone or anonymised record exists): the rollback file as a
+  forward migration; nothing else to undo at this stage.
+
+**Staged deployment plan** (each stage needs Nemat's separate go-ahead; step 1 done 12 Oct, the rest not approved):
 
 0. *Preflight, read-only.* Hosted fingerprint equal to the tested stage 2 schema; dry run lists
    exactly `20261012000200`; deployed `mux-webhook` and `mux-upload-status` byte-identical to
