@@ -1067,7 +1067,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed 12 Oct, worker configured 12 Oct, Nemat approved each; clean-up off)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured and a first dry run 12 Oct, Nemat approved each; clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -1415,7 +1415,70 @@ Checks (15:48 to 15:53):
   `5fabfaf`; delete the `mux-cleanup` function, the `MUX_CLEANUP_KEY` secret and the two Vault
   secrets. None of it is needed to keep clean-up inert: the database switch alone does that.
 
-**Staged deployment plan** (each stage needs Nemat's separate go-ahead; steps 1 and 2 done 12 Oct, the rest not approved):
+**Controlled dry run, 12 Oct (UTC; approved by Nemat: step 3 as one read-only verification, the
+switch back to `off` afterwards).** From `dc8c495` (clean tree); same read-only method. Only the
+database switch changed; no function, secret, Vault entry or bundle was touched; `MUX_CLEANUP_MODE`
+stayed unset (the function's mode `dry_run`), so neither switch ever allowed a change at Mux.
+
+- *Preflight (15:58:40 to 15:59:11):* 16 migrations; fingerprint 741 /
+  `8d15eb8ec1900b44deaa7c5e6ff7be9e`, line for line the step 1 record; switch `off` (`migration`,
+  15:31:43); 0 jobs, 0 purge failures, empty overview (no due, stuck, failed, review or dry-run
+  items); pg_net queue and responses 0; every table hash as at the end of step 2; founder response
+  `md5(row_to_json)` `c9918f8241a2c45eefb106b5d0ec0a8f`, ledger `md5(u::text)`
+  `9726bb8fdf8d9eb0cb759d13ce59c8b6`, `live`, 0 deleted accounts, 0 deleted or removed videos;
+  functions and the 11 secrets as at the end of step 2, no `MUX_CLEANUP_MODE`; Mux the founder's
+  asset and upload only, 0 live streams; HLS 200.
+- *Dry run on, 15:59:24:* `select public.mux_cleanup_set_mode('dry_run', 'Nemat: stage 3 step 3 dry
+  run (Claude Code)')`; 0 jobs.
+- *One manual sweep, 15:59:38:* `select public.run_mux_cleanup('sweep')`, so pg_cron's own path:
+  pg_net to the hosted gateway with the Vault key, then the worker. pg_net response 1: HTTP 200,
+  not timed out, no error, body `{"ok":true,"mode":"dry_run","listed":1,"complete":true,
+  "listError":null,"seen":1,"young":0,"in_use":1,"queued":0,"review":0,"dry_run":true,
+  "would_queue":[],"would_review":[]}`. The worker's Mux requests: one `GET
+  /video/v1/assets?limit=100&page=1` (one page, as fewer than 100 came back), answered without
+  error; the sweep has no other Mux call, and its database call ran with `p_dry_run` true, which
+  queues and records nothing. **Classification:** the one asset listed, the founder's
+  (`L7KxG29…UVc`, created 11 Oct 08:02:25 UTC, older than the 24-hour minimum, so judged and not
+  counted `young`), `in_use` because its response is `live`. Nothing would be queued for deletion,
+  cancellation or a playback change, nothing would go for review, no ownership mismatch, no
+  unexpected asset or provider answer.
+- *Overview and queue during the dry run (16:00:07, 16:02:15):* `mode` `dry_run`; 0 jobs; due,
+  stuck 0; `dry_run_planned`, `failed`, `review`, `purge_failures` empty.
+- *Scheduler in `dry_run`:* `mux-cleanup` at 16:00:00, 16:01:00 and 16:02:00 succeeded (11, 6 and
+  4 ms); with no job due, `run_mux_cleanup('drain')` returns before calling, so no pg_net request
+  (still the one response). `send-push` and `tonight-prompt` succeeded throughout; the daily jobs
+  did not run.
+- *Mux, read by this check (`GET` only, the Shortcut Beta token):* asset, upload and live-stream
+  lists before, during (16:00:20) and after, and the founder's asset by id: `ready`, 9.91 s, one
+  public playback id `8UqSC…6JU`, no errors; identical each time.
+- *Dry run off, 16:02:25:* `select public.mux_cleanup_set_mode('off', 'Nemat: stage 3 step 3 dry run
+  finished (Claude Code)')`. The switch was `dry_run` for 3 min 1 s. The 16:03:00 run succeeded
+  (2 ms) with no request.
+- *After (16:02:44 to 16:03:15):* switch `off`; fingerprint 741 / `8d15eb8e…`, line for line
+  unchanged; every table hash and both founder hashes unchanged, `live` (the only snapshot change:
+  pg_net's one stored response); 0 jobs, 0 purge failures, empty overview; Vault the same two
+  secrets, digests and timestamps (15:49:18); functions unchanged (versions, bundle hashes,
+  `verify_jwt`, update times); secrets the same 11, no `MUX_CLEANUP_MODE`; Mux the same asset,
+  upload and playback id, 0 live streams; HLS 200.
+- *No destructive operation:* no job existed, so the worker never read or planned a single asset
+  or upload and never reached its change guard; no Mux object changed. Mux's own request log is not
+  available through the API, so "no `POST`, `PUT` or `DELETE`" rests on the code path, the response
+  body and the unchanged inventory.
+- *Errors:* none in any command, pg_net response or cron run. Edge Function, gateway and Postgres
+  logs not read (Dashboard sign-in needed; Nemat to look at 15:59 to 16:04 UTC: expected one 200
+  `POST` to `mux-cleanup` at 15:59:38, its sweep log line, and the switch updates).
+
+**Still to verify before real deletion (step 4):** a dry run with real jobs. Every per-job read
+(`GET` of one asset or upload), the ownership check on real `passthrough` and `upload_id` values,
+and the plans for a deletion, a playback revocation or restore and an upload cancellation have
+run only against the fake Mux, because the hosted queue has never held a job. The safest way to
+get one is the step 4 test video (Nemat records and deletes it) watched first in `dry_run`: its
+`dry_run_planned` entry should read `delete` with the right asset and owner before `live` is set.
+Also: Mux listing past one page; a sweep finding an orphan or unknown asset; the daily jobs on
+hosted; the function logs; the playback-id `POST` and `DELETE` and asset `DELETE` endpoints, which
+first run for real in step 4 and cannot be undone.
+
+**Staged deployment plan** (each stage needs Nemat's separate go-ahead; steps 1 and 2 done 12 Oct, step 3's first verification done 12 Oct with the switch back to `off`, the rest not approved):
 
 0. *Preflight, read-only.* Hosted fingerprint equal to the tested stage 2 schema; dry run lists
    exactly `20261012000200`; deployed `mux-webhook` and `mux-upload-status` byte-identical to
@@ -1465,8 +1528,21 @@ Checks (15:48 to 15:53):
   script).
 - **`app/package-lock.json` out of sync** (above): a fresh `npm ci` fails on the deployed branch.
 
-**Not verified:** anything on the hosted project; anything against real Mux; the hosted gateway's
-behaviour with pg_net (locally the same gateway route was used); a device run; Android. Still open:
+**Verified on the hosted project** (12 Oct; steps 1 to 3 above): the migration and the schema it
+produces; the worker deployed, its key and the Vault secrets; the worker's 401 and 405 answers;
+the scheduler with the switch `off` (no HTTP call) and in `dry_run` with no job due (no HTTP call);
+the hosted gateway passing pg_net's call to the worker with the Vault key (200); one dry-run sweep
+reading the real Shortcut Beta asset list and classifying the founder's asset `in_use`; the switch
+back to `off`; the founder's rows, asset, playback id and HLS unchanged throughout.
+
+**Not verified:** any per-job dry run against real Mux (no job has ever existed, so the reads of a
+single asset or upload, the ownership check on real `passthrough` and `upload_id` values, and the
+plans for a deletion, a playback change or a cancellation have only run against the fake); any
+change at Mux (deleting an asset, creating or deleting a playback id, cancelling an upload: the
+first is the step 4 test); a sweep that finds an orphan or an unknown asset; Mux listing beyond one
+page; the daily jobs (03:15 purge, 03:30 and 03:40 prunes, 04:45 sweep) on hosted, which have
+nothing to act on yet; the Edge Function, gateway and Postgres logs (not readable from here); a
+device run; Android. Still open:
 errored assets stay `processing`; direct reads of `profiles`, `follows` and `comments`
 (section 13).
 
