@@ -709,8 +709,155 @@ account created.
   F1, so roll forward instead unless the app is shown to depend on it.
 - **Still open from section 12:** uploads not bound to their author (`passthrough`); deleted videos
   still playable at Mux; no limit on upload URLs; errored assets stay `processing`; the database
-  accepts any upload id string. Same shape as F1 on other tables: `profiles` and `follows` are
+  accepts any upload id string. (Binding, limits and upload ids: built locally in stage 2, section 14;
+  not deployed.) Same shape as F1 on other tables: `profiles` and `follows` are
   readable directly by any member (`true`), and `comments` wherever `deleted_at` is null.
+
+## 14. Security stage 2: upload ownership and limits (built 12 Oct, local only, not deployed)
+
+Branch `claude/shortcut-stage-2-upload-ownership-a8bab3`, on top of the deployed stage 1 head
+(`a50b71a`). Nothing hosted was touched: no deployment, no hosted database or secret change, no Mux
+upload created, no asset deleted. The only hosted contact was three read-only Mux `GET`s (below).
+
+- **Ledger.** Migration `20261012000100_video_uploads.sql` adds `video_uploads`: every Mux upload
+  URL, the account it was minted for, and whether it was used. States: `reserved` (slot taken before
+  Mux is called), `active` (URL handed out), `claimed` (a response, video reply or draft took it),
+  `failed` (Mux refused, so no upload exists). Expiry is a time (`expires_at`, one hour from the
+  reservation, before Mux's own), not a status. RLS on, no policies, no table grants to `anon` or
+  `authenticated`. Existing responses are backfilled as `claimed` by their authors (on the hosted
+  project, the founder's one response).
+- **Minting** (`mux-create-upload`, now `handler.ts` plus `index.ts` like the other two). The
+  member's own session calls `reserve_video_upload`, which locks the account row (so concurrent
+  requests count one another), refuses accounts with no profile (403 `profile_required`),
+  suspended (403 `suspended`, also refused by `pre_request`), posting paused (403 `posting_paused`)
+  or deleted (403 `account_deleted`), and applies the limits: 10 in any rolling hour, 30 in any
+  rolling 24 hours, 3 unused active URLs (429 `upload_limit_hour`, `upload_limit_day`,
+  `upload_limit_active`, with `Retry-After` and `retryAfter` in seconds). Then Mux is called with a
+  15 s timeout, then the service role records the upload id (`activate_video_upload`, letters and
+  digits only). The answer the app sees is unchanged: `{ uploadId, uploadUrl }`.
+- **Partial failures.** Mux answers with an error: the slot is given back (`fail_video_upload`).
+  Timeout, network error or a malformed answer: the slot stays `reserved` and keeps counting, so
+  retries cannot get round the limits (a reservation counts as active for 60 s, then only towards
+  the hour and the day). Mux created the upload but the ledger cannot record it: the upload is
+  cancelled at Mux and not handed out (503 `ledger_unavailable`). A reservation that outlived its
+  60 s cannot be activated later, so it can never become a fourth active URL.
+- **Claiming.** `post_response`, `post_reply`, `post_draft` and `retry_response_upload` claim the
+  upload with one conditional `update` (owner, `active`, not expired): another member's or an
+  unknown id is `upload_not_found` (the same answer, so nothing reveals that someone else's exists),
+  a used one `upload_already_used`, an expired one `upload_expired`. A concurrent second claim waits
+  on the row lock and then finds it claimed. A post refused for another reason (already responded,
+  prompt gone, duration) does not use the upload up. `claim_video_upload` is executable by no API
+  role, and a catalog test fails if any function writes `responses.mux_upload_id` without claiming.
+- **Going live.** `mark_response_live` takes the asset's Mux `passthrough` (the member the upload was
+  minted for) as a fifth argument, default null so the deployed stage 1 functions keep working
+  until redeployed. If it is not the author, or the ledger owner is not the author, nothing changes
+  and it answers `owner_mismatch` (the webhook acknowledges it with 200 so Mux does not retry; the
+  status check keeps answering `processing`).
+- **App.** `mintUpload` now throws the server's refusal reason (`posting_paused`, `suspended`,
+  `upload_limit_*`, ...) instead of always `mint_failed`, so Post Review's existing A-Restricted and
+  LV-Suspended routing still fires now that a restricted member is refused at minting, before
+  `post_response`. No screen, copy or flow changed. The installed founder build does not have this
+  (see risks).
+
+**Local checks** (isolated stack `shortcut-s2` on ports 554xx, so the default `shortcut` stack was
+not touched; Mux stubbed in every test; 12 Oct):
+
+- pgTAP **565/565**: the 436 existing (0001 to 0008) plus 129 in `0009_video_uploads.sql`
+  (privileges, account states, the three limits and their windows, `Retry-After` values, activation
+  rules, claims across all four posting paths, cross-account refusal, reuse, expiry, the passthrough
+  and ledger owner checks, cascade on account purge, constraints). **Disclosed change to existing
+  tests:** 0002, 0003 and 0005 posted with upload ids the server never minted, which stage 2
+  refuses, so those three files abort without the 10 added fixture lines that register the ids
+  (`insert into public.video_uploads ...`). No assertion, plan count or expected value changed.
+- Deno: unit **21/21**; stage 1 integration **20/20** (**disclosed change:** the stubbed Mux assets in
+  three tests now carry `passthrough`, as every real asset does; the hosted asset has one);
+  new `uploads_integration_test.ts` **20/20** over real HTTP sessions and transactions: ten
+  simultaneous mints give exactly 3 URLs and 3 Mux calls; with 8 used this hour six simultaneous
+  mints give exactly 2; six simultaneous posts of one upload give exactly 1 row; cross-account,
+  reuse, expiry, day limit, each partial failure, and the end-to-end iPhone path (mint, post, Mux
+  ready, live, claimed). `deno check` and `deno lint` clean.
+- App: typecheck and lint clean, Jest **65/65** (54 existing, 11 new for `mintUpload`).
+- `scripts/auth-integration.mjs` **37/37** against the isolated stack.
+- **Migration rehearsal:** the isolated stack built with exactly the 14 hosted migrations, the
+  founder's response recreated with its real prompt, response, upload, asset and playback ids and
+  times, then only `20261012000100` applied with `supabase migration up`: the founder row identical
+  in every column (md5 of the row), the only table count change `video_uploads` 0 to 1 (`claimed`,
+  the founder's account, the response id, outside the 24-hour window). Through the local gateway
+  and edge runtime: `mux-upload-status` for the founder's upload 200 `live` from the database
+  (that stack has no Mux credentials), 404 for another member; `web_video` and `get_response` serve
+  it; minting 401 with no token, 403 suspended, 429 with three unused URLs; a forged and a re-used
+  upload id refused; a member reading `video_uploads` 42501.
+- **Rollback rehearsal:** `supabase/rollback/20261012000100_video_uploads.down.sql` (not a
+  migration; nothing applies it) applied on top of the new migration: the original pgTAP files,
+  byte-identical to `a50b71a`, pass 436/436.
+
+**Mux capacity (read-only, 12 Oct; three `GET`s with the hosted Shortcut Beta token, no values
+printed):** 1 asset (the founder's, `ready`, `basic`, passthrough set), 1 upload (`asset_created`,
+timeout 3600), 0 live streams. The plan is not readable through the Video API with this token. The
+spike environment hit the free plan's 10-asset cap twice (`spike/REPORT.md`), Mux's pricing page
+still lists the free plan at 10 stored assets, and section 12 records 7 spike assets plus this 1.
+**Unknown and decisive: whether a card is on the account.** If it is still on the free plan, the
+project can hold at most 10 videos in total, possibly only 2 more if the cap is shared with the
+spike environment; that makes any per-account limit beside the point. Nemat to check Mux, Billing.
+- **Project-wide limit: proposed, not built.** Once the plan is confirmed: on the free plan, add a
+  card before the second tester; on pay-as-you-go, a project-wide daily cap on minted URLs as a cost
+  circuit breaker (one more count in `reserve_video_upload` under a project-wide advisory lock, so
+  concurrent mints cannot overshoot; answered with 503 so it is not mistaken for a member's limit), sized from the cohort and Mux's per-minute prices,
+  plus a Mux billing alert. Not built because the number depends on both.
+
+**Hosted migration plan (needs Nemat's approval; nothing done):**
+
+1. Preflight, read-only: hosted schema fingerprint equal to the local stack at `a50b71a` (14
+   migrations); deployed function source byte-identical to `a50b71a`; Mux Shortcut Beta asset and
+   upload lists; the founder response row and table counts recorded. Nemat not posting during the
+   window.
+2. `supabase db push --linked --dry-run`, expecting exactly `20261012000100_video_uploads.sql`; then
+   `supabase db push --linked --yes`.
+3. Immediately, by name with `--no-verify-jwt`, never `--prune`: `mux-create-upload` first (until it
+   is deployed, the stage 1 function mints URLs the database will not accept), then
+   `mux-upload-status`, then `mux-webhook`.
+4. Checks: one `video_uploads` row (the founder's, `claimed`); founder response unchanged; the
+   unauthenticated and forged-token checks from section 13; with a signed-in member token,
+   `mux-upload-status` for the founder's upload answers `live`; `GET /rest/v1/video_uploads` as a
+   member 42501. A real mint, post and play on the iPhone is the regression test, and creates one
+   Mux upload and asset: needs Nemat's separate go-ahead.
+5. Rollback: copy the rollback file to a new forward migration and push it, and redeploy the three
+   functions from `a50b71a`. Both halves together; either alone breaks posting.
+
+**Deployment risks:**
+
+- **The window between steps 2 and 3:** a URL minted by the stage 1 function (for example on Post
+  Review just before the push) is unknown to the ledger, so Post fails with `upload_not_found`;
+  leaving review and recording again mints a new one. Seconds to minutes; the founder only.
+- **Installed founder build, normal path: compatible** (same request and answer shapes; the
+  founder's response, row and asset untouched; old function calls to `mark_response_live` still
+  work). **Restricted path: degraded on the installed build:** minting is now refused, and without
+  the app change Post does nothing visible instead of opening A-Restricted. Matters only once a
+  restricted member uses a build without the change; the next build has it.
+- **No board for a reached limit** (design gate). Post Review: the review-time mint fails quietly and
+  Post does nothing; a retry after a failed post shows the existing X-Upload-Failed banner ("Check
+  your connection"), which is misleading. Needs a board, or Nemat's decision that this is acceptable
+  for the beta.
+- **Re-recording counts.** Every Post Review mints a URL. Three re-records within an hour without
+  posting fill the three unused slots, after which Post does nothing until the oldest URL expires
+  (up to an hour); ten in an hour hit the hourly limit. Recommended alternative for Nemat: at three
+  unused, retire the oldest unused URL (cancel it at Mux, mark it unusable) instead of refusing; the
+  hour and day limits still bound minting and no more than three URLs are ever usable.
+- **A review screen left open over an hour:** its URL has expired, so Post fails with
+  `upload_expired` until the person leaves and records again (before stage 2 the post went through
+  and the upload to the expired URL failed instead).
+- **Spec wording:** SPEC.md Section 6 says video replies "are not limited" (per prompt). These
+  limits count replies and drafts. Recorded as open in `docs/DECISIONS.md` (12 Oct).
+- **Drafts while posting is paused:** `post_draft` still does not check the restriction (unchanged
+  from phase 6); minting does, so only a URL minted before the restriction, within its hour, can
+  still save a private draft. The spec lists respond, reply, comment and suggest, not drafts.
+- **Concurrency cost:** minting holds the member's `accounts` row lock for one short transaction;
+  nothing else waits on it for longer.
+
+**Not verified:** anything on the hosted project; a real Mux upload through the new code (by
+decision, none was created); the app change on a device or simulator (Jest only); an Android run.
+Still open after stage 2: deleted videos stay playable at Mux; errored assets stay `processing`;
+direct reads of `profiles`, `follows` and `comments` (section 13).
 
 ## Gates
 

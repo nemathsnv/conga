@@ -12,7 +12,7 @@ Postgres, Auth, Storage and Edge Functions for Shortcut. Everything here is repr
 | `seed.sql` | Local development seed only (test invite codes). Never applied to the hosted project. |
 | `tests/` | pgTAP tests. `supabase test db` runs them against the local stack. |
 | `functions/` | Edge Functions (Deno). `auth-signin-method` backs the E-Linked check; `mux-create-upload`, `mux-upload-status` and `mux-webhook` carry video; `send-push` drains the push outbox. |
-| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network) and `integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
+| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network), `integration_test.ts` and `uploads_integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
 | `templates/` | Auth email templates. `sign_in_code.html` carries the 6-digit code and no link; it is used for the confirmation (new account), magic link (returning account) and recovery emails. |
 | `.env.example` | Names of the provider secrets the CLI needs. Copy to `.env` (git-ignored). |
 
@@ -41,7 +41,20 @@ The integration tests need the local stack's URL and keys (from `supabase status
 
 ```bash
 deno test --allow-env --allow-net supabase/functions/_tests/integration_test.ts
+deno test --allow-env --allow-net supabase/functions/_tests/uploads_integration_test.ts
 ```
+
+## Video uploads
+
+`mux-create-upload` records every Mux upload URL in `video_uploads` against the member it was
+minted for (migration `20261012000100_video_uploads.sql`). The member's own session reserves a slot
+first (`reserve_video_upload`: suspended, posting-paused and deleted accounts are refused; at most
+10 an hour, 30 a day and 3 unused active URLs per account, answered with 429 and `Retry-After`);
+the service role then records Mux's upload id (`activate_video_upload`) or gives the slot back when
+Mux refused (`fail_video_upload`). `post_response`, `post_reply`, `post_draft` and
+`retry_response_upload` claim the upload once, for its owner, before it expires
+(`upload_not_found`, `upload_already_used`, `upload_expired`). `mark_response_live` takes the
+asset's Mux `passthrough` and leaves the video unchanged unless it is the author (`owner_mismatch`).
 
 Email codes sent locally land in Mailpit at http://127.0.0.1:54324.
 
