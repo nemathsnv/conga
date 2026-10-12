@@ -27,15 +27,39 @@ const run = Date.now().toString(36);
 
 // ---------------------------------------------------------------------------
 // Mux stub. Creating an upload answers with a fresh id unless a test sets another behaviour.
+// Uploads it created are remembered as Mux would: waiting until cancelled, and cancel succeeds
+// only while waiting. Tests can replace the read or the cancel of one upload.
 type MuxCall = { method: string; url: string; body: unknown };
 const muxCalls: MuxCall[] = [];
 let uploadSeq = 0;
+const muxUploads = new Map<string, string>();
 const freshUpload = () => {
   const id = `up${run}n${++uploadSeq}`;
+  muxUploads.set(id, "waiting");
   return Response.json({ data: { id, url: `https://storage.example.invalid/upload/${id}`, status: "waiting", timeout: 3600 } }, { status: 201 });
 };
 let createUpload: () => Response | Promise<Response> = freshUpload;
 let muxGets: Record<string, unknown> = {};
+let readUpload: (id: string) => Response | Promise<Response> | null = () => null;
+let cancelUpload: (id: string) => Response | Promise<Response> | null = () => null;
+function muxUploadRoute(method: string, path: string): Response | Promise<Response> | null {
+  const cancel = path.match(/^\/video\/v1\/uploads\/([A-Za-z0-9]+)\/cancel$/);
+  if (method === "PUT" && cancel) {
+    const id = cancel[1];
+    const custom = cancelUpload(id);
+    if (custom) return custom;
+    if (muxUploads.get(id) !== "waiting") return Response.json({ error: { type: "invalid_parameters", messages: ["not waiting"] } }, { status: 400 });
+    muxUploads.set(id, "cancelled");
+    return Response.json({ data: { id, status: "cancelled" } });
+  }
+  const read = path.match(/^\/video\/v1\/uploads\/([A-Za-z0-9]+)$/);
+  if (method === "GET" && read && !muxGets[path]) {
+    const custom = readUpload(read[1]);
+    if (custom) return custom;
+    if (muxUploads.has(read[1])) return Response.json({ data: { id: read[1], status: muxUploads.get(read[1]) } });
+  }
+  return null;
+}
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
@@ -44,7 +68,8 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     muxCalls.push({ method, url: url.toString(), body: init?.body ? JSON.parse(String(init.body)) : null });
     if (url.hostname === "stream.mux.com") return new Response("#EXTM3U\n");
     if (method === "POST" && url.pathname === "/video/v1/uploads") return await createUpload();
-    if (method === "PUT" && url.pathname.endsWith("/cancel")) return Response.json({ data: { status: "cancelled" } });
+    const route = muxUploadRoute(method, url.pathname);
+    if (route) return await route;
     const data = muxGets[url.pathname];
     return data ? Response.json({ data }) : Response.json({ error: "stub: no route" }, { status: 404 });
   }
@@ -55,8 +80,12 @@ function resetMux() {
   muxCalls.length = 0;
   createUpload = freshUpload;
   muxGets = {};
+  readUpload = () => null;
+  cancelUpload = () => null;
 }
 const creates = () => muxCalls.filter((c) => c.method === "POST" && c.url === "https://api.mux.com/video/v1/uploads");
+const cancels = () => muxCalls.filter((c) => c.method === "PUT").map((c) => c.url.split("/")[6]);
+const reads = () => muxCalls.filter((c) => c.method === "GET" && /\/video\/v1\/uploads\/[A-Za-z0-9]+$/.test(c.url)).map((c) => c.url.split("/")[6]);
 
 // ---------------------------------------------------------------------------
 // Local stack helpers
@@ -118,6 +147,16 @@ async function history(accountId: string, n: number, minutesAgo: number) {
   const created_at = new Date(Date.now() - minutesAgo * 60_000).toISOString();
   const rows = Array.from({ length: n }, (_, i) => ({ account_id: accountId, upload_id: `old${run}${accountId.slice(0, 8)}m${minutesAgo}n${i}`, status: "claimed", created_at, reserved_until: created_at, expires_at: created_at }));
   assertEquals((await http("/rest/v1/video_uploads", { method: "POST", body: rows })).status, 201, "history");
+}
+
+/** Moves a member's URLs back in time, as the minutes between re-records would. */
+async function age(accountId: string, seconds = 60) {
+  const rows = await ledger(accountId);
+  for (const r of rows) {
+    if (!r.upload_id) continue;
+    const created_at = new Date(Date.parse(r.created_at) - seconds * 1000).toISOString();
+    await http(`/rest/v1/video_uploads?upload_id=eq.${r.upload_id}`, { method: "PATCH", body: { created_at } });
+  }
 }
 
 async function mint(token?: string, method = "POST") {
@@ -292,20 +331,169 @@ Deno.test("concurrency: six simultaneous posts of one upload; exactly one wins",
 
 // ---------------------------------------------------------------------------
 // Limits
-Deno.test("limits: a fourth unused URL is 429 upload_limit_active with Retry-After, and Mux is not called", async () => {
+Deno.test("repeated recording: each re-record retires the oldest unused URL at Mux, and Post still works", async () => {
+  resetMux();
+  const m = await member("rerecord");
+  const tickets: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    const r = await mint(m.token);
+    assertEquals(r.status, 200, `re-record ${i + 1}`);
+    tickets.push(r.json.uploadId as string);
+    await age(m.id);
+  }
+  assertEquals(creates().length, 5);
+  assertEquals(reads(), tickets.slice(0, 2), "Mux is asked about the oldest unused URL before it is cancelled");
+  assertEquals(cancels(), tickets.slice(0, 2), "re-records 4 and 5 each cancelled one abandoned URL");
+  assertEquals((await ledger(m.id)).map((x) => x.status), ["cancelled", "cancelled", "active", "active", "active"]);
+  // Normal posting with the latest URL; an abandoned one cannot be posted.
+  assertEquals((await postResponse(m, p1, tickets[4])).status, 200);
+  assertEquals((await postResponse(m, p2, tickets[0])).error, "upload_cancelled");
+  assertEquals((await postResponse(m, p2, tickets[3])).status, 200);
+});
+
+Deno.test("repeated recording: cancelled URLs still count; the eleventh in an hour is 429 upload_limit_hour", async () => {
+  resetMux();
+  const m = await member("quota");
+  for (let i = 0; i < 10; i++) {
+    assertEquals((await mint(m.token)).status, 200, `mint ${i + 1}`);
+    await age(m.id);
+  }
+  const r = await mint(m.token);
+  assertEquals([r.status, r.json.error], [429, "upload_limit_hour"]);
+  assert(Number(r.retryAfter) > 0 && Number(r.retryAfter) <= 3600, `Retry-After ${r.retryAfter}`);
+  assertEquals(creates().length, 10);
+  assertEquals(cancels().length, 7);
+  const statuses = (await ledger(m.id)).map((x) => x.status);
+  assertEquals([statuses.filter((x) => x === "cancelled").length, statuses.filter((x) => x === "active").length], [7, 3]);
+});
+
+Deno.test("limits: three URLs minted moments ago are not abandoned; the fourth is 429 with no Mux call", async () => {
   resetMux();
   const m = await member("active");
   for (let i = 0; i < 3; i++) assertEquals((await mint(m.token)).status, 200);
   const r = await mint(m.token);
-  assertEquals(r.status, 429);
-  assertEquals(r.json.error, "upload_limit_active");
+  assertEquals([r.status, r.json.error], [429, "upload_limit_active"]);
   assert(Number(r.retryAfter) > 3500 && Number(r.retryAfter) <= 3600, `Retry-After ${r.retryAfter}`);
   assertEquals(r.json.retryAfter, Number(r.retryAfter));
+  assertEquals([creates().length, reads().length, cancels().length], [3, 0, 0]);
+  assertEquals((await ledger(m.id)).map((x) => x.status), ["active", "active", "active"]);
+});
+
+// Each cancellation failure: the mint is 429, the abandoned URL is not freed, and nothing is
+// cancelled that Mux did not report waiting.
+const failures: { name: string; read?: (id: string) => Response | Promise<Response> | null; cancel?: (id: string) => Response | Promise<Response> | null; status: string; put: boolean }[] = [
+  { name: "Mux cannot be reached to read it", read: () => Promise.reject(new TypeError("network down")), status: "active", put: false },
+  { name: "Mux reports a transfer finished (asset_created)", read: (id) => Response.json({ data: { id, status: "asset_created", asset_id: "asX" } }), status: "active", put: false },
+  { name: "Mux reports it errored", read: (id) => Response.json({ data: { id, status: "errored" } }), status: "active", put: false },
+  { name: "Mux refuses the cancel (no longer waiting)", cancel: () => Response.json({ error: { type: "invalid_parameters" } }, { status: 400 }), status: "active", put: true },
+  { name: "Mux answers the cancel without cancelling", cancel: (id) => Response.json({ data: { id, status: "waiting" } }), status: "active", put: true },
+  { name: "the cancel times out (outcome unknown)", cancel: () => Promise.reject(new DOMException("timed out", "TimeoutError")), status: "cancelling", put: true },
+];
+for (const f of failures) {
+  Deno.test(`cancellation failure: ${f.name}; 429, the slot is not freed`, async () => {
+    resetMux();
+    const m = await member(`cf${failures.indexOf(f)}`);
+    const tickets: string[] = [];
+    for (let i = 0; i < 3; i++) tickets.push((await mint(m.token)).json.uploadId as string);
+    await age(m.id);
+    if (f.read) readUpload = (id) => (id === tickets[0] ? f.read!(id) : null);
+    if (f.cancel) cancelUpload = (id) => (id === tickets[0] ? f.cancel!(id) : null);
+    const r = await mint(m.token);
+    assertEquals([r.status, r.json.error], [429, "upload_limit_active"]);
+    assertEquals(creates().length, 3, "no new upload at Mux");
+    assertEquals(cancels(), f.put ? [tickets[0]] : []);
+    assertEquals((await ledgerRow(tickets[0])).status, f.status);
+    assertEquals((await ledger(m.id)).filter((x) => x.status === "cancelled").length, 0, "nothing freed");
+    if (f.status === "active") {
+      assertEquals((await postResponse(m, p1, tickets[0])).status, 200, "an upload put back can still be posted");
+    } else {
+      assertEquals((await postResponse(m, p1, tickets[0])).error, "upload_cancelled", "an upload whose cancel is unknown cannot be posted");
+      // It keeps its slot; the next mint retires the next abandoned URL instead.
+      const next = await mint(m.token);
+      assertEquals(next.status, 200);
+      assertEquals(cancels(), [tickets[0], tickets[1]]);
+    }
+  });
+}
+
+Deno.test("cancellation: an upload Mux already reports cancelled or timed out frees its slot without a cancel call", async () => {
+  for (const status of ["cancelled", "timed_out"]) {
+    resetMux();
+    const m = await member(`gone${status.replace("_", "")}`);
+    const tickets: string[] = [];
+    for (let i = 0; i < 3; i++) tickets.push((await mint(m.token)).json.uploadId as string);
+    await age(m.id);
+    readUpload = (id) => (id === tickets[0] ? Response.json({ data: { id, status } }) : null);
+    assertEquals((await mint(m.token)).status, 200, status);
+    assertEquals(cancels(), []);
+    assertEquals((await ledgerRow(tickets[0])).status, "cancelled");
+  }
+});
+
+Deno.test("concurrency: six simultaneous mints at the cap retire each abandoned URL once and give exactly three", async () => {
+  resetMux();
+  const m = await member("racecap");
+  const old: string[] = [];
+  for (let i = 0; i < 3; i++) old.push((await mint(m.token)).json.uploadId as string);
+  await age(m.id);
+  muxCalls.length = 0;
+  const results = await Promise.all(Array.from({ length: 6 }, () => mint(m.token)));
+  assertEquals(results.filter((r) => r.status === 200).length, 3, JSON.stringify(results.map((r) => r.json.error ?? r.status)));
+  assertEquals(results.filter((r) => r.json.error === "upload_limit_active").length, 3);
+  assertEquals(cancels().sort(), [...old].sort(), "each abandoned URL cancelled exactly once");
   assertEquals(creates().length, 3);
-  // Posting one frees a slot.
-  const first = (await ledger(m.id))[0].upload_id!;
-  assertEquals((await postResponse(m, p1, first)).status, 200);
-  assertEquals((await mint(m.token)).status, 200);
+  const rows = await ledger(m.id);
+  assertEquals(rows.filter((x) => x.status === "active").map((x) => x.upload_id).sort(), results.filter((r) => r.status === 200).map((r) => r.json.uploadId as string).sort(), "the three handed out are the three usable");
+  assertEquals(rows.filter((x) => x.status === "cancelled").map((x) => x.upload_id).sort(), [...old].sort());
+});
+
+Deno.test("concurrency: a post arriving while its upload is being cancelled is refused, and the cancel completes", async () => {
+  resetMux();
+  const m = await member("midcancel");
+  const old: string[] = [];
+  for (let i = 0; i < 3; i++) old.push((await mint(m.token)).json.uploadId as string);
+  await age(m.id);
+  let during: Awaited<ReturnType<typeof postResponse>> | null = null;
+  // Mux is being asked about old[0] for its cancellation: the person taps Post with it right then.
+  readUpload = (id) => {
+    if (id !== old[0]) return null;
+    return (async () => {
+      during = await postResponse(m, p1, old[0]);
+      return Response.json({ data: { id, status: "waiting" } });
+    })();
+  };
+  const minted = await mint(m.token);
+  assertEquals(minted.status, 200);
+  assertEquals(during!.error, "upload_cancelled");
+  assertEquals(cancels(), [old[0]]);
+  assertEquals(await ledgerRow(old[0]), { account_id: m.id, status: "cancelled", response_id: null });
+  assertEquals(await responseRow(old[0]), undefined);
+  // The app then mints a fresh URL and posts (postingFlow.prepareUpload replaces it once).
+  assertEquals((await postResponse(m, p1, minted.json.uploadId as string)).status, 200);
+});
+
+Deno.test("concurrency: a post and a mint at the cap at the same moment; a claimed upload is never cancelled", async () => {
+  for (let round = 0; round < 4; round++) {
+    resetMux();
+    const m = await member(`claimrace${round}`);
+    const old: string[] = [];
+    for (let i = 0; i < 3; i++) old.push((await mint(m.token)).json.uploadId as string);
+    await age(m.id);
+    muxCalls.length = 0;
+    const [minted, posted] = await Promise.all([mint(m.token), postResponse(m, p1, old[0])]);
+    assertEquals(minted.status, 200, `round ${round}`);
+    const row = await ledgerRow(old[0]);
+    if (posted.status === 200) {
+      assertEquals(row.status, "claimed", `round ${round}: posted, so claimed`);
+      assert(!cancels().includes(old[0]), `round ${round}: a claimed upload is never cancelled`);
+      // Posted before the mint reserved: a slot was already free. Posted after: the next abandoned one went instead.
+      assert(cancels().length === 0 || (cancels().length === 1 && cancels()[0] === old[1]), `round ${round}: ${cancels()}`);
+    } else {
+      assertEquals(posted.error, "upload_cancelled", `round ${round}`);
+      assertEquals(row.status, "cancelled", `round ${round}`);
+      assertEquals(cancels(), [old[0]], `round ${round}`);
+    }
+  }
 });
 
 Deno.test("concurrency: ten simultaneous mints give exactly three URLs", async () => {
