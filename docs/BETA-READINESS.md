@@ -22,6 +22,7 @@ run on a device), **partly verified** (some of the check has run on a device; th
 | Moderation web admin | open | A small internal web admin over the `mod_*` functions (queues, actions, the log, suggestion review). The CLI `scripts/moderate.sh` is development-only. See section 7. | A moderator handles a report, a review request and a suggestion from the admin without the CLI. |
 | Post refused while creating the row (security stage 2 follow-up) | open | When the server refuses the post itself for a reason other than a restriction or a stale upload URL (for example `already_responded`, `prompt_not_found`, `video_not_found`), or the connection drops at that step, Post Review still only logs it: Post does nothing visible. Pre-existing; left out of stage 2 by decision (Nemat, 12 Oct). Needs a decided state or copy. | Each refusal shows something on Post Review or Home; nothing is silent. |
 | Restricted on Retry (security stage 2 follow-up) | open | A post that never got a row (an upload limit at Post) and is retried after the member has been restricted or suspended shows the Upload failed banner's generic line, not A-Restricted or LV-Suspended. Rare; left out of stage 2 by decision (Nemat, 12 Oct). | Retry by a restricted member opens A-Restricted; by a suspended one, LV-Suspended. |
+| Deleted reply stays in Me → Replies (seen 12 Oct, stage 3 step 4A) | open | After Nemat deleted a test video reply on the iPhone (founder build `ede68ed`), its card stayed in Me → Replies; opening it showed "This video is not available."; it was gone only after the app restarted. The server is right (`profile_replies` no longer returns it, `get_video` answers `unavailable`); the app does not refresh the profile's lists after `delete_video` (only Home is marked dirty). Not fixed during the security verification (Nemat, 12 Oct). | Delete your own reply (and response): it leaves Me → Replies (and Responses) at once, without a restart. |
 | App icon | needs input (branding) | The Expo template icon is development-only and must not go to outside testers or the stores (Nemat, 9 Oct). Replaced once the name and brand are approved (section 5). | The icon in `app/assets` is the approved one before any outside build. |
 
 Everything else in SPEC.md Sections 3 to 21 is built. No feature phase remains; Nemat asked for no
@@ -1067,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured and a first dry run 12 Oct, Nemat approved each; clean-up off)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run and a canary dry run against real Mux 12 Oct, Nemat approved each; clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -1478,7 +1479,80 @@ Also: Mux listing past one page; a sweep finding an orphan or unknown asset; the
 hosted; the function logs; the playback-id `POST` and `DELETE` and asset `DELETE` endpoints, which
 first run for real in step 4 and cannot be undone.
 
-**Staged deployment plan** (each stage needs Nemat's separate go-ahead; steps 1 and 2 done 12 Oct, step 3's first verification done 12 Oct with the switch back to `off`, the rest not approved):
+**Canary dry run against real Mux (step 4A), 12 Oct (UTC; approved by Nemat: one disposable video,
+a dry run of its clean-up job, no change at Mux by the clean-up).** Same read-only method; Nemat
+recorded, posted and deleted on the iPhone (founder Release build from `ede68ed`).
+
+- *Preflight (16:10 to 16:11):* as at the end of step 3 (fingerprint 741 / `8d15eb8e…` line for
+  line; switch `off`; no `MUX_CLEANUP_MODE`; 0 jobs, 0 purge failures; no cron failure in 24 h;
+  founder hashes, functions, 11 secrets, Mux inventory unchanged; HLS 200).
+- *Capacity:* Mux is on the free plan, "up to 10 videos" (Nemat, Billing, 12 Oct; confirmed after
+  the upload, not before it). Assets: Shortcut Beta 1 before the test, 2 after; the spike
+  environment 7 (read with the spike token, `GET` only). If the cap is account-wide that is 9 of 10
+  now, 8 after step 4B.
+- *Flow chosen:* a video reply to the founder's own response (no new prompt): the app offers
+  "Reply to {name}" on your own videos; `post_reply` allows it; the reply count is computed, so the
+  root row does not change; a self-reply creates no activity row.
+- *The test video* (all ids recorded apart from the founder's): reply
+  `6f600f9e-3559-4911-9ebf-13d9d3df509d` (kind `reply`, `reply_to_id` and `root_response_id` the
+  founder's response, same prompt, no caption, 6,012 ms); ledger `78de8408-d6d9-476b-a080-2e326907cd39`
+  (`claimed`, the founder's account, linked to the reply); Mux upload
+  `iEkMuSYobsEnQJgDlmR02PA4mct02AczR7ZADZ3hbAp9s` (`asset_created`, passthrough the founder); asset
+  `M00202rDaKgn4p02DcDE1hFmBzl00Ru2T00evvf00W02mJt2RA` (`ready`, 6.01 s, upload id and passthrough
+  matching the ledger, no errors); public playback id `wHPWZuGF51kjQ1AVT9VlaEukVdwYuzEAGre02dfsjqKM`
+  (HLS 200). Times: URL minted 16:39:01, `post_reply` 16:39:21, asset created 16:39:25, `live`
+  16:39:27, `video_published` on the phone 16:39:29; played on the iPhone (Nemat).
+- *Webhook:* `mux-webhook` booted five times (16:38:30, 16:39:03, 16:39:25, 16:39:26, 16:39:26), and
+  Supabase's invocation log shows all five `POST`s answered **200** (Nemat, Dashboard), so all were
+  signed correctly and accepted. Which path set the reply `live` (the ready event or the app's
+  `mux-upload-status` check) is still not recorded anywhere.
+- *Deviation: a second upload URL.* Ledger `72561473-6f33-40f5-ba03-0b4f7409015f`, Mux upload
+  `Tm01xbKSZYEWRnHW61E97FLJxhRk00PjFtdYsTz8EY02UM`, minted 16:38:28, never claimed: the app's own
+  events show two recordings (`record_started` 16:38:19, `record_completed` 16:38:27, 8 s; again
+  16:38:53 and 16:39:00, 7 s), so Post Review opened twice and minted twice (as designed: it mints
+  on opening). Nemat did not notice a re-record. It holds no asset (Mux `waiting`, then `timed_out`
+  after 17:38:28) and is not a clean-up target; the ledger row stays `active` with an expired URL.
+- *Deletion (16:53:19, Nemat, Me → Replies → More → Delete reply):* the reply `deleted`, author the
+  founder, asset, upload and playback id still recorded. Read paths, each in a rolled-back `READ
+  ONLY` transaction as the founder (`authenticated`) or `anon`: `get_video(reply)` and
+  `web_video(reply)` `{"status": "unavailable"}`; `reply_room(root)` and `profile_replies(founder)`
+  without it; the founder's response still served with its playback id. The app kept the card in
+  Me → Replies until restarted (section 1). **At Mux the deleted reply is still public** (HLS 200
+  for its playback id): that is what step 4B removes.
+- *The job, queued by the deletion (switch `off`):* exactly one job in the queue, `45c34fbc-ef5c-46aa-9efa-d999bf1a3984`:
+  `delete_asset`, `author_deleted`, `pending`, 0 attempts, asset `M00202rD…RA`, upload
+  `iEkMuSYo…9s`, response the reply, owner the founder; hold none (due at once). Nothing references
+  the founder's asset or upload.
+- *Dry run on, 16:59:21* (`mux_cleanup_set_mode('dry_run', 'Nemat: stage 3 step 4A canary dry run
+  (Claude Code)')`), immediately after confirming exactly that one job; then
+  `select public.run_mux_cleanup('drain')` at 16:59:27. pg_net response 2: HTTP 200, body
+  `{"ok":true,"mode":"dry_run","claimed":1,"done":0,"found_asset":0,"retry":0,"release":1,
+  "skipped":0,"failed":0,"stale":0,"unrecorded":0}`. The worker leased the job, read the asset with
+  one `GET /video/v1/assets/M00202rD…RA`, found its id, passthrough (the owner) and upload id (the
+  job's) matching (a mismatch would have failed the job `not_verified`), and released it with the
+  plan. The deletion plan reads the asset only; the upload was read by this check's own `GET`s
+  (`asset_created`, that asset, passthrough the founder).
+- *Recorded plan:* `result` `{"dry_run": true, "would": {"act": "delete"}}`, status `pending`,
+  attempts back to 0, `not_before` 17:59:29 (an hour), no error; `mux_cleanup_overview()` lists it
+  under `dry_run_planned` with that asset and upload. **Planned action: delete asset
+  `M00202rDaKgn4p02DcDE1hFmBzl00Ru2T00evvf00W02mJt2RA`.** No other asset was selected.
+- *Scheduler:* the 17:00:00 run succeeded (7 ms) with no request (the job not due until 17:59).
+- *Dry run off, 17:00:12* (`mux_cleanup_set_mode('off', 'Nemat: stage 3 step 4A canary dry run
+  finished (Claude Code)')`); on for 51 s.
+- *No change at Mux by the clean-up:* the change guard is reached only in live mode, and the
+  response shows no `done`; Mux assets, uploads and playback ids identical before and after (the
+  test asset and its public playback id still there). Mux's own request log is not available
+  through the API.
+- *After (17:00:33 to 17:00:58):* switch `off`; fingerprint unchanged; founder hashes unchanged,
+  `live`, HLS 200; the only data changes are the test's (responses 2, the reply `deleted`; ledger 3;
+  analytics 47; pg_net responses 2); the job kept, `pending` with its plan, for step 4B; Vault,
+  functions (versions and bundles) and the 11 secrets unchanged, no `MUX_CLEANUP_MODE`.
+- *For step 4B:* `MUX_CLEANUP_MODE=live` on the function (a secret change moves every function up
+  one version), then `mux_cleanup_set_mode('live', …)`, which makes this dry-run job due at once:
+  the next scheduled run deletes the asset within a minute. The job is the only one in the queue;
+  check again first, as anything queued meanwhile would run too.
+
+**Staged deployment plan** (each stage needs Nemat's separate go-ahead; steps 1 and 2 done 12 Oct, step 3's first verification done 12 Oct with the switch back to `off`, step 4A (canary dry run) done 12 Oct with the switch back to `off`, real deletion not approved):
 
 0. *Preflight, read-only.* Hosted fingerprint equal to the tested stage 2 schema; dry run lists
    exactly `20261012000200`; deployed `mux-webhook` and `mux-upload-status` byte-identical to
@@ -1528,21 +1602,24 @@ first run for real in step 4 and cannot be undone.
   script).
 - **`app/package-lock.json` out of sync** (above): a fresh `npm ci` fails on the deployed branch.
 
-**Verified on the hosted project** (12 Oct; steps 1 to 3 above): the migration and the schema it
+**Verified on the hosted project** (12 Oct; steps 1 to 4A above): the migration and the schema it
 produces; the worker deployed, its key and the Vault secrets; the worker's 401 and 405 answers;
 the scheduler with the switch `off` (no HTTP call) and in `dry_run` with no job due (no HTTP call);
 the hosted gateway passing pg_net's call to the worker with the Vault key (200); one dry-run sweep
 reading the real Shortcut Beta asset list and classifying the founder's asset `in_use`; the switch
-back to `off`; the founder's rows, asset, playback id and HLS unchanged throughout.
+back to `off`; the founder's rows, asset, playback id and HLS unchanged throughout. Step 4A: a
+video reply posted on the iPhone through the stage 2 ledger (owner, upload, passthrough matching),
+five signed webhook deliveries answered 200, the author's deletion hiding it from every app read
+path and queuing exactly one `delete_asset` job with the right asset, upload and owner, and that
+job's dry run against real Mux (one `GET` of the asset, the ownership check on real `passthrough`
+and `upload_id` values passing, plan `delete`, recorded and kept for step 4B).
 
-**Not verified:** any per-job dry run against real Mux (no job has ever existed, so the reads of a
-single asset or upload, the ownership check on real `passthrough` and `upload_id` values, and the
-plans for a deletion, a playback change or a cancellation have only run against the fake); any
-change at Mux (deleting an asset, creating or deleting a playback id, cancelling an upload: the
-first is the step 4 test); a sweep that finds an orphan or an unknown asset; Mux listing beyond one
+**Not verified:** any change at Mux (deleting an asset, creating or deleting a playback id,
+cancelling an upload: the first is the step 4B test); dry runs of a playback revocation or restore
+and of an upload cancellation against real Mux (no such job has existed on hosted); a sweep that finds an orphan or an unknown asset; Mux listing beyond one
 page; the daily jobs (03:15 purge, 03:30 and 03:40 prunes, 04:45 sweep) on hosted, which have
-nothing to act on yet; the Edge Function, gateway and Postgres logs (not readable from here); a
-device run; Android. Still open:
+nothing to act on yet; the Edge Function, gateway and Postgres logs beyond the webhook invocations
+Nemat read for step 4A; which path set the reply `live`; Android. Still open:
 errored assets stay `processing`; direct reads of `profiles`, `follows` and `comments`
 (section 13).
 
