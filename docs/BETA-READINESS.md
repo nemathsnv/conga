@@ -34,7 +34,7 @@ new feature work after phase 7.
 | Google Play developer account (B-4) | needs input | Signing and internal testing track. | A preview build installs on an Android phone from the internal track. |
 | APNs key and FCM service account (B-2) | needs input | Added to the EAS project; the `send-push` secrets (`PUSH_SENDER_KEY`, the two Vault secrets from `supabase/README.md`) set per environment. | A video reply from another account arrives as a push with the spec's text on both platforms; Pause all stops it; comments within 10 minutes arrive as one notification. |
 | Google Sign-In credentials | needs input | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` for the hosted project; without them the plugin is left out and the Google button fails with a configuration error. | Google sign-in completes on both platforms, including the E-Linked case. |
-| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (13 migrations applied 9 Oct) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: `send-push` and `web` and the `send-push` Vault secrets (deployed: `auth-signin-method` 10 Oct, section 10; `mux-webhook`, `mux-create-upload`, `mux-upload-status` 10 and 11 Oct, section 12), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
+| Hosted Supabase project (`picvoavfxnajfjkqawju`) | needs input (14 migrations applied; the 14th, `20261011000100`, on 12 Oct, section 13) | Done 9 Oct (section 9): the 12 migrations `20261006000100` to `20261010000200` applied with `supabase db push`, schema verified equal to the local stack. Done 9 Oct (section 10, hosted steps 1 and 2): the auth hardening migration `20261010000300`, and the Auth configuration with the access token hook on, 6-digit codes and the code-only emails. Still open: `send-push` and `web` and the `send-push` Vault secrets (deployed: `auth-signin-method` 10 Oct, section 10; `mux-webhook`, `mux-create-upload`, `mux-upload-status` 10 and 11 Oct, section 12, redeployed 12 Oct, section 13), reference data that today only exists in `seed.sql` (topics, the other places, place neighbours), the app's `.env` pointed at it. | pgTAP is local-only; the check is the device run in section 3 against the hosted project. |
 | Mux credentials for the hosted project | done 10 Oct; check passed 11 Oct on the founder iPhone (section 12); spike tokens not yet revoked | Token and webhook secret in the function env; uploads minted server-side only. Since 10 Oct the hosted project uses its own "Shortcut Beta" Mux environment and token (section 12); the spike pair is no longer on the hosted project but is still valid in Mux and still in the local `supabase/functions/.env`. | A posted response goes live through the hosted stack. |
 | Email provider for sign-in codes and waitlist emails | needs input (provider decided: Resend, Nemat 9 Oct) | A sending domain that is not a Conga domain; the Resend account, its DNS records (SPF, DKIM, bounce MX, then DMARC) and a send-only API key; the SMTP settings on the hosted project (section 10). Free plan: 100 emails a day, 3,000 a month. 9 Oct: domain `auth.churntech.com` verified in Resend and SMTP saved in the hosted dashboard by Nemat (sender `no-reply@auth.churntech.com`, name Shortcut); no email delivered or checked yet. | A code arrives within a minute on Gmail, Outlook, iCloud and a Bali address; a waitlist admission email arrives. |
 
@@ -633,45 +633,80 @@ A build for Nemat's own iPhone only, before Apple Developer enrollment. Not for 
     errors at Mux; a second account seeing and playing the response, and replies; Bali mobile
     data; Android; B-1; the items below. No gate changes.
 - **Open before outside testers:** the upload id is not checked or encoded before it goes into
-  the Mux API path in `mux-upload-status`; uploads are not bound to their author (the
+  the Mux API path in `mux-upload-status` (fixed 12 Oct, section 13); uploads are not bound to their author (the
   `passthrough` user id is set but never compared); deleted or removed videos stay playable at
   Mux (nothing deletes assets, including the 30-day purge); no limit on upload URLs per member;
   an asset that errors at Mux leaves its response `processing`; the webhook's signature
-  comparison is not constant-time.
+  comparison is not constant-time (fixed 12 Oct, section 13).
 - **Still to do in Mux (Nemat):** revoke the extra token created in the spike environment and the
   spike token; decide about the spike's 7 assets; give the local stack its own development token
   instead of the spike pair in `supabase/functions/.env`.
 
-## 13. Security stage 1 (11 Oct; local only, not deployed)
+## 13. Security stage 1 (built 11 Oct; deployed 12 Oct, Nemat approved)
 
-Four audit findings fixed on branch `claude/shortcut-stage-1-security-c02c82`. Nothing hosted was
-touched: no migration pushed, no function deployed, no secret changed, no Mux call made (Mux is
-stubbed in every test, and the test stack has no Mux secrets).
+Four audit findings, branch `claude/shortcut-stage-1-security-c02c82` (`phase-7-beta` plus four
+commits). Deployed to `picvoavfxnajfjkqawju` on 12 Oct: one migration and three functions. No
+secret, configuration, Auth setting, Mux asset or other function changed; no upload, prompt or
+account created.
 
 - **F1, direct reads of `responses`:** migration `20261011000100_responses_direct_read.sql`. Any
   member could `GET /rest/v1/responses` and read every live row, including blocked members' and
   their Mux upload and asset ids. Members now read only their own rows directly. The read functions
-  (feeds, players, profiles, web) are SECURITY DEFINER and unaffected; the app never reads the table.
+  (feeds, players, profiles, web) are SECURITY DEFINER owned by `postgres` and unaffected; the app
+  never reads the table.
 - **F3, upload ids and Mux URLs:** `_shared/mux.ts` accepts only 1 to 128 letters and digits as a
   Mux id (`isMuxId`, `muxSegment`), `mux()` refuses any URL that is not `https://api.mux.com`, and
   `prewarm` skips invalid playback ids. `mux-upload-status` answers 400 `invalid_upload_id` before
   the database or Mux; a malformed asset id from Mux is never put in a path.
 - **F13, ownership in `mux-upload-status`:** the lookup filters on `author_id` as well as RLS.
-- **F12, webhook signature:** `verifyMuxSignature` compares the HMAC bytes in constant time and
-  requires exactly 64 hex characters; accepted and rejected signatures are otherwise unchanged.
+- **F12, webhook signature:** `verifyMuxSignature` compares HMAC bytes in constant time over the
+  raw body, within 300 s either way, and (like Mux's own SDK) accepts the request when any one
+  `v1` value matches; a `v1` must be exactly 64 lowercase hex characters and there must be exactly
+  one numeric `t`. One secret only; no rotation support (Nemat, 12 Oct).
 - **Structure:** `mux-upload-status` and `mux-webhook` moved their code to `handler.ts` so tests can
   import it; `index.ts` only serves it. The responses and status codes the app sees are unchanged.
-- **Checks (isolated local stack, a separate project id and ports):** pgTAP 436/436 (400 before,
-  36 new in `0008_security_stage1.sql`; 12 of them fail on the old policy); Deno unit 15/15 and
-  integration 19/19 (`supabase/functions/_tests/`; with the old policy the 2 F1 HTTP tests fail,
-  and without the author filter as well the F13 live-upload test fails); the same cases through
-  the local gateway and edge runtime; `deno check` and `deno lint` clean; app typecheck, lint and
-  Jest 54/54; `scripts/auth-integration.mjs` 37/37. Not run: anything on the hosted project, a device,
-  or real Mux.
-- **To deploy (needs Nemat's approval):** `supabase db push --dry-run`, then `supabase db push`
-  (the one migration); then `supabase functions deploy mux-upload-status`, `mux-webhook` and
-  `mux-create-upload` (it shares `_shared/mux.ts`), never `--prune`. Then the founder iPhone
-  record, upload, publish and play check again, and the 401 and 400 checks on the hosted functions.
+- **Local checks (isolated stack, separate project id and ports; 12 Oct, final code):** pgTAP
+  436/436 (36 new in `0008_security_stage1.sql`, 12 of them fail on the old policy); Deno unit
+  21/21 (4 of the multi-signature tests fail on the previous verifier) and integration 20/20
+  (`supabase/functions/_tests/`; Mux stubbed); `deno check` and `deno lint` clean; app typecheck,
+  lint and Jest 54/54; `scripts/auth-integration.mjs` 37/37 (11 Oct).
+- **Preflight (read-only, 12 Oct):** hosted schema fingerprint (every public function definition,
+  policy, table grant, RLS flag and trigger) equal to the local stack built from the same 13
+  migrations; deployed source of the three Mux functions byte-identical to `d91bea8`.
+- **Deployment, 12 Oct (UTC):**
+  - 08:59:30 `supabase db push --linked --yes`, after a dry run listing exactly
+    `20261011000100_responses_direct_read.sql` (no seeds, no roles); exit 0. 14 of 14 migrations
+    applied, none pending.
+  - Then, each by name with `--no-verify-jwt`, never `--prune`: `mux-upload-status` 09:00:06
+    (v1 to v2), `mux-webhook` 09:00:47 (v2 to v3), `mux-create-upload` 09:01:01 (v1 to v2).
+- **Hosted checks after deployment (12 Oct):**
+  - `responses` has one policy, "responses: signed-in users read only their own directly",
+    `authenticated`, `author_id = auth.uid()`. Hosted fingerprint equal to the tested local stack;
+    against before, only that policy differs. All 20 read and write functions on `responses` still
+    SECURITY DEFINER, owned by `postgres`, with unchanged execute grants (`web_video` and
+    `web_prompt` for `anon`); `pre_request` gate unchanged.
+  - Functions: `auth-signin-method` v3 (unchanged bundle), `mux-create-upload` v2,
+    `mux-upload-status` v2, `mux-webhook` v3, all `ACTIVE`, `verify_jwt` false. Downloaded source
+    byte-identical to the branch; the `_tests` folder was not deployed.
+  - `mux-upload-status` and `mux-create-upload`: 401 with no token, a garbage token, the anon key,
+    the publishable key and a forged ES256 token. Malformed upload ids without a member session:
+    401 (authentication is checked first).
+  - `mux-webhook`: `GET` 405; unsigned, malformed, no `v1`, forged, two forged `v1`, stale and
+    uppercase signatures all 401.
+  - `GET /rest/v1/responses` as anon: `[]`; with a forged token: rejected by PostgREST (PGRST301).
+  - The founder response through `web_video` (anon): `live`, same id and playback id; its HLS
+    manifest HTTP 200.
+  - Secrets: 10 before and after, same names and digests. The founder response row identical in
+    every column; account, profile, prompt, response, comment, like and analytics counts unchanged.
+    Mux Shortcut Beta (read-only `GET`s): the same 1 upload and 1 asset.
+- **Not verified on hosted:** a malformed upload id with a valid member session answering 400 (needs
+  a signed-in member token; the same code answers 400 through the local gateway); the founder video
+  in the signed-in app (feed and player functions are unchanged in definition and grants, but no
+  signed-in call was made); a genuine signed `video.asset.ready` delivery through the new webhook
+  (no upload was made, by decision); function logs. These wait for the device regression test.
+- **Rollback:** functions, redeploy the three from a checkout of `d91bea8` (byte-identical to what
+  was deployed before). Migration, a new forward migration restoring the old policy; this reopens
+  F1, so roll forward instead unless the app is shown to depend on it.
 - **Still open from section 12:** uploads not bound to their author (`passthrough`); deleted videos
   still playable at Mux; no limit on upload URLs; errored assets stay `processing`; the database
   accepts any upload id string. Same shape as F1 on other tables: `profiles` and `follows` are
