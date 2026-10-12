@@ -22,9 +22,26 @@ export function muxSegment(id: unknown): string {
   return encodeURIComponent(id);
 }
 
+/** Hosts a local fake Mux may run on (tests only). Anything else in MUX_API_BASE is refused. */
+const LOCAL_MUX_HOSTS = ["127.0.0.1", "localhost", "host.docker.internal"];
+
+/**
+ * https://api.mux.com, unless MUX_API_BASE names a fake Mux on this machine (http, loopback or
+ * Docker's host alias). It can never point Mux calls at another host: on a hosted project such a
+ * value only makes every Mux call fail.
+ */
+export function muxBase(): string {
+  const override = Deno.env.get("MUX_API_BASE");
+  if (!override) return MUX_API;
+  const u = new URL(override);
+  if (u.protocol !== "http:" || !LOCAL_MUX_HOSTS.includes(u.hostname)) throw new Error("invalid_mux_api_base");
+  return u.origin;
+}
+
 export async function mux<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const url = new URL(MUX_API + path);
-  if (url.origin !== MUX_API) throw new Error("invalid_mux_path");
+  const base = muxBase();
+  const url = new URL(base + path);
+  if (url.origin !== base) throw new Error("invalid_mux_path");
   const res = await fetch(url, {
     ...init,
     headers: { Authorization: authHeader(), "Content-Type": "application/json", ...(init.headers ?? {}) },

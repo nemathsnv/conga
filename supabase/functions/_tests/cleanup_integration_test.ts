@@ -25,6 +25,8 @@ const WEBHOOK_SECRET = "local-test-webhook-secret";
 Deno.env.set("MUX_WEBHOOK_SECRET", WEBHOOK_SECRET);
 const CLEANUP_KEY = "local-test-cleanup-key";
 Deno.env.set("MUX_CLEANUP_KEY", CLEANUP_KEY);
+// Both switches on for this run (the database's is put back to off at the end).
+Deno.env.set("MUX_CLEANUP_MODE", "live");
 
 const run = Date.now().toString(36);
 
@@ -233,6 +235,10 @@ async function drainAll() {
   }
   return totals;
 }
+
+const setMode = async (mode: string) => assertEquals((await http("/rest/v1/rpc/mux_cleanup_set_mode", { method: "POST", body: { p_mode: mode, p_by: `test-${run}` } })).status, 200, `mode ${mode}`);
+const mutations = () => muxCalls.filter((c) => c.method !== "GET");
+await setMode("live");
 
 // Every job already due in this local database is set aside, so this run drains only its own.
 await http("/rest/v1/mux_cleanup_jobs?status=in.(pending,running)", { method: "PATCH", body: { status: "skipped", lease_id: null, locked_until: null, result: { outcome: "set_aside_by_test", run } } });
@@ -468,8 +474,8 @@ Deno.test("ownership: an asset whose passthrough or upload is not the recorded o
   await drainAll();
   assertEquals(destructive(a.asset.id).length + destructive(b.asset.id).length, 0, "no DELETE or cancel");
   assert(assets.has(a.asset.id) && assets.has(b.asset.id));
-  assertEquals((await jobs(a.asset.id))[0].status + ":" + (await jobs(a.asset.id))[0].last_error, "skipped:passthrough_mismatch");
-  assertEquals((await jobs(b.asset.id))[0].status + ":" + (await jobs(b.asset.id))[0].last_error, "skipped:upload_id_mismatch");
+  assertEquals((await jobs(a.asset.id))[0].status + ":" + (await jobs(a.asset.id))[0].last_error, "failed:passthrough_mismatch", "left for a person, never retried automatically");
+  assertEquals((await jobs(b.asset.id))[0].status + ":" + (await jobs(b.asset.id))[0].last_error, "failed:upload_id_mismatch");
 });
 
 // ---------------------------------------------------------------------------
@@ -559,6 +565,138 @@ Deno.test("the founder's video: never touched at Mux, its row unchanged, still p
   assertEquals((await jobs(founderVideo.asset.id)).filter((j) => j.status !== "skipped"), []);
 });
 
+
+// ---------------------------------------------------------------------------
+// The switches: nothing changes at Mux unless both say live.
+Deno.test("off: nothing is leased and Mux is not called, not even listed", async () => {
+  const xia = await member("xia");
+  const v = await liveVideo(xia);
+  await rpc(xia, "delete_video", { p_id: v.id });
+  await setMode("off");
+  muxCalls.length = 0;
+  const r = await drain() as Record<string, unknown>;
+  assertEquals([r.mode, r.claimed], ["off", 0]);
+  const s = await handleMuxCleanup(new Request("http://localhost/functions/v1/mux-cleanup", { method: "POST", headers: { Authorization: `Bearer ${CLEANUP_KEY}` }, body: JSON.stringify({ mode: "sweep" }) }));
+  assertEquals((await s.json()).skipped, "off");
+  assertEquals(muxCalls, [], "no Mux call of any kind");
+  assert(assets.has(v.asset.id));
+  await setMode("live");
+  await drainAll();
+  assert(!assets.has(v.asset.id), "once on, the deletion runs");
+});
+
+Deno.test("dry run (the function's switch): Mux is read, never changed; the plan is recorded; going live acts on it", async () => {
+  const yan = await member("yan");
+  const v = await liveVideo(yan), w = await liveVideo(yan);
+  await rpc(yan, "delete_video", { p_id: v.id });
+  await service("mod_remove_video", { p_video: w.id, p_reason: "Spam.", p_moderator: "test" });
+  Deno.env.set("MUX_CLEANUP_MODE", "dry_run");
+  try {
+    muxCalls.length = 0;
+    const r = await drain() as Record<string, number | string>;
+    assertEquals(r.mode, "dry_run");
+    assert((r.release as number) >= 2, JSON.stringify(r));
+    assertEquals(mutations(), [], "only GETs");
+    assert(assets.has(v.asset.id) && assets.get(w.asset.id)!.playback_ids.length === 1, "nothing changed at Mux");
+    assertEquals((await row(w.id))!.mux_playback_id, w.asset.playback_ids[0].id, "nor in the database's videos");
+    const [job] = await jobs(v.asset.id);
+    assertEquals([job.status, job.attempts, (job.result as { dry_run: boolean }).dry_run], ["pending", 0, true]);
+    assertEquals((job.result as { would: { act: string } }).would.act, "delete");
+    const overview = await service("mux_cleanup_overview") as { dry_run_planned: { asset_id: string }[] };
+    assert(overview.dry_run_planned.some((p) => p.asset_id === v.asset.id), "the overview lists the plan");
+  } finally {
+    Deno.env.set("MUX_CLEANUP_MODE", "live");
+  }
+  await setMode("live");
+  await drainAll();
+  assert(!assets.has(v.asset.id), "live: deleted");
+  assertEquals(assets.get(w.asset.id)!.playback_ids, [], "live: revoked");
+});
+
+Deno.test("dry run (the database's switch): the sweep queues and records nothing, and reports what it would", async () => {
+  const zed = await member("zed");
+  const u = await mint(zed);
+  const orphan = muxReceives(u, { createdDaysAgo: 3 });
+  const old = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  await http(`/rest/v1/video_uploads?upload_id=eq.${u}`, { method: "PATCH", body: { created_at: old, expires_at: old } });
+  await setMode("dry_run");
+  try {
+    muxCalls.length = 0;
+    const res = await handleMuxCleanup(new Request("http://localhost/functions/v1/mux-cleanup", { method: "POST", headers: { Authorization: `Bearer ${CLEANUP_KEY}` }, body: JSON.stringify({ mode: "sweep" }) }));
+    const sweep = await res.json();
+    assertEquals([sweep.mode, sweep.dry_run], ["dry_run", true]);
+    assert(sweep.would_queue.includes(orphan.id), JSON.stringify(sweep));
+    assertEquals(await jobs(orphan.id), [], "nothing queued");
+    assertEquals(mutations(), []);
+  } finally {
+    await setMode("live");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Ordering: the worker acts on the database as it is at the last moment.
+Deno.test("ordering: a restore whose video is deleted again while Mux creates the id removes the id at once", async () => {
+  const ama = await member("ama");
+  const v = await liveVideo(ama);
+  assertEquals((await rpc(ama, "delete_account")).status, 204);
+  await drainAll();
+  assertEquals(assets.get(v.asset.id)!.playback_ids, []);
+  assertEquals((await rpc(ama, "get_onboarding_state")).json.has_profile, true);
+  // Mux is slow to create the new playback id; meanwhile Ama deletes her account again.
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  fault = (method, path) =>
+    method === "POST" && path === `/video/v1/assets/${v.asset.id}/playback-ids`
+      ? gate.then(() => fakeMux(method, new URL(`https://api.mux.com${path}`), JSON.stringify({ policy: "public" }), false))
+      : null;
+  const running = drain(1);
+  await new Promise((r) => setTimeout(r, 300));
+  assertEquals((await rpc(ama, "delete_account")).status, 204);
+  release();
+  await running;
+  fault = () => null;
+  assertEquals(assets.get(v.asset.id)!.playback_ids, [], "the id created for the stale restore was removed straight away");
+  assertEquals((await row(v.id))!.mux_playback_id, null, "and never recorded");
+  assertEquals((await web(v.id)).status, "unavailable");
+  await drainAll();
+  assertEquals(assets.get(v.asset.id)!.playback_ids, []);
+});
+
+Deno.test("ordering: a deleted video stays deleted through account deletion and recovery", async () => {
+  const bo = await member("bo");
+  const gone = await liveVideo(bo), kept = await liveVideo(bo);
+  await rpc(bo, "delete_video", { p_id: gone.id });
+  assertEquals((await rpc(bo, "delete_account")).status, 204);
+  assertEquals((await rpc(bo, "get_onboarding_state")).json.has_profile, true);
+  await drainAll();
+  assert(!assets.has(gone.asset.id), "the deleted video's asset is deleted");
+  assertEquals((await web(gone.id)).status, "unavailable");
+  assertEquals((await web(kept.id)).status, "live", "the other one plays");
+});
+
+Deno.test("ordering: removal, review, reversal brings the video back; removal, restore, removal leaves it off", async () => {
+  const cy = await member("cy");
+  const v = await liveVideo(cy), w = await liveVideo(cy);
+  await service("mod_remove_video", { p_video: v.id, p_reason: "Spam.", p_moderator: "test" });
+  await drainAll();
+  const action = ((await http(`/rest/v1/moderation_actions?target_id=eq.${v.id}&kind=eq.remove&select=id`)).json as { id: string }[])[0].id;
+  assertEquals((await rpc(cy, "request_review", { p_action: action })).status, 204);
+  await service("mod_decide_review", { p_action: action, p_outcome: "reversed", p_moderator: "test" });
+  await drainAll();
+  assertEquals(assets.get(v.asset.id)!.playback_ids.length, 1);
+  assertEquals((await web(v.id)).video?.playback_id, assets.get(v.asset.id)!.playback_ids[0].id, "it plays again");
+
+  await service("mod_remove_video", { p_video: w.id, p_reason: "Spam.", p_moderator: "test" });
+  await service("mod_restore_video", { p_video: w.id, p_reason: "Mistake.", p_moderator: "test" });
+  await service("mod_remove_video", { p_video: w.id, p_reason: "Spam again.", p_moderator: "test" });
+  muxCalls.length = 0;
+  await drainAll();
+  assertEquals(assets.get(w.asset.id)!.playback_ids, [], "removed in the end: no playback");
+  assert(assets.has(w.asset.id), "the asset kept for the retention");
+  assertEquals((await web(w.id)).status, "unavailable");
+  assertEquals(muxCalls.filter((c) => c.method === "POST" && c.path.includes(w.asset.id)).length, 0, "no playback id was ever created for it");
+});
+
 // ---------------------------------------------------------------------------
 Deno.test("cleanup: remove the test members, their rows and the prompts", async () => {
   // Replies first (they reference their root), then tombstones, then everything else.
@@ -571,6 +709,7 @@ Deno.test("cleanup: remove the test members, their rows and the prompts", async 
     await http(`/auth/v1/admin/users/${m.id}`, { method: "DELETE" });
   }
   await http(`/rest/v1/prompts?id=in.(${promptIds.join(",")})`, { method: "DELETE" });
+  await setMode("off");
   // This run's open jobs (the 30-day retentions) are closed so they never act on a later run.
   await http(`/rest/v1/mux_cleanup_jobs?status=in.(pending,running,review)&or=(asset_id.like.*${run}*,upload_id.like.*${run}*)`, {
     method: "PATCH", body: { status: "skipped", lease_id: null, locked_until: null, result: { outcome: "test_cleanup" } },
