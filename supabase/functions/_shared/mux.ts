@@ -30,8 +30,15 @@ export async function mux<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { Authorization: authHeader(), "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Mux ${res.status} ${path}: ${JSON.stringify(body)}`);
+  if (!res.ok) throw new MuxHttpError(res.status, `Mux ${res.status} ${path}: ${JSON.stringify(body)}`);
   return body.data as T;
+}
+
+/** Mux answered with an error status. Unlike a timeout or a network error, the outcome is known. */
+export class MuxHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
 }
 
 export interface MuxUpload { id: string; url: string; status: string; asset_id?: string; error?: unknown }
@@ -49,8 +56,8 @@ export const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-export function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+export function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json", ...headers } });
 }
 
 /**

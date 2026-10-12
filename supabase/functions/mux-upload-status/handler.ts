@@ -27,9 +27,15 @@ export async function handleUploadStatus(req: Request): Promise<Response> {
       const { data } = await admin.rpc("mark_response_live", {
         p_upload_id: uploadId, p_asset_id: asset.id, p_playback_id: playbackId,
         p_duration_ms: asset.duration ? Math.round(asset.duration * 1000) : null,
+        // The member the upload was minted for; it must be the response's author.
+        p_passthrough: asset.passthrough ?? "",
       });
-      responseStatus = data?.status ?? responseStatus;
-      await prewarm(playbackId);
+      if (data?.status === "owner_mismatch") {
+        console.error("owner_mismatch", uploadId);
+      } else {
+        responseStatus = data?.status ?? responseStatus;
+        await prewarm(playbackId);
+      }
     }
     return json({ uploadStatus: upload.status, assetStatus: asset.status, playbackId, responseStatus, errors: asset.errors ?? null });
   } catch (e) {

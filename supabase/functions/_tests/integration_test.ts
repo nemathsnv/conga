@@ -217,7 +217,7 @@ Deno.test("status: the caller's own ready upload goes live (the verified iPhone 
   const asset = ids("asLenaProc"), playback = ids("pbLenaProc");
   resetMux({
     [`/video/v1/uploads/${U.lenaProc}`]: { body: { data: { id: U.lenaProc, status: "asset_created", asset_id: asset } } },
-    [`/video/v1/assets/${asset}`]: { body: { data: { id: asset, status: "ready", duration: 9.911, playback_ids: [{ id: playback, policy: "public" }] } } },
+    [`/video/v1/assets/${asset}`]: { body: { data: { id: asset, status: "ready", duration: 9.911, playback_ids: [{ id: playback, policy: "public" }], passthrough: lena.id } } },
   });
   const r = await call(statusRequest(U.lenaProc, lena.token));
   assertEquals(r.status, 200);
@@ -249,8 +249,9 @@ async function signed(body: string, secret = WEBHOOK_SECRET, t = Math.floor(Date
   const hex = Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
   return new Request("http://localhost/functions/v1/mux-webhook", { method: "POST", body, headers: { "Mux-Signature": `t=${t},v1=${hex}` } });
 }
-const readyEvent = (uploadId: string, asset: string, playback: string) =>
-  JSON.stringify({ type: "video.asset.ready", data: { id: asset, upload_id: uploadId, status: "ready", duration: 12.5, playback_ids: [{ id: playback, policy: "public" }] } });
+// Mux sets passthrough on every asset to the member the upload was minted for (stage 2 checks it).
+const readyEvent = (uploadId: string, asset: string, playback: string, passthrough = adam.id) =>
+  JSON.stringify({ type: "video.asset.ready", data: { id: asset, upload_id: uploadId, status: "ready", duration: 12.5, playback_ids: [{ id: playback, policy: "public" }], passthrough } });
 
 Deno.test("F12: a webhook signed with the wrong secret is 401 and changes nothing", async () => {
   resetMux();

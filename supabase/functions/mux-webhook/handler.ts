@@ -16,8 +16,15 @@ export async function handleMuxWebhook(req: Request): Promise<Response> {
   const { data, error } = await admin.rpc("mark_response_live", {
     p_upload_id: asset.upload_id, p_asset_id: asset.id, p_playback_id: playbackId,
     p_duration_ms: asset.duration ? Math.round(asset.duration * 1000) : null,
+    // The member the upload was minted for; it must be the response's author.
+    p_passthrough: asset.passthrough ?? "",
   });
   if (error) return json({ error: "db_failed" }, 500);
+  // Acknowledged so Mux does not retry; the response is left as it was.
+  if (data?.status === "owner_mismatch") {
+    console.error("owner_mismatch", asset.upload_id);
+    return json({ ok: true, ignored: "owner_mismatch" });
+  }
   await prewarm(playbackId);
   return json({ ok: true, response: data });
 }
