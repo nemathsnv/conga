@@ -285,6 +285,17 @@ Deno.test("webhook: a correctly signed video.asset.ready makes the response live
   assertEquals(muxCalls[0], `https://stream.mux.com/${playback}.m3u8`);
 });
 
+Deno.test("webhook: an invalid first v1 followed by a valid second v1 is accepted", async () => {
+  const req = await signed(readyEvent(U.adamWebhookBad, ids("asMulti"), ids("pbMulti")));
+  const header = req.headers.get("Mux-Signature")!;
+  const [t, v1] = header.split(",");
+  const multi = new Request(req.url, { method: "POST", body: await req.text(), headers: { "Mux-Signature": `${t},v1=${"ab".repeat(32)},${v1}` } });
+  const res = await handleMuxWebhook(multi);
+  assertEquals(res.status, 200);
+  await res.body?.cancel();
+  assertEquals((await row(U.adamWebhookBad)).status, "live");
+});
+
 Deno.test("webhook: other signed event types are acknowledged and ignored", async () => {
   const res = await handleMuxWebhook(await signed(JSON.stringify({ type: "video.upload.created", data: { id: "x" } })));
   assertEquals(res.status, 200);

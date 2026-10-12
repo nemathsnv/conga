@@ -86,18 +86,34 @@ export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
 const WEBHOOK_TOLERANCE_S = 300;
 
 /**
- * Checks a Mux-Signature header (t=<unix seconds>,v1=<hex HMAC-SHA256 of "t.body">) against the
- * raw request body. False without a secret, outside 300 s of now, or on any mismatch.
+ * Checks a Mux-Signature header (t=<unix seconds>,v1=<hex HMAC-SHA256 of "t.body">[,v1=...])
+ * against the raw request body. Like Mux's own SDK, any one matching v1 signature is enough.
+ * False without a secret, with no or more than one timestamp, outside 300 s of now, or when no
+ * v1 signature matches.
  */
 export async function verifyMuxSignature(header: string, raw: string, secret: string | undefined, nowMs = Date.now()): Promise<boolean> {
   if (!secret) return false;
-  const t = /t=(\d+)/.exec(header)?.[1];
-  const v1 = /v1=([a-f0-9]+)/.exec(header)?.[1];
-  if (!t || !v1 || v1.length !== 64) return false;
+  const timestamps: string[] = [];
+  const signatures: string[] = [];
+  for (const part of header.split(",")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const name = part.slice(0, eq).trim(), value = part.slice(eq + 1).trim();
+    if (name === "t") timestamps.push(value);
+    else if (name === "v1") signatures.push(value);
+  }
+  if (timestamps.length !== 1 || !/^\d+$/.test(timestamps[0]) || !signatures.length) return false;
+  const t = timestamps[0];
   if (Math.abs(nowMs / 1000 - Number(t)) > WEBHOOK_TOLERANCE_S) return false;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const expected = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${raw}`)));
-  const given = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) given[i] = parseInt(v1.slice(i * 2, i * 2 + 2), 16);
-  return timingSafeEqual(expected, given);
+  let matched = false;
+  for (const v1 of signatures) {
+    if (!/^[a-f0-9]{64}$/.test(v1)) continue;
+    const given = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) given[i] = parseInt(v1.slice(i * 2, i * 2 + 2), 16);
+    // Every signature is compared; no early exit on a match.
+    if (timingSafeEqual(expected, given)) matched = true;
+  }
+  return matched;
 }

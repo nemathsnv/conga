@@ -160,3 +160,52 @@ Deno.test("verifyMuxSignature rejects malformed headers and wrong-length signatu
     assert(!(await verifyMuxSignature(header, BODY, SECRET, NOW)), header);
   }
 });
+
+Deno.test("verifyMuxSignature accepts an invalid first v1 followed by a valid second v1", async () => {
+  const good = await sign(T, BODY);
+  const forged = await sign(T, BODY, "other-secret");
+  assert(await verifyMuxSignature(`t=${T},v1=${forged},v1=${good}`, BODY, SECRET, NOW), "forged then valid");
+  assert(await verifyMuxSignature(`t=${T},v1=${"0".repeat(64)},v1=${good}`, BODY, SECRET, NOW), "zeros then valid");
+  assert(await verifyMuxSignature(`t=${T},v1=${good.slice(0, 63)},v1=${good}`, BODY, SECRET, NOW), "malformed then valid");
+  assert(await verifyMuxSignature(`t=${T},v1=${good.toUpperCase()},v1=${good}`, BODY, SECRET, NOW), "uppercase then valid");
+});
+
+Deno.test("verifyMuxSignature accepts a valid first v1 followed by others, in any position", async () => {
+  const good = await sign(T, BODY);
+  const forged = await sign(T, BODY, "other-secret");
+  assert(await verifyMuxSignature(`t=${T},v1=${good},v1=${forged}`, BODY, SECRET, NOW), "valid then forged");
+  assert(await verifyMuxSignature(`v1=${forged},t=${T},v1=${forged},v1=${good}`, BODY, SECRET, NOW), "valid third, t in the middle");
+});
+
+Deno.test("verifyMuxSignature rejects headers where no v1 signature is valid", async () => {
+  const good = await sign(T, BODY);
+  const forged = await sign(T, BODY, "other-secret");
+  const forged2 = await sign(T, BODY, "third-secret");
+  for (const header of [
+    `t=${T},v1=${forged},v1=${forged2}`,
+    `t=${T},v1=${good.toUpperCase()},v1=${good.slice(0, 62)}`,
+    `t=${T},v1=,v1=${forged}`,
+    `t=${T},v0=${good},v2=${good},v1=${forged}`,
+    `t=${T},v1=${good}x`,
+  ]) {
+    assert(!(await verifyMuxSignature(header, BODY, SECRET, NOW)), header);
+  }
+});
+
+Deno.test("verifyMuxSignature with several v1 values still checks the body and the window", async () => {
+  const forged = await sign(T, BODY, "other-secret");
+  assert(!(await verifyMuxSignature(`t=${T},v1=${forged},v1=${await sign(T, BODY)}`, BODY + " ", SECRET, NOW)), "changed body");
+  const stale = T - 301;
+  assert(!(await verifyMuxSignature(`t=${stale},v1=${forged},v1=${await sign(stale, BODY)}`, BODY, SECRET, NOW)), "stale");
+});
+
+Deno.test("verifyMuxSignature rejects a missing, repeated or non-numeric timestamp", async () => {
+  const good = await sign(T, BODY);
+  for (const header of [`v1=${good},v1=${good}`, `t=${T},t=${T},v1=${good}`, `t=${T}abc,v1=${good}`, `t=-${T},v1=${good}`, `t=${T}.5,v1=${good}`]) {
+    assert(!(await verifyMuxSignature(header, BODY, SECRET, NOW)), header);
+  }
+});
+
+Deno.test("verifyMuxSignature tolerates spaces after commas, as the previous parser did", async () => {
+  assert(await verifyMuxSignature(`t=${T}, v1=${await sign(T, BODY)}`, BODY, SECRET, NOW));
+});
