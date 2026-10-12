@@ -53,7 +53,11 @@ first (`reserve_video_upload`: suspended, posting-paused and deleted accounts ar
 the service role then records Mux's upload id (`activate_video_upload`) or gives the slot back when
 Mux refused (`fail_video_upload`). `post_response`, `post_reply`, `post_draft` and
 `retry_response_upload` claim the upload once, for its owner, before it expires
-(`upload_not_found`, `upload_already_used`, `upload_expired`). `mark_response_live` takes the
+(`upload_not_found`, `upload_already_used`, `upload_expired`, `upload_cancelled`). Post Review
+mints as it opens, so re-recording leaves unused URLs: at the 3-URL cap the oldest abandoned one
+(unclaimed, over 15 s old) is cancelled at Mux if Mux reports it `waiting`, and its slot is freed
+only once Mux confirms (`begin_upload_cancellation`, `finish_upload_cancellation`). Cancelled URLs
+still count towards the hour and the day. `mark_response_live` takes the
 asset's Mux `passthrough` and leaves the video unchanged unless it is the author (`owner_mismatch`).
 
 Email codes sent locally land in Mailpit at http://127.0.0.1:54324.
