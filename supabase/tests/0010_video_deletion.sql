@@ -5,7 +5,7 @@
 -- cleanup_integration_test.ts. Inside one transaction now() does not move, so "later" is
 -- written as moving recorded times back.
 begin;
-select plan(328);
+select plan(363);
 
 delete from public.responses;
 delete from public.prompts;
@@ -576,6 +576,81 @@ select is((pg_temp.job('delete_asset', 'asS1')).reason, 'account_purged', 'his a
 select is((select count(*)::int from public.responses where author_id is null and status <> 'deleted'), 0, 'every tombstone is deleted');
 select throws_ok($$ insert into public.responses (prompt_id, author_id, duration_ms, status) values ('11111111-aaaa-aaaa-aaaa-111111111111', null, 9000, 'live') $$, '23514', null, 'only a deleted video can have no author');
 select throws_ok($$ insert into public.comments (response_id, author_id, body) values ('ad000000-0000-0000-0000-000000000004', null, 'x') $$, '23514', null, 'only a deleted comment can have no author');
+
+-- ===========================================================================
+-- 7b. Accounts removed outside the purge (Dashboard, Admin API, SQL): the same preparation runs
+-- ===========================================================================
+select is((select count(*)::int from pg_trigger where tgname = 'accounts_before_delete' and tgrelid = 'public.accounts'::regclass and tgenabled = 'O'), 1, 'the safeguard trigger is on accounts');
+select is(has_function_privilege('service_role', 'public.prepare_account_removal(uuid, text)', 'execute') or has_function_privilege('authenticated', 'public.prepare_account_removal(uuid, text)', 'execute'), false, 'its function is internal');
+insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
+  ('0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'oz@example.com', '{}', '{}', now(), now()),
+  ('0c0c0c0c-0c0c-0c0c-0c0c-0c0c0c0c0c0c', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'pat@example.com', '{}', '{}', now(), now());
+update public.accounts set age_confirmed_at = now(), public_disclosure_ack_at = now() where id in ('0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', '0c0c0c0c-0c0c-0c0c-0c0c-0c0c0c0c0c0c');
+insert into public.profiles (id, name, username) values ('0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 'Oz Brand', 'testoz'), ('0c0c0c0c-0c0c-0c0c-0c0c-0c0c0c0c0c0c', 'Pat Lee', 'testpat');
+insert into public.responses (id, prompt_id, author_id, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at, caption) values
+  ('0a000000-0000-0000-0000-000000000001', '11111111-aaaa-aaaa-aaaa-111111111111', '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 9000, 'live', 'upO1', 'asO1', 'pbO1', now(), 'Oz caption'),
+  ('0a000000-0000-0000-0000-000000000002', '22222222-aaaa-aaaa-aaaa-222222222222', '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 9000, 'live', 'upO2', 'asO2', 'pbO2', now(), null),
+  ('0a000000-0000-0000-0000-000000000003', '33333333-aaaa-aaaa-aaaa-333333333333', '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 9000, 'live', 'upO3', 'asO3', 'pbO3', now(), null),
+  ('0c000000-0000-0000-0000-000000000001', '11111111-aaaa-aaaa-aaaa-111111111111', '0c0c0c0c-0c0c-0c0c-0c0c-0c0c0c0c0c0c', 9000, 'live', 'upP1', 'asP1', 'pbP1', now(), null);
+insert into public.responses (id, prompt_id, author_id, duration_ms, status, mux_upload_id) values
+  ('0a000000-0000-0000-0000-000000000004', '44444444-aaaa-aaaa-aaaa-444444444444', '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 9000, 'processing', 'upO4');
+insert into public.responses (id, kind, prompt_id, root_response_id, reply_to_id, author_id, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at) values
+  ('a1000000-0000-0000-0000-0000000000a1', 'reply', '11111111-aaaa-aaaa-aaaa-111111111111', '0a000000-0000-0000-0000-000000000001', '0a000000-0000-0000-0000-000000000001', 'a1111111-1111-1111-1111-111111111111', 5000, 'live', 'upLRO', 'asLRO', 'pbLRO', now());
+insert into public.video_uploads (account_id, upload_id, status, created_at, expires_at, activated_at) values
+  ('0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 'upOzOpen', 'active', now(), now() + interval '1 hour', now()),
+  ('0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 'upOzOld', 'active', now() - interval '3 days', now() - interval '3 days' + interval '1 hour', now() - interval '3 days');
+insert into public.comments (id, response_id, author_id, parent_id, body) values
+  ('cc000000-0000-0000-0000-0000000000a1', 'ad000000-0000-0000-0000-000000000004', '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', null, 'Oz on A4');
+insert into public.comments (id, response_id, author_id, parent_id, body) values
+  ('cc000000-0000-0000-0000-0000000000a2', 'ad000000-0000-0000-0000-000000000004', 'b2222222-2222-2222-2222-222222222222', 'cc000000-0000-0000-0000-0000000000a1', 'Adam replies to Oz');
+select lives_ok($$ select public.mod_remove_video('0a000000-0000-0000-0000-000000000003', 'Spam about a named person.', 'nemat', 'internal note about Oz') $$, 'O3 is removed, with free text');
+select lives_ok($$ select public.mod_restrict('0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', now() + interval '3 days', 'Repeated spam.', 'nemat') $$, 'Oz is restricted');
+set local role authenticated;
+select pg_temp.act('0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a');
+select lives_ok($$ select public.request_review((select id from public.moderation_actions where target_id = '0a000000-0000-0000-0000-000000000003')) $$, 'Oz requests a review of the removal');
+select lives_ok($$ select public.report_item('video', 'a1000000-0000-0000-0000-000000000002', 'spam') $$, 'Oz reports Lena''s L2: an open case about Lena');
+select pg_temp.act('a1111111-1111-1111-1111-111111111111');
+select lives_ok($$ select public.report_item('video', '0a000000-0000-0000-0000-000000000002', 'spam') $$, 'Lena reports Oz''s O2');
+select pg_temp.act('b2222222-2222-2222-2222-222222222222');
+select lives_ok($$ select public.report_item('profile', '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 'harassment') $$, 'Adam reports Oz''s profile');
+reset role;
+delete from public.mux_cleanup_jobs where asset_id in ('asO1', 'asO2', 'asO3') or upload_id in ('upO4', 'upOzOpen', 'upOzOld');
+
+-- The Auth user is deleted (the Dashboard and Admin API do this through Supabase Auth: covered
+-- end to end in cleanup_integration_test.ts); the account goes by cascade. Oz is not in the
+-- deletion window: this is not the scheduled purge.
+select lives_ok($$ delete from auth.users where id = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a' $$, 'Oz''s Auth user is deleted, although O1 has Lena''s reply');
+select is((select count(*)::int from public.accounts where id = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a'), 0, 'the account went by cascade');
+-- Moderation records: anonymised by the same policy as the purge.
+select is((select count(*)::int from public.moderation_actions where anonymized_at = now() and account_id is null and target_id is null and moderator is null and reason is null and note is null and kind in ('remove', 'restrict')), 2, 'his removal and restriction keep only kind, target kind and times');
+select is((select count(*)::int from public.moderation_actions where reason in ('Spam about a named person.', 'Repeated spam.') or note = 'internal note about Oz'), 0, 'no free text survives');
+select is((select count(*)::int from public.review_requests rr join public.moderation_actions m on m.id = rr.action_id where m.anonymized_at = now()), 0, 'his pending review is closed');
+select is((select reporter_id::text || '|' || status || '|' || target_id from public.reports where target_id = 'a1000000-0000-0000-0000-000000000002' and reason = 'spam' and anonymized_at = now()), null, 'his report on Lena''s video has no reporter');
+select is((select status || '|' || target_id from public.reports where target_id = 'a1000000-0000-0000-0000-000000000002' and reporter_id is null), 'open|a1000000-0000-0000-0000-000000000002', 'and stays open on Lena''s video: another member''s case is not closed');
+select is((select count(*)::int from public.reports where closed_by = 'account_removed' and reporter_id is null and target_id is null and status = 'closed' and anonymized_at = now()), 2, 'Lena''s report on his video and Adam''s on his profile close, with no reporter or target');
+-- Tombstones and other people's content.
+select is((select coalesce(author_id::text, '') || status || coalesce(caption, '') || coalesce(mux_asset_id, '') from public.responses where id = '0a000000-0000-0000-0000-000000000001'), 'deleted', 'O1 is an anonymous tombstone');
+select is((select status || '|' || root_response_id from public.responses where id = 'a1000000-0000-0000-0000-0000000000a1'), 'live|0a000000-0000-0000-0000-000000000001', 'Lena''s reply to it stays live in its room');
+select is((select count(*)::int from public.responses where id in ('0a000000-0000-0000-0000-000000000002', '0a000000-0000-0000-0000-000000000003', '0a000000-0000-0000-0000-000000000004')), 0, 'his other videos are gone');
+select is((select coalesce(author_id::text, '') || coalesce(body, '') from public.comments where id = 'cc000000-0000-0000-0000-0000000000a1'), '', 'his comment with Adam''s reply is a deleted-parent tombstone');
+select is((select body from public.comments where id = 'cc000000-0000-0000-0000-0000000000a2'), 'Adam replies to Oz', 'Adam''s reply stays');
+-- Mux provenance: every asset and open upload queued with his id, outliving his rows and ledger.
+select is((select count(*)::int from public.mux_cleanup_jobs where reason = 'account_removed' and owner_id = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a' and action = 'delete_asset' and asset_id in ('asO1', 'asO2', 'asO3')), 3, 'his three assets are queued for deletion, owned by his id');
+select is((pg_temp.job('delete_asset', 'asO1')).not_before, now(), 'his ordinary videos at once');
+select is((pg_temp.job('delete_asset', 'asO3')).not_before, now() + interval '30 days', 'the removed one 30 days on: his pending review closed with the removal');
+select is((pg_temp.job('cancel_upload', 'upO4')).owner_id, '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a'::uuid, 'his processing upload is queued for cancellation');
+select is((pg_temp.job('cancel_upload', 'upOzOpen')).owner_id, '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a'::uuid, 'and the upload URL he still held');
+select is(pg_temp.jobs('upOzOld'), 0, 'not a URL that expired days ago');
+select is((select count(*)::int from public.video_uploads where account_id = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a'), 0, 'his ledger rows are gone; the jobs carry the owner');
+select is(pg_temp.jobs('asLRO'), 0, 'nothing of Lena''s reply is queued');
+select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asO1'), 'delete_asset', 'asO1')->>'owner_id', '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a', 'the worker gets his id for the ownership check');
+select is(pg_temp.finish('delete_asset', 'asO1', 'done', '{"outcome": "deleted"}'), 'done', 'deleted');
+-- A direct SQL delete of the account row takes the same path.
+select lives_ok($$ delete from public.accounts where id = '0c0c0c0c-0c0c-0c0c-0c0c-0c0c0c0c0c0c' $$, 'Pat''s account row is deleted directly');
+select is((pg_temp.job('delete_asset', 'asP1')).reason, 'account_removed', 'his asset is queued too');
+select is((select count(*)::int from public.account_purge_failures), 0, 'no purge failure recorded for either');
+-- The scheduled purge still records its own reason (section 7: account_purged).
+select is((select count(*)::int from public.mux_cleanup_jobs where reason = 'account_purged' and asset_id in ('asM2', 'asM3', 'asMR2')), 3, 'jobs from the scheduled purge keep the reason account_purged');
 
 -- ===========================================================================
 -- 8. The sweep: orphans at Mux (F8)

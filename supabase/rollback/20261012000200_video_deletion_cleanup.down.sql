@@ -33,6 +33,10 @@ begin
 end;
 $$;
 
+drop trigger accounts_before_delete on public.accounts;
+drop function public.accounts_before_delete();
+drop function public.prepare_account_removal(uuid, text);
+
 select cron.unschedule('mux-cleanup');
 select cron.unschedule('mux-sweep');
 select cron.unschedule('prune-moderation-records');

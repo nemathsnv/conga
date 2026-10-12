@@ -23,6 +23,11 @@
 --   sync_playback  make one video's public playback match the database: none while it is
 --                  removed or its account is deleted, one public playback id otherwise
 --   cancel_upload  cancel an upload whose video was deleted before Mux made an asset
+-- However an account goes (the scheduled purge, or an Auth user deleted in the Dashboard, through
+-- the Admin API or in SQL), a BEFORE DELETE trigger on accounts first queues its Mux assets with
+-- their owner, keeps the tombstones other people's replies need, and anonymises its moderation
+-- records (prepare_account_removal).
+--
 -- Every destructive call is preceded by an ownership check at Mux (the asset's passthrough, and
 -- its upload id, must be the ones recorded) and, for deletions, by a check here under row locks
 -- that no live, processing or draft video uses the asset and no retention applies
@@ -36,7 +41,7 @@ create table public.mux_cleanup_jobs (
   id uuid primary key default gen_random_uuid(),
   action text not null check (action in ('delete_asset', 'sync_playback', 'cancel_upload')),
   reason text not null check (reason in ('author_deleted', 'abandoned', 'moderation_removed', 'moderation_restored', 'review_upheld',
-                                         'account_deleted', 'account_restored', 'account_purged', 'orphan', 'sweep')),
+                                         'account_deleted', 'account_restored', 'account_purged', 'account_removed', 'orphan', 'sweep')),
   -- pending: waiting for not_before; running: leased by a worker; done; skipped: nothing to do or
   -- the asset must be kept; failed: out of attempts or impossible (retry with mux_cleanup_retry);
   -- review: an orphan whose owner could not be proven, reported and never acted on automatically.
@@ -947,39 +952,45 @@ $$;
 -- The purge (F6, F7)
 -- ---------------------------------------------------------------------------
 
--- Removes one account past its 30 days; false if it is no longer due (restored meanwhile).
---  1. Mux: every asset of the account is queued for deletion, and unfinished uploads for
---     cancellation. The jobs hold the ids and the owner, so they outlive the rows (F7). A video
---     removed by moderation is kept until 30 days after its case closed; a case still open
---     closes now.
+-- Everything that must happen before an account's rows go, however the account goes: the
+-- scheduled purge (purge_account), or an Auth user deleted outside it (Supabase Dashboard, Admin
+-- API, SQL), whose cascade deletes the account row. Run by the accounts_before_delete trigger, so
+-- no path can skip it. p_reason is account_purged for the purge, account_removed otherwise.
+--  1. Mux: every asset of the account is queued for deletion, and unfinished uploads (including
+--     upload URLs it was still holding) for cancellation. The jobs hold the ids and the owner, so
+--     they outlive the rows and the upload ledger (F7). A video removed by moderation is kept
+--     until 30 days after its case closed; a case still open closes now.
 --  2. Its videos that other people's video replies point at, directly or through its own
 --     replies, become tombstones; the comments on them go, as with any deleted response.
 --  3. Its comments that other people's comments reply to become deleted-parent tombstones.
 --  4. Moderation records keep only what was done, to what kind of thing, and when: actions lose
 --     the account, target, moderator, reason (free text) and note; pending reviews close and
---     decided ones lose the account and who decided; reports it made lose the reporter; reports
---     about it or its content close and lose the target, the reporter and who closed them. All
---     are deleted 90 days later (prune_moderation_records).
---  5. The Auth user is deleted; the account, profile and everything else cascades.
-create or replace function public.purge_account(p_account uuid)
-returns boolean language plpgsql security definer set search_path = '' as $$
+--     decided ones lose the account and who decided; reports it made lose the reporter (and stay
+--     open if they were: they are other people's cases); reports about it or its content close
+--     and lose the target, the reporter and who closed them. All are deleted 90 days later
+--     (prune_moderation_records).
+create or replace function public.prepare_account_removal(p_account uuid, p_reason text)
+returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_now timestamptz := now();
   v_videos uuid[];
   v_comments uuid[];
 begin
-  -- Under the row lock, so a sign-in restoring the account at the same moment waits or wins.
-  perform 1 from public.accounts where id = p_account and deleted_at is not null and deleted_at < now() - interval '30 days' for update;
-  if not found then return false; end if;
+  if p_reason not in ('account_purged', 'account_removed') then raise exception 'invalid_reason' using errcode = 'P0001'; end if;
 
   -- 1.
-  perform public.mux_cleanup_enqueue('delete_asset', 'account_purged', r.mux_asset_id, r.mux_upload_id, r.id, p_account,
+  perform public.mux_cleanup_enqueue('delete_asset', p_reason, r.mux_asset_id, r.mux_upload_id, r.id, p_account,
                                      case when r.status = 'removed' then coalesce(public.moderation_case_closed_at(r.removed_action_id), v_now) + interval '30 days' end)
      from public.responses r
     where r.author_id = p_account and r.mux_asset_id is not null;
-  perform public.mux_cleanup_enqueue('cancel_upload', 'account_purged', null, r.mux_upload_id, r.id, p_account)
+  perform public.mux_cleanup_enqueue('cancel_upload', p_reason, null, r.mux_upload_id, r.id, p_account)
      from public.responses r
     where r.author_id = p_account and r.mux_asset_id is null and r.mux_upload_id is not null and r.status in ('processing', 'draft', 'removed');
+  -- Upload URLs no video took that could still receive bytes (the ledger rows go with the account).
+  perform public.mux_cleanup_enqueue('cancel_upload', p_reason, null, u.upload_id, null, p_account)
+     from public.video_uploads u
+    where u.account_id = p_account and u.upload_id is not null and u.status in ('active', 'cancelling')
+      and u.expires_at > v_now - interval '1 day';
 
   -- 2.
   with recursive kept(id) as (
@@ -993,7 +1004,7 @@ begin
      where p.author_id = p_account
   )
   select coalesce(array_agg(id), '{}') into v_videos from kept;
-  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = 'account_purged', target_id = null, reporter_id = null, anonymized_at = v_now
+  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = p_reason, target_id = null, reporter_id = null, anonymized_at = v_now
    where target_kind = 'video' and target_id in (select id from public.responses where author_id = p_account);
   delete from public.comments where response_id = any (v_videos);
   delete from public.likes where target_kind = 'video' and target_id = any (v_videos);
@@ -1015,7 +1026,7 @@ begin
      where p.author_id = p_account
   )
   select coalesce(array_agg(id), '{}') into v_comments from kept;
-  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = 'account_purged', target_id = null, reporter_id = null, anonymized_at = v_now
+  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = p_reason, target_id = null, reporter_id = null, anonymized_at = v_now
    where target_kind = 'comment' and target_id in (select id from public.comments where author_id = p_account);
   delete from public.likes where target_kind = 'comment' and target_id = any (v_comments);
   update public.comments set author_id = null, body = null, deleted_at = coalesce(deleted_at, v_now), removed_action_id = null
@@ -1026,11 +1037,35 @@ begin
   delete from public.review_requests where account_id = p_account and decided_at is null;
   update public.review_requests set account_id = null, decided_by = null where account_id = p_account;
   update public.reports set reporter_id = null, anonymized_at = coalesce(anonymized_at, v_now) where reporter_id = p_account;
-  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = 'account_purged', target_id = null, reporter_id = null, anonymized_at = v_now
+  update public.reports set status = 'closed', closed_at = coalesce(closed_at, v_now), closed_by = p_reason, target_id = null, reporter_id = null, anonymized_at = v_now
    where target_kind = 'profile' and target_id = p_account;
+end;
+$$;
 
-  -- 5.
+-- Fires for every deletion of an account row, including the cascade from auth.users, before the
+-- account's own cascades run. A failure here stops the deletion (nothing is half removed).
+create or replace function public.accounts_before_delete()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.prepare_account_removal(old.id,
+    case when current_setting('shortcut.purging_account', true) = old.id::text then 'account_purged' else 'account_removed' end);
+  return old;
+end;
+$$;
+create trigger accounts_before_delete before delete on public.accounts for each row execute function public.accounts_before_delete();
+
+-- Removes one account past its 30 days; false if it is no longer due (restored meanwhile). The
+-- Auth user is deleted; accounts_before_delete prepares the removal (above) and the account,
+-- profile and everything else cascades.
+create or replace function public.purge_account(p_account uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  -- Under the row lock, so a sign-in restoring the account at the same moment waits or wins.
+  perform 1 from public.accounts where id = p_account and deleted_at is not null and deleted_at < now() - interval '30 days' for update;
+  if not found then return false; end if;
+  perform set_config('shortcut.purging_account', p_account::text, true);
   delete from auth.users where id = p_account;
+  perform set_config('shortcut.purging_account', '', true);
   return true;
 end;
 $$;
@@ -1104,6 +1139,8 @@ revoke execute on function public.mux_asset_hold(text, text) from public, anon, 
 revoke execute on function public.mux_playback_wanted(uuid, text) from public, anon, authenticated, service_role;
 revoke execute on function public.mux_sync_account_playback(uuid, text) from public, anon, authenticated, service_role;
 revoke execute on function public.purge_account(uuid) from public, anon, authenticated, service_role;
+revoke execute on function public.prepare_account_removal(uuid, text) from public, anon, authenticated, service_role;
+revoke execute on function public.accounts_before_delete() from public, anon, authenticated, service_role;
 revoke execute on function public.mux_cleanup_mode() from public, anon, authenticated, service_role;
 revoke execute on function public.mux_video_restorable(public.responses) from public, anon, authenticated, service_role;
 revoke execute on function public.mux_cleanup_claim(integer, integer) from public, anon, authenticated;

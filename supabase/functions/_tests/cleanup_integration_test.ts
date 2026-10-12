@@ -533,6 +533,48 @@ Deno.test("purge: several accounts due at once, each with a reply chain, are all
   assert(!assets.has(a.asset.id) && !assets.has(b.asset.id), "both accounts' assets deleted");
 });
 
+Deno.test("Admin API deletion (as the Dashboard does): anonymised, tombstoned, and every asset deleted with its provenance", async () => {
+  const rex = await member("rex"), lia = await member("lia");
+  const replied = await liveVideo(rex), removed = await liveVideo(rex);
+  const liaReply = await liveReply(lia, replied.id);
+  const liaVideo = await liveVideo(lia);
+  const comment = await rpc(rex, "post_comment", { p_response: liaVideo.id, p_body: "from Rex" });
+  await rpc(lia, "post_comment", { p_response: liaVideo.id, p_body: "reply to Rex", p_parent: comment.json.id });
+  await rpc(rex, "report_item", { p_kind: "video", p_id: liaVideo.id, p_reason: "spam" });
+  await service("mod_remove_video", { p_video: removed.id, p_reason: "Free text naming someone.", p_moderator: "test", p_note: "internal note" });
+  await drainAll();
+  const openUrl = await mint(rex);
+  // Supabase Auth deletes the user (its own database role); the account goes by cascade.
+  assertEquals((await http(`/auth/v1/admin/users/${rex.id}`, { method: "DELETE" })).status, 200, "admin delete");
+  assertEquals((await http(`/rest/v1/accounts?id=eq.${rex.id}&select=id`)).json, []);
+  const actions = (await http(`/rest/v1/moderation_actions?kind=eq.remove&anonymized_at=not.is.null&select=account_id,target_id,moderator,reason,note,target_kind&order=created_at.desc&limit=1`)).json as Record<string, unknown>[];
+  assertEquals(actions[0], { account_id: null, target_id: null, moderator: null, reason: null, note: null, target_kind: "video" }, "the removal is anonymised");
+  const free = await http(`/rest/v1/moderation_actions?or=(reason.eq.Free%20text%20naming%20someone.,note.eq.internal%20note)&select=id`);
+  assertEquals(free.json, [], "no free text left");
+  const report = (await http(`/rest/v1/reports?target_id=eq.${liaVideo.id}&select=reporter_id,status`)).json as { reporter_id: string | null; status: string }[];
+  assertEquals(report, [{ reporter_id: null, status: "open" }], "his report on Lia's video stays open, without him");
+  const t = (await row(replied.id))!;
+  assertEquals([t.status, t.author_id, t.caption, t.mux_asset_id], ["deleted", null, null, null], "a tombstone keeps Lia's reply in its room");
+  assertEquals((await web(liaReply.id)).status, "live");
+  const sheet = (await rpc(lia, "comments_list", { p_response: liaVideo.id })).json.comments as { id: string; deleted: boolean; replies: unknown[] }[];
+  assertEquals(sheet.filter((c) => c.id === comment.json.id).map((c) => [c.deleted, c.replies.length]), [[true, 1]], "his comment is a deleted parent; Lia's reply stays");
+  // Mux: every asset and the open upload URL queued with his id; the worker checks it and acts.
+  assertEquals((await jobs(replied.asset.id)).map((j) => [j.action, j.reason, j.status]), [["delete_asset", "account_removed", "pending"]], "his video's asset is queued");
+  // The removed video already had its deletion queued for the end of its retention: the removal
+  // merges into it, keeping the later time.
+  const held = (await jobs(removed.asset.id)).filter((j) => j.action === "delete_asset");
+  assertEquals(held.map((j) => [j.reason, j.status]), [["moderation_removed", "pending"]]);
+  const days = (Date.parse(held[0].not_before) - Date.now()) / 86_400_000;
+  assert(days > 29.9 && days < 30.1, `still 30 days, got ${days}`);
+  assertEquals((await jobs(openUrl))[0].action, "cancel_upload", "the URL he still held is queued for cancellation");
+  muxCalls.length = 0;
+  await drainAll();
+  assert(!assets.has(replied.asset.id), "his video's asset is deleted (passthrough checked against the recorded owner)");
+  assert(assets.has(removed.asset.id), "the removed one is kept for its 30 days");
+  assertEquals(uploads.get(openUrl)?.status, "cancelled");
+  assert(assets.has(liaReply.asset.id) && assets.has(liaVideo.asset.id), "Lia's videos untouched");
+});
+
 // ---------------------------------------------------------------------------
 Deno.test("sweep: an orphan from an unused upload is deleted; an asset of unknown origin is only reported", async () => {
   const wen = await member("wen");
