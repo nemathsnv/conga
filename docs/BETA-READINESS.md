@@ -1067,7 +1067,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed 12 Oct, Nemat approved; worker not deployed, clean-up off)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed 12 Oct, worker configured 12 Oct, Nemat approved each; clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -1335,7 +1335,87 @@ the preflight method (Management API, `READ ONLY` transactions rolled back; Mux 
 - *Rollback* remains available (no tombstone or anonymised record exists): the rollback file as a
   forward migration; nothing else to undo at this stage.
 
-**Staged deployment plan** (each stage needs Nemat's separate go-ahead; step 1 done 12 Oct, the rest not approved):
+**Worker configuration, 12 Oct (UTC; approved by Nemat: step 2 only, the database switch to stay
+`off`).** Followed step 2 of the plan below from `9c7250b` (clean tree; this worktree's branch
+fast-forwarded to it). Deployment from a `git archive` of that commit's `supabase/` folder, never
+linked; every command named the project (`--project-ref picvoavfxnajfjkqawju`); no `--prune`; Mux
+credentials not touched. Read-only checks used the preflight method (Management API, `READ ONLY`
+transactions rolled back; Mux `GET`s with the Shortcut Beta token, which matches the hosted
+`MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` by digest). No secret value was printed or committed.
+
+- *Before (15:45 to 15:47):* 16 migrations; fingerprint 741 objects `8d15eb8ec1900b44deaa7c5e6ff7be9e`,
+  line for line the step 1 record; switch `off` (`migration`, 15:31:43); 0 jobs, 0 purge failures,
+  0 deleted accounts, 0 deleted or removed videos, 0 `processing` or `draft` rows, 0 open upload
+  URLs; Vault empty; pg_net queue and responses 0; cron the same 7 jobs, 14 `mux-cleanup` runs since
+  step 1, all succeeded. Every table hash identical to the step 1 record; founder response
+  `md5(row_to_json)` `c9918f8241a2c45eefb106b5d0ec0a8f`, ledger `md5(u::text)`
+  `9726bb8fdf8d9eb0cb759d13ce59c8b6`, `live`. Functions `auth-signin-method` v3, `mux-create-upload`
+  v3, `mux-upload-status` v3, `mux-webhook` v4 (bundle hashes as at step 1), deployed `mux-webhook`
+  and `mux-upload-status` source byte-identical to `5fabfaf`; the same 10 secrets and digests. Mux:
+  the founder's asset alone (`ready`, one public playback id, passthrough the founder) and its
+  upload, 0 live streams; HLS 200. Locally on `9c7250b`: `deno check` and `deno lint` clean, Deno
+  unit 29/29 (`mux_test.ts`, `cleanup_unit_test.ts`).
+- *`MUX_CLEANUP_KEY`, 15:47:15 to 15:47:19:* 64 random hex characters (`openssl rand -hex 32`),
+  written to the git-ignored, mode-600 `supabase/.env.mux-cleanup` in the main checkout (next to
+  `.env.mux-hosted`) and set with `supabase secrets set --env-file`, so the value was never on a
+  command line. Then 11 secrets: the 10 earlier ones with unchanged digests, the new one matching
+  the file by digest. **`MUX_CLEANUP_MODE` not set** (the function's mode is `dry_run`).
+- *`mux-cleanup`, 15:47:47 to 15:47:56:* `supabase functions deploy mux-cleanup --no-verify-jwt`:
+  v1, `ACTIVE`, `verify_jwt` false. The secret change moved every other function up one version with
+  unchanged bundle hashes (platform behaviour, section 12).
+- *Vault, 15:49:18:* `mux_cleanup_url` (`https://picvoavfxnajfjkqawju.supabase.co/functions/v1/mux-cleanup`)
+  and `mux_cleanup_key` (the same value as the function secret), from a mode-600 SQL file deleted
+  straight after. Both match by digest; no other Vault secret.
+- *`mux-webhook`, 15:49:53 to 15:50:00 (v5 to v6) and `mux-upload-status`, 15:50:00 to 15:50:07 (v4
+  to v5):* by name with `--no-verify-jwt`, nobody posting (0 `processing` or `draft` rows, 0 open
+  upload URLs). Downloaded afterwards, all three functions' sources are byte-identical to `9c7250b`,
+  four files each (`index.ts`, `handler.ts`, `_shared/mux.ts`, `_shared/supabase.ts`), no test file.
+
+Checks (15:48 to 15:53):
+
+- *`mux-cleanup`:* `GET`, `PUT`, `DELETE` 405 (`GET` with the correct key too). `POST` 401
+  `unauthorized` with no `Authorization`, `Bearer garbage`, a wrong 64-hex key, the right key
+  without `Bearer`, the right key in an `apikey` header only, the legacy anon key, the legacy
+  service-role key and the publishable key; the new-style secret key is refused by the gateway
+  (401 "Invalid API key") before the function. With the right key, immediately after confirming
+  the switch `off`: `drain` (and an empty body) 200 `{"ok":true,"mode":"off","claimed":0, ...}`, all
+  counts 0; `sweep` 200 `{"ok":true,"mode":"off","skipped":"off"}`, which returns before any Mux
+  call; an unknown mode 400 `invalid_mode`. No job was claimed, created or changed.
+- *Existing functions:* `mux-webhook` `GET` 405; unsigned, malformed, `t` without `v1`, forged
+  `v1` with a current `t`, two forged `v1`, a 400 s stale `t` and an uppercase `v1` all 401
+  `bad_signature` (no correctly signed request sent). `mux-upload-status` (founder's upload id) 401
+  with no token, garbage, the anon key and the publishable key; a malformed upload id without a
+  session 401. `mux-create-upload` `GET` 405; 401 with no token, garbage, the anon key and the
+  publishable key. `auth-signin-method` not redeployed (bundle hash unchanged).
+- *Scheduler, with both Vault secrets present:* every `mux-cleanup` run from 15:50:00 to
+  15:53:00 (four runs; 22 since step 1) succeeded in 2 to 4 ms (no HTTP call: `run_mux_cleanup` returns while the switch is
+  `off`, before reading Vault); pg_net queue 0 and `net._http_response` empty (no request ever
+  made by pg_net on this project); 0 jobs; no `mux-sweep` run yet (04:45). `send-push` and
+  `tonight-prompt` succeeded throughout.
+- *After (15:52 to 15:53):* fingerprint 741 / `8d15eb8e…`, line for line unchanged (functions,
+  grants, policies, RLS, triggers, cron, default privileges, the `authenticator` setting); switch
+  `off` (`migration`, 15:31:43); every table hash and both founder hashes identical, the only
+  difference in the snapshot the two Vault names; Mux the same 1 asset and 1 upload (ids, status,
+  playback id, passthrough), 0 live streams; HLS 200. Functions now `auth-signin-method` v4,
+  `mux-create-upload` v4 (bundle hashes unchanged), `mux-upload-status` v5, `mux-webhook` v6,
+  `mux-cleanup` v1, all `ACTIVE`, `verify_jwt` false. Secrets 11 (the 10 unchanged plus
+  `MUX_CLEANUP_KEY`); no `MUX_CLEANUP_MODE`.
+- *No Mux traffic from clean-up:* the switch was `off` throughout, so `mux_cleanup_claim` leased
+  nothing, `sweep` stopped before listing, and the scheduler made no HTTP call; the Mux inventory is
+  unchanged. The only Mux requests were this check's own `GET`s.
+- *Not checked:* the Edge Function, gateway and Postgres logs (the CLI has no logs command and the
+  Dashboard needs a sign-in; Nemat to look at 15:45 to 15:55 UTC: expected only the 401, 405 and
+  400 answers and three 200s from `mux-cleanup` above, and the deployments); the Auth configuration
+  was not read back (no Auth command was run); `mux-create-upload` still runs the stage 2
+  `_shared/mux.ts` (not redeployed, by the plan; the stage 3 change there only adds the
+  local-only `MUX_API_BASE` hook).
+- *Side effects of the method:* the CLI's temporary login role refreshed on each linked command;
+  the scratch folders' link files deleted afterwards.
+- *Undoing step 2, not reviewed and not done:* redeploy `mux-webhook` and `mux-upload-status` from
+  `5fabfaf`; delete the `mux-cleanup` function, the `MUX_CLEANUP_KEY` secret and the two Vault
+  secrets. None of it is needed to keep clean-up inert: the database switch alone does that.
+
+**Staged deployment plan** (each stage needs Nemat's separate go-ahead; steps 1 and 2 done 12 Oct, the rest not approved):
 
 0. *Preflight, read-only.* Hosted fingerprint equal to the tested stage 2 schema; dry run lists
    exactly `20261012000200`; deployed `mux-webhook` and `mux-upload-status` byte-identical to
