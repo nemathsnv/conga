@@ -10,8 +10,27 @@ export type UploadTicket = { uploadId: string; uploadUrl: string };
 /** Mint a direct-upload URL. Called on Post Review so it is ready before Post is tapped. */
 export async function mintUpload(): Promise<UploadTicket> {
   const { data, error } = await supabase.functions.invoke('mux-create-upload', { method: 'POST' });
-  if (error || !data?.uploadId || !data?.uploadUrl) throw new Error('mint_failed');
+  if (error || !data?.uploadId || !data?.uploadUrl) throw new Error(await mintRefusal(error));
   return { uploadId: String(data.uploadId), uploadUrl: String(data.uploadUrl) };
+}
+
+/** Reasons mux-create-upload gives for refusing a URL (security stage 2). */
+const MINT_REFUSALS = new Set(['suspended', 'posting_paused', 'account_deleted', 'profile_required', 'upload_limit_hour', 'upload_limit_day', 'upload_limit_active']);
+
+/**
+ * The server's reason when it refuses a URL, else 'mint_failed'. Since uploads are refused for
+ * suspended and restricted accounts at minting, this carries 'posting_paused' or 'suspended' to
+ * Post Review, which shows A-Restricted or LV-Suspended as it did when post_response refused.
+ */
+export async function mintRefusal(error: unknown): Promise<string> {
+  const response = (error as { context?: { clone?: () => { json: () => Promise<unknown> } } } | null)?.context;
+  try {
+    const body = (await response?.clone?.().json()) as { error?: unknown } | undefined;
+    if (typeof body?.error === 'string' && MINT_REFUSALS.has(body.error)) return body.error;
+  } catch {
+    // Not a JSON answer from the function.
+  }
+  return 'mint_failed';
 }
 
 /** The file that is uploaded. One segment only until stitching lands (docs/BLOCKERS.md B-1). */
