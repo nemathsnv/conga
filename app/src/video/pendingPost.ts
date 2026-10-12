@@ -14,7 +14,7 @@ export async function loadPendingPost(): Promise<PendingPost | null> {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PendingPost;
-    return parsed && typeof parsed.responseId === 'string' ? parsed : null;
+    return parsed && (typeof parsed.responseId === 'string' || parsed.responseId === null) ? parsed : null;
   } catch {
     return null;
   }

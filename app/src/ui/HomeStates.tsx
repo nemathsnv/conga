@@ -14,6 +14,7 @@ import { ChevronRightIcon, OfflineIcon, PlacePinIcon, PlusSlotIcon, RecordDotIco
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
 import type { PostingState } from '@/video/posting';
+import { uploadFailedDetail } from '@/video/postingFlow';
 
 export function Spinner({ size = 28, light = true }: { size?: number; light?: boolean }) {
   const [spin] = useState(() => new Animated.Value(0));
@@ -168,7 +169,7 @@ export function PostingBanner({ state, onRetry, topInset }: { state: PostingStat
           {failed ? (
             <>
               <Text style={s.bannerTitle}>Your {post.kind === 'draft' ? 'draft' : 'response'} didn&apos;t {post.kind === 'draft' ? 'save' : 'post'}</Text>
-              <Text style={s.bannerSub}>It&apos;s saved on this phone. Check your connection.</Text>
+              <Text style={s.bannerSub}>{uploadFailedDetail(post.failedReason)}</Text>
             </>
           ) : (
             <>

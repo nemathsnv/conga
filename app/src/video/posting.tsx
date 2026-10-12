@@ -9,6 +9,7 @@ import { isOnline, subscribeOnline } from '@/lib/connectivity';
 import { abandonResponse, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { loadPendingPost, savePendingPost } from './pendingPost';
 import { resumeState, uploadUrlUsable, type PendingPost } from './pendingPostState';
+import { errorReason, prepareUpload } from './postingFlow';
 import type { Recording } from './types';
 import { deleteRecordingFiles, mintUpload, putRecording, waitUntilLive, type UploadTicket } from './upload';
 
@@ -36,6 +37,14 @@ const PostingContext = createContext<PostingContextValue | null>(null);
 
 const UPLOAD_URL_TTL_MS = 55 * 60 * 1000;
 
+/** Creates the posted row (a response, a video reply or a draft) for an upload URL. */
+function createRow(post: Pick<PendingPost, 'draftFor' | 'replyToId' | 'promptId' | 'caption' | 'recording'>, t: UploadTicket): Promise<{ id: string }> {
+  const durationMs = post.recording.durationMs;
+  if (post.draftFor) return postDraft(post.draftFor, t.uploadId, post.caption, durationMs);
+  if (post.replyToId) return postReply(post.replyToId, t.uploadId, post.caption, durationMs);
+  return postResponse(post.promptId, t.uploadId, post.caption, durationMs);
+}
+
 export function PostingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PostingState>({ kind: 'idle' });
   const running = useRef(false);
@@ -47,9 +56,17 @@ export function PostingProvider({ children }: { children: ReactNode }) {
   const run = useCallback(async (post: PendingPost) => {
     if (running.current) return;
     running.current = true;
+    // The latest state of this post, so a failure keeps a row or URL obtained along the way.
+    let current = post;
     try {
-      let current = post;
-      if (!uploadUrlUsable(current)) {
+      if (!current.responseId) {
+        // No URL could be had when Post was tapped (an upload limit, or no connection): get one now
+        // and create the row, as Post would have.
+        const fresh = await mintUpload();
+        const row = await createRow(current, fresh);
+        current = { ...current, responseId: row.id, uploadId: fresh.uploadId, uploadUrl: fresh.uploadUrl, uploadUrlExpiresAt: Date.now() + UPLOAD_URL_TTL_MS };
+        await persist(current);
+      } else if (!uploadUrlUsable(current)) {
         const fresh = await mintUpload();
         await retryResponseUpload(current.responseId, fresh.uploadId);
         current = { ...current, uploadId: fresh.uploadId, uploadUrl: fresh.uploadUrl, uploadUrlExpiresAt: Date.now() + UPLOAD_URL_TTL_MS };
@@ -67,9 +84,9 @@ export function PostingProvider({ children }: { children: ReactNode }) {
       setState({ kind: 'live', post: { ...current, playbackId }, playbackId });
       track('video_published', { kind: current.kind, prompt_id: current.promptId, duration_s: Math.round(current.recording.durationMs / 1000), has_caption: !!current.caption });
     } catch (e) {
-      const reason = e instanceof Error ? e.message : String(e);
+      const reason = errorReason(e);
       track('upload_failed', { reason: reason.slice(0, 80) });
-      const failed: PendingPost = { ...post, state: 'failed', failedReason: reason };
+      const failed: PendingPost = { ...current, state: 'failed', failedReason: reason };
       await persist(failed);
       setState({ kind: 'failed', post: failed });
     } finally {
@@ -89,12 +106,37 @@ export function PostingProvider({ children }: { children: ReactNode }) {
   }, [run]);
 
   const post = useCallback<PostingContextValue['post']>(async ({ recording, promptId, promptText, caption, ticket, replyTo, draftFor }) => {
-    const t = ticket ?? (await mintUpload());
-    const row = draftFor
-      ? await postDraft(draftFor, t.uploadId, caption, recording.durationMs)
-      : replyTo
-        ? await postReply(replyTo.id, t.uploadId, caption, recording.durationMs)
-        : await postResponse(promptId, t.uploadId, caption, recording.durationMs);
+    const target = { draftFor: draftFor ?? null, replyToId: replyTo?.id ?? null, promptId, caption, recording };
+    const prepared = await prepareUpload({ ticket, mint: mintUpload, create: (t) => createRow(target, t) });
+    if (!prepared.ok) {
+      // No upload URL: never a silent Post. Offline, it waits for the connection like any post
+      // tapped offline (A-Offline; Nemat, 9 Oct). Otherwise the recording is kept on the phone and
+      // the Upload failed banner says why (an upload limit, or the connection), with Retry.
+      const waitsOffline = !isOnline() && !prepared.reason.startsWith('upload_limit');
+      if (!waitsOffline) track('upload_failed', { reason: prepared.reason.slice(0, 80) });
+      const failed: PendingPost = {
+        responseId: null,
+        kind: draftFor ? 'draft' : replyTo ? 'reply' : 'response',
+        draftFor: draftFor ?? null,
+        replyToId: replyTo?.id ?? null,
+        replyToName: replyTo?.name ?? null,
+        promptId,
+        promptText,
+        recording,
+        caption,
+        uploadId: '',
+        uploadUrl: '',
+        uploadUrlExpiresAt: 0,
+        playbackId: null,
+        state: waitsOffline ? 'waiting' : 'failed',
+        attempts: 0,
+        failedReason: waitsOffline ? null : prepared.reason,
+      };
+      await persist(failed);
+      setState(waitsOffline ? { kind: 'waiting', post: failed } : { kind: 'failed', post: failed });
+      return;
+    }
+    const { ticket: t, row } = prepared;
     const pending: PendingPost = {
       responseId: row.id,
       kind: draftFor ? 'draft' : replyTo ? 'reply' : 'response',
@@ -149,7 +191,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     deleteRecordingFiles(state.post.recording);
     await persist(null);
     try {
-      await abandonResponse(state.post.responseId);
+      if (state.post.responseId) await abandonResponse(state.post.responseId);
     } catch {
       // The row stays "processing" server-side; harmless and invisible to others.
     }

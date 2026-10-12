@@ -2,8 +2,9 @@
 import type { Recording } from './types';
 
 export type PendingPost = {
-  /** The posted row's id (a response or a video reply; both live in responses). */
-  responseId: string;
+  /** The posted row's id (a response or a video reply; both live in responses). Null when no
+   *  upload URL could be had at Post: Retry gets one and creates the row. */
+  responseId: string | null;
   kind: 'response' | 'reply' | 'draft';
   /** Drafts: the suggestion the draft belongs to. */
   draftFor: string | null;
