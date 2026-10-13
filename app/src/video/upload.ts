@@ -1,5 +1,7 @@
 // Foreground upload to Mux with progress, then polling until the asset is playable.
 // The recording file stays on the phone until the response is live.
+// Foreground only (SPEC.md Sections 2, 19 and 22): on iOS the transfer runs in the app's own
+// URLSession, so it stops with the app instead of continuing in the system's background daemon.
 import { File, UploadType } from 'expo-file-system';
 
 import { supabase } from '@/lib/supabase';
@@ -41,7 +43,12 @@ export function uploadableFile(recording: Recording): File {
   return file;
 }
 
-/** PUTs the recording to its upload URL. Aborting `signal` cancels the transfer (signing out). */
+/**
+ * PUTs the recording to its upload URL. Aborting `signal` cancels the transfer (signing out).
+ * sessionType 'foreground': expo-file-system's iOS default is 'background', a background
+ * URLSession that keeps sending after the app is suspended or ended, which SPEC.md rules out and
+ * which let a Retry PUT race the first transfer. Android ignores the option (in-process OkHttp).
+ */
 export async function putRecording(
   recording: Recording,
   uploadUrl: string,
@@ -55,6 +62,7 @@ export async function putRecording(
     uploadType: UploadType.BINARY_CONTENT,
     headers: { 'Content-Type': 'video/mp4' },
     onProgress: (p) => onProgress(total > 0 ? Math.min(1, p.bytesSent / (p.totalBytes || total)) : 0),
+    sessionType: 'foreground',
     signal,
   });
   const result = await task.uploadAsync();
@@ -70,10 +78,26 @@ export type UploadStatus = {
   errors?: unknown;
 };
 
+/**
+ * What Mux has for one of the member's uploads. 'status_not_found' when none of the member's videos
+ * uses that upload any more (its row moved to a newer upload, or was deleted); 'status_failed' when
+ * there was no answer.
+ */
 export async function checkUploadStatus(uploadId: string): Promise<UploadStatus> {
   const { data, error } = await supabase.functions.invoke(`mux-upload-status?uploadId=${encodeURIComponent(uploadId)}`, { method: 'GET' });
-  if (error) throw new Error('status_failed');
+  if (error) throw new Error((await statusRefusal(error)) ?? 'status_failed');
   return data as UploadStatus;
+}
+
+async function statusRefusal(error: unknown): Promise<string | null> {
+  const response = (error as { context?: { status?: number; clone?: () => { json: () => Promise<unknown> } } } | null)?.context;
+  if (response?.status !== 404) return null;
+  try {
+    const body = (await response.clone?.().json()) as { error?: unknown } | undefined;
+    return body?.error === 'not_found' ? 'status_not_found' : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Polls until the response is live (or, for a private draft, until its asset is ready). Resolves with the playback id. */

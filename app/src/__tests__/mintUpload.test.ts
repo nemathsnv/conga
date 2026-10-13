@@ -1,6 +1,6 @@
 // mintUpload: the server's refusal reason reaches Post Review (security stage 2), so A-Restricted
 // and LV-Suspended still show when posting is refused at minting rather than at post_response.
-import { mintUpload } from '@/video/upload';
+import { checkUploadStatus, mintUpload } from '@/video/upload';
 
 const mockInvoke = jest.fn();
 jest.mock('@/lib/supabase', () => ({ supabase: { functions: { invoke: (...a: unknown[]) => mockInvoke(...a) } } }));
@@ -50,4 +50,23 @@ test('anything else is mint_failed, as before', async () => {
 test('an unknown error code from the server is not passed through', async () => {
   mockInvoke.mockResolvedValue(httpError(403, { error: 'something_else' }));
   await expect(mintUpload()).rejects.toThrow('mint_failed');
+});
+
+describe('checkUploadStatus (asked before a recording is sent again)', () => {
+  test('an upload none of the member\'s videos uses any more is status_not_found', async () => {
+    mockInvoke.mockResolvedValue(httpError(404, { error: 'not_found' }));
+    await expect(checkUploadStatus('abc123')).rejects.toThrow('status_not_found');
+  });
+
+  test.each([[502, { error: 'mux_unavailable' }], [401, { error: 'unauthorized' }], [404, 'not json']])('a %s answer is status_failed', async (status, body) => {
+    mockInvoke.mockResolvedValue(httpError(status, body));
+    await expect(checkUploadStatus('abc123')).rejects.toThrow('status_failed');
+  });
+
+  test('an answer is returned as is', async () => {
+    const answer = { uploadStatus: 'asset_created', assetStatus: 'ready', playbackId: 'pb', responseStatus: 'live' };
+    mockInvoke.mockResolvedValue({ data: answer, error: null });
+    await expect(checkUploadStatus('abc123')).resolves.toEqual(answer);
+    expect(mockInvoke).toHaveBeenCalledWith('mux-upload-status?uploadId=abc123', { method: 'GET' });
+  });
 });

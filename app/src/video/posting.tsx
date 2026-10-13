@@ -15,7 +15,7 @@ import { newPendingPost, pendingPostFor, resumeState, type PendingPost } from '.
 import { createGate, createOncePerKey, prepareUpload } from './postingFlow';
 import type { TicketSource } from './ticketStore';
 import type { Recording } from './types';
-import { deleteRecordingFiles, mintUpload, putRecording, waitUntilLive, type UploadTicket } from './upload';
+import { checkUploadStatus, deleteRecordingFiles, mintUpload, putRecording, waitUntilLive, type UploadTicket } from './upload';
 import { runPendingPost, type PostingState } from './uploadRun';
 import { uploadTickets } from './uploadTickets';
 
@@ -75,6 +75,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
           createRow,
           retryResponseUpload,
           put: putRecording,
+          status: checkUploadStatus,
           waitUntilLive,
           deleteFiles: deleteRecordingFiles,
           track,

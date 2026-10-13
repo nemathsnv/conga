@@ -3,9 +3,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { storeNewPendingPost } from '@/video/pendingPost';
-import { newPendingPost, pendingPostFor, UPLOAD_URL_TTL_MS, uploadUrlUsable, type PendingPost } from '@/video/pendingPostState';
+import { newPendingPost, pendingPostFor, resumeState, UPLOAD_URL_TTL_MS, uploadUrlUsable, type PendingPost } from '@/video/pendingPostState';
+import { createGate } from '@/video/postingFlow';
 import type { Recording } from '@/video/types';
-import type { UploadTicket } from '@/video/upload';
+import type { UploadStatus, UploadTicket } from '@/video/upload';
 import { runPendingPost, type PostingState, type RunDeps } from '@/video/uploadRun';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() }));
@@ -25,6 +26,14 @@ function deferred<T>(): Deferred<T> {
   });
   return { promise, resolve, reject };
 }
+
+/** mux-upload-status's answer. */
+const muxSays = (uploadStatus: string, assetStatus: string | null = null, responseStatus: UploadStatus['responseStatus'] = 'processing'): UploadStatus => ({
+  uploadStatus,
+  assetStatus,
+  playbackId: assetStatus === 'ready' ? 'PB1' : null,
+  responseStatus,
+});
 
 /** A post that got its row and URL at Post, `mintedAt` being when the URL was asked for. */
 function posted(over: Partial<PendingPost> = {}, mintedAt = 0): PendingPost {
@@ -47,6 +56,7 @@ function harness(over: Partial<RunDeps> = {}, clock = { t: 0 }) {
     createRow: jest.fn((_p: PendingPost, t: UploadTicket) => Promise.resolve({ id: `row-${t.uploadId}` })),
     retryResponseUpload: jest.fn(() => Promise.resolve()),
     put: jest.fn(() => Promise.resolve()),
+    status: jest.fn(() => Promise.resolve(muxSays('waiting'))),
     waitUntilLive: jest.fn(() => Promise.resolve('PB1')),
     deleteFiles: jest.fn(),
     track: jest.fn(),
@@ -78,6 +88,8 @@ describe('a URL lasts from when it was asked for, not from Post', () => {
     const slow = deferred<UploadTicket>();
     const { deps, stored } = harness({ mint: jest.fn(() => slow.promise) }, clock);
     const run = runPendingPost(posted({ uploadUrlExpiresAt: 0 }), deps, new AbortController().signal);
+    await flush();
+    expect(deps.mint).toHaveBeenCalledTimes(1); // asked at 0
     clock.t = 2 * MIN; // the answer takes 2 minutes
     slow.resolve(ticket(2));
     await run;
@@ -193,5 +205,141 @@ describe('failures keep what was obtained', () => {
     expect(last()).toBeNull();
     expect(deps.deleteFiles).toHaveBeenCalledTimes(1);
     expect(shown[shown.length - 1]).toMatchObject({ kind: 'live', playbackId: 'PB1' });
+  });
+});
+
+// Foreground uploads (SPEC.md Sections 2, 19, 22). With the foreground session a transfer stops
+// with the app, so these are the cases left: it stops part-way, it finishes with the answer lost,
+// or the app is closed. The setting alone does not stop a second send of the same recording, so
+// Mux is asked before any resend.
+describe('foreground uploads: interruption, backgrounding, closing, reopening and Retry', () => {
+  const sent = { state: 'failed' as const, attempts: 1, failedReason: 'interrupted' };
+
+  test('a first send asks Mux nothing', async () => {
+    const { deps } = harness();
+    await runPendingPost(posted(), deps, new AbortController().signal);
+    expect(deps.status).not.toHaveBeenCalled();
+    expect(deps.put).toHaveBeenCalledTimes(1);
+  });
+
+  test('interrupted part-way (sent to the background, connection lost): Retry asks Mux, which still waits, and sends again to the same URL', async () => {
+    const { deps, last } = harness({ put: jest.fn().mockRejectedValueOnce(new Error('The network connection was lost.')).mockResolvedValue(undefined) });
+    await runPendingPost(posted(), deps, new AbortController().signal);
+    expect(last()).toMatchObject({ state: 'failed', attempts: 1, uploadId: 'U1' });
+    await runPendingPost(last() as PendingPost, deps, new AbortController().signal); // Retry
+    expect(deps.status).toHaveBeenCalledWith('U1');
+    expect(deps.put).toHaveBeenCalledTimes(2);
+    expect((deps.put as jest.Mock).mock.calls[1][1]).toBe('https://storage.example/1');
+    expect(deps.mint).not.toHaveBeenCalled();
+    expect(last()).toBeNull();
+  });
+
+  test('finished with the answer lost (suspended at the end): Retry finds Mux has it and does not send it again', async () => {
+    const { deps, last } = harness({ status: jest.fn(() => Promise.resolve(muxSays('asset_created', 'preparing'))) });
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.put).not.toHaveBeenCalled();
+    expect(deps.mint).not.toHaveBeenCalled();
+    expect(deps.waitUntilLive).toHaveBeenCalledWith('U1', expect.objectContaining({ until: 'live' }));
+    expect(last()).toBeNull();
+  });
+
+  test('force-quit mid-upload, then reopened: Upload failed with Retry; Retry asks Mux before sending', async () => {
+    const stored = posted({ state: 'uploading', attempts: 1 }); // what was on the phone when it was closed
+    const reopened = resumeState(stored);
+    expect(reopened).toMatchObject({ state: 'failed', failedReason: 'interrupted' });
+    const { deps } = harness();
+    await runPendingPost(reopened, deps, new AbortController().signal);
+    expect((deps.status as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan((deps.put as jest.Mock).mock.invocationCallOrder[0]);
+    expect(deps.put).toHaveBeenCalledTimes(1);
+  });
+
+  test('closed while processing, then reopened hours later: only the processing is waited on; nothing is sent or minted', async () => {
+    const clock = { t: 5 * 60 * MIN }; // the URL is long expired
+    const { deps } = harness({}, clock);
+    await runPendingPost(resumeState(posted({ state: 'processing', attempts: 1 })), deps, new AbortController().signal);
+    expect(deps.put).not.toHaveBeenCalled();
+    expect(deps.mint).not.toHaveBeenCalled();
+    expect(deps.retryResponseUpload).not.toHaveBeenCalled();
+    expect(deps.waitUntilLive).toHaveBeenCalledWith('U1', expect.anything());
+  });
+
+  test('Retry with an expired URL whose bytes had all arrived: no new URL and no second asset', async () => {
+    const clock = { t: 2 * 60 * MIN };
+    const { deps } = harness({ status: jest.fn(() => Promise.resolve(muxSays('asset_created', 'ready'))) }, clock);
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.mint).not.toHaveBeenCalled();
+    expect(deps.retryResponseUpload).not.toHaveBeenCalled();
+    expect(deps.put).not.toHaveBeenCalled();
+  });
+
+  test.each(['timed_out', 'cancelled', 'errored'])('Retry after Mux reports the upload %s: one fresh URL on the row, sent once', async (dead) => {
+    const { deps, last } = harness({ status: jest.fn(() => Promise.resolve(muxSays(dead))) });
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.mint).toHaveBeenCalledTimes(1);
+    expect(deps.retryResponseUpload).toHaveBeenCalledWith('row-1', 'U2');
+    expect(deps.put).toHaveBeenCalledTimes(1);
+    expect((deps.put as jest.Mock).mock.calls[0][1]).toBe('https://storage.example/2');
+    expect(last()).toBeNull();
+  });
+
+  test('Retry after Mux could not process the asset: a fresh URL, rather than waiting on the failed asset again', async () => {
+    const { deps } = harness({ status: jest.fn(() => Promise.resolve(muxSays('asset_created', 'errored'))) });
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.mint).toHaveBeenCalledTimes(1);
+    expect(deps.put).toHaveBeenCalledTimes(1);
+  });
+
+  test('Retry when Mux cannot be asked (offline, or mux-upload-status down): Upload failed again; nothing is sent blind', async () => {
+    const { deps, last } = harness({ status: jest.fn(() => Promise.reject(new Error('status_failed'))) });
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.put).not.toHaveBeenCalled();
+    expect(last()).toMatchObject({ state: 'failed', failedReason: 'status_failed', uploadId: 'U1', attempts: 1 });
+  });
+
+  test('a Retry whose new URL was recorded but whose answer was lost: the next Retry puts a fresh URL on the row, not status_failed forever', async () => {
+    // Retry 1 minted U2 and retry_response_upload moved the row to it, but the answer was lost, so
+    // the phone still has U1. mux-upload-status no longer finds U1 among the member's videos.
+    const { deps, last } = harness({ status: jest.fn(() => Promise.reject(new Error('status_not_found'))) });
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.mint).toHaveBeenCalledTimes(1);
+    expect(deps.retryResponseUpload).toHaveBeenCalledWith('row-1', 'U2');
+    expect(deps.put).toHaveBeenCalledTimes(1);
+    expect(last()).toBeNull();
+  });
+
+  test.each(['removed', 'deleted'] as const)('a video %s on the server meanwhile: Retry sends nothing; Upload failed stays, for Discard', async (gone) => {
+    const { deps, last } = harness({ status: jest.fn(() => Promise.resolve(muxSays('waiting', null, gone))) });
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.put).not.toHaveBeenCalled();
+    expect(deps.mint).not.toHaveBeenCalled();
+    expect(last()).toMatchObject({ state: 'failed', failedReason: `response_${gone}` });
+  });
+
+  test('a post that went live while the app was closed: Retry sends nothing and clears it', async () => {
+    const { deps, last } = harness({ status: jest.fn(() => Promise.resolve(muxSays('asset_created', 'ready', 'live'))) });
+    await runPendingPost(posted(sent), deps, new AbortController().signal);
+    expect(deps.put).not.toHaveBeenCalled();
+    expect(last()).toBeNull();
+  });
+
+  test('Retry tapped twice, or the connection returning during Retry: one transfer', async () => {
+    const put = deferred<void>();
+    const { deps } = harness({ put: jest.fn(() => put.promise) });
+    const gate = createGate();
+    const signal = new AbortController().signal;
+    const a = gate(() => runPendingPost(posted(sent), deps, signal));
+    const b = gate(() => runPendingPost(posted(sent), deps, signal));
+    await flush();
+    put.resolve();
+    await Promise.all([a, b]);
+    expect(deps.status).toHaveBeenCalledTimes(1);
+    expect(deps.put).toHaveBeenCalledTimes(1);
+  });
+
+  test('a post that waited offline and was never sent: Retry sends without asking Mux', async () => {
+    const { deps } = harness();
+    await runPendingPost(resumeState(posted({ state: 'waiting' })), deps, new AbortController().signal);
+    expect(deps.status).not.toHaveBeenCalled();
+    expect(deps.put).toHaveBeenCalledTimes(1);
   });
 });
