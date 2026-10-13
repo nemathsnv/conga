@@ -5,7 +5,7 @@
 //   deno test --allow-env supabase/functions/_tests/cleanup_unit_test.ts
 import { assert, assertEquals, assertRejects, assertThrows } from "./assert.ts";
 import { mux, muxBase } from "../_shared/mux.ts";
-import { assetMismatch, changer, type Check, effectiveMode, envMode, type Job, runJob } from "../mux-cleanup/handler.ts";
+import { assetMismatch, changer, type Check, effectiveMode, envMode, forLog, type Job, runJob } from "../mux-cleanup/handler.ts";
 
 Deno.env.set("MUX_TOKEN_ID", "unit-id");
 Deno.env.set("MUX_TOKEN_SECRET", "unit-secret");
@@ -140,4 +140,52 @@ Deno.test("ownership: a mismatch fails before the database is asked or Mux is ch
   const noOwner = await runJob(job({ owner_id: null }), "live", neverCheck);
   assertEquals(noOwner.outcome, "failed");
   assert(true);
+});
+
+Deno.test("dry run plans say what would happen: the direction, the target and the playback ids", async () => {
+  const plan = async (j: Job, a: Record<string, unknown> | null) => {
+    muxWith(a);
+    const r = await runJob(j, "dry_run", neverCheck);
+    assertEquals(r.outcome, "release");
+    return (r.detail as { would: Record<string, unknown> }).would;
+  };
+  calls.length = 0;
+  assertEquals(await plan(job({ action: "sync_playback", playback_wanted: false }), asset), {
+    act: "sync", direction: "revoke", asset_id: "asset1", asset_status: "ready", owner_verified: true, playback_wanted: false,
+    public_playback_ids: ["pb1"], would_revoke: ["pb1"],
+  });
+  assertEquals(await plan(job({ action: "sync_playback", playback_wanted: true }), { ...asset, playback_ids: [] }), {
+    act: "sync", direction: "restore", asset_id: "asset1", asset_status: "ready", owner_verified: true, playback_wanted: true,
+    public_playback_ids: [], would_create: "public",
+  });
+  assertEquals(await plan(job({ action: "sync_playback", playback_wanted: true }), asset), {
+    act: "sync", direction: "keep", asset_id: "asset1", asset_status: "ready", owner_verified: true, playback_wanted: true,
+    public_playback_ids: ["pb1"], would_record: "pb1",
+  });
+  // A signed (non-public) playback id is neither revoked nor recorded.
+  assertEquals((await plan(job({ action: "sync_playback", playback_wanted: false }), { ...asset, playback_ids: [{ id: "pbS", policy: "signed" }] })).would_revoke, []);
+  assertEquals(await plan(job(), asset), { act: "delete", asset_id: "asset1", upload_id: "upload1", owner_verified: true });
+  // Ownership still decides first: a mismatch is the plan, with nothing to act on.
+  assertEquals(await plan(job({ action: "sync_playback", playback_wanted: false }), { ...asset, passthrough: "someone-else" }), { outcome: "not_verified", detail: "passthrough_mismatch" });
+  assertEquals(mutations(), [], "only reads");
+});
+
+Deno.test("dry run plan of a cancellation names the upload and its state", async () => {
+  answer = (method, url) => method === "GET" && url.pathname === "/video/v1/uploads/upload1"
+    ? Response.json({ data: { id: "upload1", status: "waiting", url: "https://x", new_asset_settings: { passthrough: "owner-1" } } })
+    : Response.json({}, { status: 404 });
+  calls.length = 0;
+  const r = await runJob(job({ action: "cancel_upload", asset_id: null }), "dry_run", neverCheck);
+  assertEquals(r.detail, { dry_run: true, would: { act: "cancel", upload_id: "upload1", upload_status: "waiting", owner_verified: true } });
+  assertEquals(mutations(), []);
+});
+
+Deno.test("the log shortens playback ids; the recorded result keeps them", () => {
+  const detail = { dry_run: true, would: { act: "sync", direction: "revoke", asset_id: "asset1", public_playback_ids: ["pbSecretOne"], would_revoke: ["pbSecretOne"] } };
+  const logged = JSON.stringify(forLog(detail));
+  assert(!logged.includes("pbSecretOne"), logged);
+  assert(logged.includes("pbSe…") && logged.includes("asset1"), logged);
+  assertEquals(forLog({ outcome: "restored", playback_id: "pbNewOne1", asset_status: "ready" }), { outcome: "restored", playback_id: "pbNe…", asset_status: "ready" });
+  assertEquals(forLog({ outcome: "revoked", revoked: ["abcdef", "ghijkl"] }), { outcome: "revoked", revoked: ["abcd…", "ghij…"] });
+  assertEquals(detail.would.would_revoke, ["pbSecretOne"], "the detail itself is unchanged");
 });

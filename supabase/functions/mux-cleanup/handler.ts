@@ -128,7 +128,7 @@ export async function drain(batches = MAX_BATCHES): Promise<Record<string, unkno
         } else if (finished?.status === "stale") summary.stale++;
         else summary[result.outcome]++;
       }
-      console.log(JSON.stringify({ job: job.id, mode, action: job.action, reason: job.reason, attempt: job.attempt, asset: job.asset_id, upload: job.upload_id, outcome: result.outcome, detail: result.detail }));
+      console.log(JSON.stringify({ job: job.id, mode, action: job.action, reason: job.reason, attempt: job.attempt, asset: job.asset_id, upload: job.upload_id, outcome: result.outcome, detail: forLog(result.detail) }));
     }));
   }
   return { ok: true, mode, ...summary };
@@ -147,11 +147,10 @@ export async function runJob(job: Job, mode: Mode, check: () => Promise<Check>):
       : { final: { outcome: "failed", detail: { outcome: "invalid", detail: "unknown_action" } } as Outcome };
     if (mode !== "live") {
       // A dry run records the plan and changes nothing, at Mux or in the database's videos.
-      const would = "final" in plan ? { outcome: plan.final.outcome, ...plan.final.detail } : { act: plan.act };
-      return { outcome: "release", detail: { dry_run: true, would } };
+      return { outcome: "release", detail: { dry_run: true, would: describePlan(plan, job) } };
     }
     if ("final" in plan) return plan.final;
-    return await execute(plan, check);
+    return await execute(plan, job, check);
   } catch (e) {
     return retry(errorText(e));
   }
@@ -162,6 +161,42 @@ type Plan =
   | { act: "delete"; asset: Asset }
   | { act: "sync"; asset: Asset; publics: string[] }
   | { act: "cancel"; upload: Upload };
+
+/**
+ * What a dry run records (the job's result, read by mux_cleanup_overview): the action, its target
+ * and, for playback, the direction and the playback ids involved. All of it was read from Mux after
+ * the ownership check passed. A playback job's direction is the database's answer when the job was
+ * leased; a live run asks again (mux_cleanup_check) immediately before acting.
+ */
+export function describePlan(plan: Plan, job: Job): Record<string, unknown> {
+  if ("final" in plan) return { outcome: plan.final.outcome, ...plan.final.detail };
+  if (plan.act === "delete") return { act: "delete", asset_id: plan.asset.id, upload_id: job.upload_id, owner_verified: true };
+  if (plan.act === "cancel") return { act: "cancel", upload_id: plan.upload.id, upload_status: plan.upload.status, owner_verified: true };
+  const sync = (direction: string) => ({
+    act: "sync", direction, asset_id: plan.asset.id, asset_status: plan.asset.status, owner_verified: true,
+    playback_wanted: job.playback_wanted, public_playback_ids: plan.publics,
+  });
+  if (job.playback_wanted === false) return { ...sync("revoke"), would_revoke: plan.publics };
+  if (job.playback_wanted !== true) return sync("unknown");
+  // Playback wanted: an id it already has is kept and recorded; otherwise Mux makes a new one.
+  return plan.publics.length ? { ...sync("keep"), would_record: plan.publics[0] } : { ...sync("restore"), would_create: "public" };
+}
+
+/** Keys whose values are public playback ids: anyone holding one can watch the video. */
+const PLAYBACK_KEYS = new Set(["playback_id", "would_record", "public_playback_ids", "would_revoke", "revoked"]);
+const mask = (v: unknown): unknown => typeof v === "string" ? `${v.slice(0, 4)}…` : Array.isArray(v) ? v.map(mask) : v;
+
+/**
+ * The detail as written to the function's log: playback ids shortened to their first characters.
+ * The job's result in the database keeps them whole (service role only).
+ */
+export function forLog(detail: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(detail)) {
+    out[k] = PLAYBACK_KEYS.has(k) ? mask(v) : v && typeof v === "object" && !Array.isArray(v) ? forLog(v as Record<string, unknown>) : v;
+  }
+  return out;
+}
 
 function errorText(e: unknown): string {
   if (e instanceof MuxHttpError) return `mux_${e.status}`;
@@ -232,10 +267,10 @@ async function planCancel(job: Job): Promise<Plan> {
   return { final: retry(`upload_${upload.status}`) };
 }
 
-async function execute(plan: Exclude<Plan, { final: Outcome }>, check: () => Promise<Check>): Promise<Outcome> {
+async function execute(plan: Exclude<Plan, { final: Outcome }>, job: Job, check: () => Promise<Check>): Promise<Outcome> {
   const c = await check();
   if (!c.ok) return stale;
-  if (c.mode !== "live") return { outcome: "release", detail: { dry_run: true, would: { act: plan.act }, detail: "switched off before acting" } };
+  if (c.mode !== "live") return { outcome: "release", detail: { dry_run: true, would: describePlan(plan, job), detail: "switched off before acting" } };
   const change = changer(c.mode);
   if (plan.act === "delete") {
     if (c.hold === "infinity") return kept("in use, or its moderation case is open");
