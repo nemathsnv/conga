@@ -1068,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; R0 step A, the migration, deployed 13 Oct 02:12 UTC; worker not redeployed)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; R0 step A, the migration, deployed 13 Oct 02:12 UTC; R0 step B, the worker (`mux-cleanup` v4), deployed 13 Oct 02:30 UTC; clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -2469,6 +2469,121 @@ from 02:12:31 to 02:12:38 UTC. Output: "Applying migration 20261013000100_cleanu
   (`supabase/rollback/20261013000100_cleanup_reliability.down.sql` as a new forward migration).
 - **Next:** step B (redeploy `mux-cleanup` with the G1 plans) needs Nemat's separate approval. The
   hosted worker is still the `faf1a41` code (v3), which the new schema was tested to accept.
+
+**R0 step B: `mux-cleanup` worker redeployed, v3 → v4 (13 Oct, 02:30:06 to 02:30:15 UTC; approved
+by Nemat: this one function only).** From `69da75f` (clean tree; this worktree's branch, cut from
+`main`, was moved to it). Deployed from a `git archive` of `HEAD` in a scratch folder:
+`supabase/config.toml`, `supabase/templates`, `supabase/functions/mux-cleanup` and
+`supabase/functions/_shared`. Read-only checks used the R0 preflight method and the step A snapshot
+scripts (Management API, `READ ONLY` transactions rolled back, `scripts/schema-fingerprint.sql`;
+Mux `GET`s only). No other Edge Function, no secret, Vault entry, environment variable, switch or
+alert was changed; no `--prune`; no Mux call other than `GET`s; nothing pushed to git.
+
+*Reviewed change* (`faf1a41` → `69da75f`, deployed files): only `mux-cleanup/handler.ts`.
+`describePlan` makes a dry run record the action, its target and, for playback, the direction and
+playback ids (G1); `forLog` shortens playback ids in the function log. Request handling (`POST`
+only, then the timing-safe `Bearer MUX_CLEANUP_KEY` check), both switches and the live path are
+unchanged. `index.ts`, `_shared/mux.ts` and `_shared/supabase.ts` are byte-identical. Locally:
+`deno check` clean, `deno lint` clean, Deno unit 32/32 (`mux_test.ts`, `cleanup_unit_test.ts`).
+
+*Final preflight (02:26 to 02:28):*
+- **Schema:** 17 migrations, latest `20261013000100`; fingerprint **759**, line for line the tested
+  post-migration listing (`10acc19ffaef4d3ebe549d37b2c2199c`).
+- **Switches:** database `off` (12 Oct 17:16:21, 4B); 11 secrets, **no `MUX_CLEANUP_MODE`**.
+- **Queue:** only the canary's `done` job; 0 purge failures; overview nothing due, stuck, failed,
+  in review or planned. `mux_cleanup_runs` 0 rows; pg_net queue 0, still the 3 answers of 12 Oct.
+- **Founder:** response `md5(row_to_json)` `c9918f82…`, ledger `md5(u::text)` `9726bb8f…`, both
+  `live` / `claimed`; `web_video` `live`; HLS 200.
+- **Everything else identical to step A's 02:21 snapshot** (apart from cron run counters): every
+  table hash and `auth.users`; functions (versions, bundle hashes, deploy times); secrets (names,
+  digests, times); Vault (2 secrets, 12 Oct 15:49:18); Mux (Shortcut Beta: the founder's asset
+  alone, 0 live streams; canary asset and HLS 404; spike 7 assets, 25 uploads).
+- **Health (02:27:41):** `warn`, mode `off`; only "has not run yet" for `mux-sweep`,
+  `prune-mux-cleanup-jobs` and `prune-moderation-records`. Monitor ran 02:20, succeeded.
+
+*Deploy:* `supabase functions deploy mux-cleanup --no-verify-jwt --project-ref
+picvoavfxnajfjkqawju --workdir <scratch>`.
+- A first attempt at 02:29:46 stopped in the CLI's config check before bundling: the archive
+  lacked `supabase/templates` (`config.toml` names the sign-in email template). Nothing was
+  uploaded: `functions list` straight after still showed `mux-cleanup` v3 with the old bundle
+  hash. The template was added from the same commit.
+- The second attempt, 02:30:06 to 02:30:15: "Deployed Functions.", exit 0.
+
+*Post-deployment verification (02:30 to 02:33):*
+- **Functions:**
+
+  | Function | Version | Bundle hash | Last deployed (UTC) |
+  |---|---|---|---|
+  | `mux-cleanup` | **v4** (was v3) | `5adecf46…` (was `2f53c7a7…`) | 13 Oct 02:30:10 |
+  | `auth-signin-method` | v6 | `e4894bcb…` | 10 Oct 04:52 (unchanged) |
+  | `mux-create-upload` | v6 | `bd0a6937…` | 12 Oct 10:40 (unchanged) |
+  | `mux-upload-status` | v7 | `aaa0aab6…` | 12 Oct 15:50 (unchanged) |
+  | `mux-webhook` | v8 | `e4679407…` | 12 Oct 15:49 (unchanged) |
+
+  All `ACTIVE`, `verify_jwt` false.
+- **Deployed bundle = the reviewed code.** `functions download` returns transpiled source, so the
+  comparison was structural: both sides through the TypeScript transpiler (types and comments
+  removed), then the syntax tree (node kinds, identifier and literal values; formatting, quote
+  style, trailing commas and redundant parentheses ignored).
+  - Method check first: the deployed v3 matched `faf1a41` in all four files, and differed from
+    `69da75f` in `handler.ts` only.
+  - v4 has exactly four files (`mux-cleanup/index.ts`, `mux-cleanup/handler.ts`, `_shared/mux.ts`,
+    `_shared/supabase.ts`), no test file, and **all four match `69da75f`**; its `handler.ts`
+    differs from `faf1a41`.
+- **Method and authentication** (02:31:46 to 02:32:01):
+  - `GET`, `PUT`, `DELETE` 405 `POST only`; `GET` with the correct key 405.
+  - `POST` 401 `unauthorized` with: no `Authorization`, `Bearer garbage`, a random wrong 64-hex
+    key, the right key without `Bearer`, the right key in an `apikey` header only, and the right
+    key plus one character.
+  - Not repeated this time: the legacy anon, legacy service-role, publishable and new secret keys
+    (fetching the project's API keys was refused by the session's permission rules). The handler's
+    authentication code is unchanged from v3, where all four were checked (12 Oct).
+- **Keyed, switch `off`** (confirmed `off` at 02:31:29, immediately before):
+  - `drain` and an empty body: 200 `{"ok":true,"mode":"off","claimed":0,…}`, every count 0.
+  - `sweep`: 200 `{"ok":true,"mode":"off","skipped":"off"}`, which returns before listing assets.
+  - An unknown mode: 400 `invalid_mode`.
+  - With the database `off`, `mux_cleanup_claim` returns before selecting jobs; its only write
+    (expired leases) touches `running` jobs, of which there are none. So no Mux call was possible
+    and no row was written.
+- **After (02:32:21 snapshot, against the 02:26 preflight):**
+  - Fingerprint 759 / `10acc19f…`; 17 migrations.
+  - Every table hash and `auth.users` identical; founder hashes unchanged, `web_video` `live`;
+    canary `unavailable`.
+  - Queue unchanged (the one `done` job); `mux_cleanup_runs` 0 rows; pg_net queue 0, max answer id
+    still 3 (no outbound request by the scheduler).
+  - Mux identical: the founder's asset `ready`, its `GET` 200, **HLS 200**; canary asset and HLS
+    **404**; 0 live streams; spike 7 assets, 25 uploads.
+  - Vault identical.
+  - **Secrets:** the same 11 names and digests, still no `MUX_CLEANUP_MODE`; the four set by us
+    (`MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET`, `MUX_CLEANUP_KEY`) have unchanged
+    times. The seven platform-managed `SUPABASE_*` entries show `updated_at` 02:30:10, the deploy
+    time, with identical digests. This is platform behaviour on any function deploy (on 12 Oct
+    they took the `mux-upload-status` deploy time, 15:50:03), not a configuration change.
+- **Scheduler, two monitoring intervals after the deploy observed (to 02:51):**
+  - `mux-cleanup-monitor` ran at **02:40:00** and **02:50:00** and **succeeded** both times (12 ms,
+    "1 row", 0 answers copied). `mux-cleanup` (every minute) ran 21 times since the deploy, all
+    succeeded; `send-push` 21 and `tonight-prompt` 2, 0 failures. 0 failed runs on any schedule.
+  - No new cleanup job (still the one `done` job); `mux_cleanup_runs` 0 rows; pg_net queue 0, max
+    answer id 3, so no request to the worker or Mux from the database; health worker metrics all 0.
+  - **Health (02:51:02): `warn`**, mode `off`, with only "has not run yet" for `mux-sweep`,
+    `prune-mux-cleanup-jobs` and `prune-moderation-records`. Their first runs are due 13 Oct 04:45,
+    03:40 and 03:30 UTC. That is the expected state, not a deployment failure.
+  - A full snapshot at 02:51:13 was identical to the 02:32 one: fingerprint 759 / `10acc19f…`,
+    every table hash, founder and canary, functions (versions, bundle hashes, times), secrets,
+    Vault, queue and Mux (founder HLS 200, canary 404). Only the cron run counters moved.
+- **Final cleanup modes:** database switch `off`; worker secret `MUX_CLEANUP_MODE` unset, so its own
+  mode is `dry_run`; effective mode `off`. Nothing was switched to `dry_run` or `live`.
+- **Side effects of the method:** the CLI's temporary login role was refreshed on each linked
+  command; link files written in the scratch folders were deleted. The keyed and unkeyed test
+  requests appear in the function's invocation log.
+- **Not checked:** the Edge Function and gateway logs (Dashboard sign-in needed): expected are
+  only the 405, 401, 200 and 400 answers above, between 02:31:46 and 02:32:01, and no error. The
+  daily jobs' first runs (03:15 purge, 03:30 and 03:40 prunes, 04:45 sweep) come after this
+  record.
+- **Rollback:** not needed. Available as reviewed: redeploy `mux-cleanup` from `faf1a41` (the
+  database accepts either version).
+- **R0 is complete.** The next step in the revised sequence is CP0, which needs Nemat's separate
+  approval.
 
 ## Gates
 
