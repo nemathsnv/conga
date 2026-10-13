@@ -9,11 +9,15 @@
 // the store once a posted row holds it (consume) or the server refuses it (drop).
 import type { UploadTicket } from './upload';
 
-/** URLs are handed out for this long. The server's slot and Mux's URL last an hour. */
+/** URLs are handed out for this long, counted from when the request was sent: the server's slot
+ *  and Mux's URL last an hour from moments after that, so the age is never under-counted. */
 export const TICKET_MAX_AGE_MS = 50 * 60 * 1000;
 
 export type TicketLease = {
   ticket: UploadTicket;
+  /** When the request for this URL was sent (the clock passed to the store). A post keeps it, so
+   *  Retry knows the URL's real age, not the age since Post. */
+  mintedAt: number;
   /** The URL may be replaced once if the server refuses it as stale: it was minted before this
    *  Post (by Post Review) and has never been sent with a post. A URL already sent may have been
    *  claimed by a row whose answer was lost, so it is never replaced automatically. */
@@ -36,24 +40,22 @@ export type TicketStore = {
   /** Starts a request if the member has no URL and none is running. Never throws. */
   prefetch(owner: string): void;
   forOwner(owner: string): TicketSource;
+  /** Forgets the URL and any running request: the signed-in member changed or signed out. */
   reset(): void;
 };
 
-type Entry = { owner: string; promise: Promise<UploadTicket>; ticket?: UploadTicket; mintedAt?: number; sent: boolean };
+type Entry = { owner: string; promise: Promise<UploadTicket>; ticket?: UploadTicket; askedAt: number; sent: boolean };
 
 export function createTicketStore(mint: () => Promise<UploadTicket>, now: () => number = Date.now): TicketStore {
   let entry: Entry | null = null;
 
   const start = (owner: string): Entry => {
-    const e: Entry = { owner, promise: mint(), sent: false };
+    const e: Entry = { owner, askedAt: now(), promise: mint(), sent: false };
     entry = e;
     // A failed request is forgotten, so the next get() asks again; whoever waits on it sees the error.
     e.promise.then(
       (ticket) => {
-        if (entry === e) {
-          e.ticket = ticket;
-          e.mintedAt = now();
-        }
+        if (entry === e) e.ticket = ticket;
       },
       () => {
         if (entry === e) entry = null;
@@ -62,10 +64,10 @@ export function createTicketStore(mint: () => Promise<UploadTicket>, now: () => 
     return e;
   };
 
-  /** The member's entry if it can still be used: running, or minted recently enough. */
+  /** The member's entry if it can still be used: asked for recently enough (running or minted). */
   const current = (owner: string): Entry | null => {
     if (!entry || entry.owner !== owner) return null;
-    if (entry.mintedAt !== undefined && now() - entry.mintedAt >= TICKET_MAX_AGE_MS) return null;
+    if (now() - entry.askedAt >= TICKET_MAX_AGE_MS) return null;
     return entry;
   };
 
@@ -83,7 +85,7 @@ export function createTicketStore(mint: () => Promise<UploadTicket>, now: () => 
           const existing = current(owner);
           const e = existing ?? start(owner);
           const ticket = await e.promise;
-          return { ticket, replaceable: !!existing && !e.sent };
+          return { ticket, mintedAt: e.askedAt, replaceable: !!existing && !e.sent };
         },
         sent(ticket) {
           if (entry?.ticket?.uploadId === ticket.uploadId) entry.sent = true;

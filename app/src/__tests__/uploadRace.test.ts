@@ -38,7 +38,7 @@ describe('the CP0 race', () => {
     await flush();
     expect(mint).toHaveBeenCalledTimes(1);
     requests[0].resolve(ticket(1));
-    await expect(posting).resolves.toEqual({ ok: true, ticket: ticket(1), row: { id: 'row-U1' } });
+    await expect(posting).resolves.toEqual({ ok: true, ticket: ticket(1), mintedAt: expect.any(Number), row: { id: 'row-U1' } });
     expect(mint).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledTimes(1);
   });
@@ -63,7 +63,7 @@ describe('the CP0 race', () => {
     const b = store.forOwner('T1').get();
     store.prefetch('T1');
     requests[0].resolve(ticket(1));
-    await expect(Promise.all([a, b])).resolves.toEqual([{ ticket: ticket(1), replaceable: true }, { ticket: ticket(1), replaceable: true }]);
+    await expect(Promise.all([a, b])).resolves.toEqual([{ ticket: ticket(1), mintedAt: expect.any(Number), replaceable: true }, { ticket: ticket(1), mintedAt: expect.any(Number), replaceable: true }]);
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
@@ -207,7 +207,7 @@ describe('re-recording, leaving Post Review, time and sign-in', () => {
     // The screen is gone; nothing of it is called again. The request still finishes.
     requests[0].resolve(ticket(1));
     await flush();
-    await expect(store.forOwner('T1').get()).resolves.toEqual({ ticket: ticket(1), replaceable: true });
+    await expect(store.forOwner('T1').get()).resolves.toEqual({ ticket: ticket(1), mintedAt: expect.any(Number), replaceable: true });
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
@@ -230,7 +230,7 @@ describe('re-recording, leaving Post Review, time and sign-in', () => {
     clock = TICKET_MAX_AGE_MS - 1;
     await expect(store.forOwner('T1').get()).resolves.toMatchObject({ ticket: ticket(1) });
     clock = TICKET_MAX_AGE_MS;
-    await expect(store.forOwner('T1').get()).resolves.toEqual({ ticket: ticket(2), replaceable: false });
+    await expect(store.forOwner('T1').get()).resolves.toEqual({ ticket: ticket(2), mintedAt: TICKET_MAX_AGE_MS, replaceable: false });
   });
 
   test('another member never gets the first member\'s URL', async () => {
@@ -238,7 +238,7 @@ describe('re-recording, leaving Post Review, time and sign-in', () => {
     const store = createTicketStore(() => Promise.resolve(ticket(++n)));
     store.prefetch('A');
     await flush();
-    await expect(store.forOwner('B').get()).resolves.toEqual({ ticket: ticket(2), replaceable: false });
+    await expect(store.forOwner('B').get()).resolves.toEqual({ ticket: ticket(2), mintedAt: expect.any(Number), replaceable: false });
     // A's request, still answering after B signed in, is not handed to B.
     const { mint, requests } = slowMint();
     const s2 = createTicketStore(mint);
@@ -247,6 +247,61 @@ describe('re-recording, leaving Post Review, time and sign-in', () => {
     requests[0].resolve(ticket(10));
     requests[1].resolve(ticket(11));
     await expect(b).resolves.toMatchObject({ ticket: ticket(11) });
+  });
+});
+
+describe('review of fee64ec: the URL\'s age and a member change', () => {
+  test('a URL\'s age counts from the request: a slow answer does not make it look younger', async () => {
+    let clock = 0;
+    let n = 0;
+    const answers: Deferred<UploadTicket>[] = [];
+    const store = createTicketStore(() => {
+      n += 1;
+      const d = deferred<UploadTicket>();
+      answers.push(d);
+      return d.promise;
+    }, () => clock);
+    store.prefetch('T1'); // asked at 0
+    clock = 20 * 60_000; // the phone was locked; the answer arrives 20 minutes later
+    answers[0].resolve(ticket(1));
+    await expect(store.forOwner('T1').get()).resolves.toMatchObject({ ticket: ticket(1), mintedAt: 0 });
+    clock = TICKET_MAX_AGE_MS; // 50 minutes after the request, 30 after the answer: no longer handed out
+    const next = store.forOwner('T1').get();
+    answers[1].resolve(ticket(2));
+    await expect(next).resolves.toMatchObject({ ticket: ticket(2), mintedAt: TICKET_MAX_AGE_MS });
+    expect(n).toBe(2);
+  });
+
+  test('signing out resets the store: a request still running for the old member is never handed out', async () => {
+    const { mint, requests } = slowMint();
+    const store = createTicketStore(mint);
+    store.prefetch('A');
+    store.reset(); // A signs out
+    requests[0].resolve(ticket(1)); // A's answer arrives afterwards
+    await flush();
+    const b = store.forOwner('B').get();
+    requests[1].resolve(ticket(2));
+    await expect(b).resolves.toMatchObject({ ticket: ticket(2) });
+    // A signs back in: A's old answer was dropped too, so A asks again.
+    const a = store.forOwner('A').get();
+    requests[2].resolve(ticket(3));
+    await expect(a).resolves.toMatchObject({ ticket: ticket(3) });
+  });
+
+  test('a URL sent with a post whose answer was lost is not given to the next recording silently', async () => {
+    let n = 0;
+    const store = createTicketStore(() => Promise.resolve(ticket(++n)));
+    // Recording 1: the row is created, the answer is lost.
+    const lost = jest.fn(() => Promise.reject(new Error('Network request failed')));
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: lost })).rejects.toThrow('Network');
+    // Re-record, then Post recording 2: the server says the URL is used. It is not replaced
+    // automatically (it is held by recording 1's row); the next Post asks for a new one.
+    const used = jest.fn(() => Promise.reject(new Error('upload_already_used')));
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: used })).rejects.toThrow('upload_already_used');
+    expect(used).toHaveBeenCalledWith(ticket(1));
+    const create = jest.fn((t: UploadTicket) => Promise.resolve({ id: t.uploadId }));
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create })).resolves.toMatchObject({ ticket: ticket(2) });
+    expect(n).toBe(2);
   });
 });
 

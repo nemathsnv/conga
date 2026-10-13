@@ -18,7 +18,8 @@ export function isRestriction(reason: string): boolean {
   return RESTRICTIONS.some((r) => reason.includes(r));
 }
 
-export type Prepared<Row> = { ok: true; ticket: UploadTicket; row: Row } | { ok: false; reason: string };
+/** mintedAt: when the URL was asked for (TicketLease), so the post knows how long the URL lasts. */
+export type Prepared<Row> = { ok: true; ticket: UploadTicket; mintedAt: number; row: Row } | { ok: false; reason: string };
 
 /**
  * Gets the member's upload URL from the ticket store (the one Post Review asked for, still running
@@ -54,7 +55,7 @@ export async function prepareUpload<Row>(args: {
   const first = await leaseOrFail();
   if ('reason' in first) return { ok: false, reason: first.reason };
   try {
-    return { ok: true, ticket: first.ticket, row: await attempt(first.ticket) };
+    return { ok: true, ticket: first.ticket, mintedAt: first.mintedAt, row: await attempt(first.ticket) };
   } catch (e) {
     if (!STALE_TICKET.test(errorReason(e))) throw e;
     tickets.drop(first.ticket);
@@ -63,7 +64,7 @@ export async function prepareUpload<Row>(args: {
   const fresh = await leaseOrFail();
   if ('reason' in fresh) return { ok: false, reason: fresh.reason };
   try {
-    return { ok: true, ticket: fresh.ticket, row: await attempt(fresh.ticket) };
+    return { ok: true, ticket: fresh.ticket, mintedAt: fresh.mintedAt, row: await attempt(fresh.ticket) };
   } catch (e) {
     if (STALE_TICKET.test(errorReason(e))) tickets.drop(fresh.ticket);
     throw e;
@@ -90,8 +91,10 @@ export async function ensureUploadRow<Post extends { responseId: string | null; 
   if (post.responseId) return post;
   let current = post;
   if (!current.uploadId || !current.uploadUrl || !deps.usable(current)) {
+    // The URL's life counts from the request, not the answer.
+    const askedAt = (deps.now ?? Date.now)();
     const minted = await deps.mint();
-    current = { ...current, uploadId: minted.uploadId, uploadUrl: minted.uploadUrl, uploadUrlExpiresAt: (deps.now ?? Date.now)() + deps.ttlMs };
+    current = { ...current, uploadId: minted.uploadId, uploadUrl: minted.uploadUrl, uploadUrlExpiresAt: askedAt + deps.ttlMs };
     await deps.save(current);
   }
   try {

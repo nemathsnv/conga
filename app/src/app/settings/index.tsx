@@ -10,17 +10,20 @@ import { useSession } from '@/lib/session';
 import { ActionSheet } from '@/ui/ActionSheet';
 import { ActivityTabIcon, ChevronLeft, ChevronRightIcon, PersonIcon, PlacePinIcon, PlusIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
-import { loadPendingPost, savePendingPost } from '@/video/pendingPost';
-import { deleteRecordingFiles } from '@/video/upload';
+import { loadPendingPost } from '@/video/pendingPost';
+import { pendingPostFor } from '@/video/pendingPostState';
+import { usePosting } from '@/video/posting';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { state, signOut } = useSession();
+  const { session, state, signOut } = useSession();
+  const posting = usePosting();
   const [signOutAsk, setSignOutAsk] = useState<number | null>(null);
 
   const onSignOut = async () => {
-    const pending = await loadPendingPost();
+    // Only this member's own unposted recording counts.
+    const pending = pendingPostFor(await loadPendingPost(), session?.user.id ?? null);
     if (pending) {
       setSignOutAsk(1);
       return;
@@ -28,9 +31,8 @@ export default function SettingsScreen() {
     await signOut();
   };
   const signOutAnyway = async () => {
-    const pending = await loadPendingPost();
-    if (pending) deleteRecordingFiles(pending.recording);
-    await savePendingPost(null);
+    // Stops the upload if one is running, then deletes the recording from this phone.
+    await posting.deleteUnposted();
     setSignOutAsk(null);
     await signOut();
   };

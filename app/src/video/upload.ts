@@ -41,10 +41,12 @@ export function uploadableFile(recording: Recording): File {
   return file;
 }
 
+/** PUTs the recording to its upload URL. Aborting `signal` cancels the transfer (signing out). */
 export async function putRecording(
   recording: Recording,
   uploadUrl: string,
   onProgress: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const file = uploadableFile(recording);
   const total = file.size ?? 0;
@@ -53,6 +55,7 @@ export async function putRecording(
     uploadType: UploadType.BINARY_CONTENT,
     headers: { 'Content-Type': 'video/mp4' },
     onProgress: (p) => onProgress(total > 0 ? Math.min(1, p.bytesSent / (p.totalBytes || total)) : 0),
+    signal,
   });
   const result = await task.uploadAsync();
   if (!result || result.status < 200 || result.status >= 300) throw new Error(`upload_http_${result?.status ?? 'none'}`);
@@ -74,11 +77,11 @@ export async function checkUploadStatus(uploadId: string): Promise<UploadStatus>
 }
 
 /** Polls until the response is live (or, for a private draft, until its asset is ready). Resolves with the playback id. */
-export async function waitUntilLive(uploadId: string, opts: { intervalMs?: number; timeoutMs?: number; signal?: { cancelled: boolean }; until?: 'live' | 'ready' } = {}): Promise<string> {
+export async function waitUntilLive(uploadId: string, opts: { intervalMs?: number; timeoutMs?: number; signal?: { aborted: boolean }; until?: 'live' | 'ready' } = {}): Promise<string> {
   const interval = opts.intervalMs ?? 1500;
   const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
   while (Date.now() < deadline) {
-    if (opts.signal?.cancelled) throw new Error('cancelled');
+    if (opts.signal?.aborted) throw new Error('cancelled');
     const status = await checkUploadStatus(uploadId);
     if (status.responseStatus === 'live' && status.playbackId) return status.playbackId;
     if (opts.until === 'ready' && status.assetStatus === 'ready' && status.playbackId) return status.playbackId;

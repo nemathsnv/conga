@@ -3,7 +3,8 @@
 // the Upload failed banner shows the recording that is waiting.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { PendingPost } from './pendingPostState';
+import { pendingPostFor, type PendingPost } from './pendingPostState';
+import type { Recording } from './types';
 
 export type { PendingPost } from './pendingPostState';
 
@@ -27,4 +28,15 @@ export async function savePendingPost(value: PendingPost | null): Promise<void> 
   } catch {
     // Best effort; the in-memory copy still drives this launch.
   }
+}
+
+/**
+ * Stores a new post for its member. A stored post of anyone else (a member who signed out without
+ * Sign out anyway, or one from before posts had an owner) can no longer be reached once replaced,
+ * so its recording is deleted from the phone rather than left behind.
+ */
+export async function storeNewPendingPost(post: PendingPost, deleteFiles: (recording: Recording) => void): Promise<void> {
+  const stored = await loadPendingPost();
+  if (stored && stored.recording?.id !== post.recording.id && !pendingPostFor(stored, post.ownerId)) deleteFiles(stored.recording);
+  await savePendingPost(post);
 }

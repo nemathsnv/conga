@@ -39,6 +39,7 @@ describe('recorder limits', () => {
 
 describe('pending post resume', () => {
   const base: PendingPost = {
+    ownerId: 'member',
     responseId: 'r',
     kind: 'response',
     draftFor: null,

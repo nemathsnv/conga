@@ -34,7 +34,7 @@ async function setup(opts: { reviewed?: boolean; mint?: () => Promise<UploadTick
 describe('prepareUpload', () => {
   test('normal posting: the review-time URL is used, nothing else is minted', async () => {
     const { mint, create, tickets } = await setup({ reviewed: true });
-    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: review, row: { id: 'row-upReview' } });
+    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: review, mintedAt: expect.any(Number), row: { id: 'row-upReview' } });
     expect(mint).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledTimes(1);
   });
@@ -42,13 +42,13 @@ describe('prepareUpload', () => {
   test('the posted URL leaves the store: the next post asks for a new one', async () => {
     const { mint, create, tickets } = await setup({ reviewed: true });
     await prepareUpload({ tickets, create });
-    await expect(tickets.get()).resolves.toEqual({ ticket: fresh, replaceable: false });
+    await expect(tickets.get()).resolves.toEqual({ ticket: fresh, mintedAt: expect.any(Number), replaceable: false });
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
   test('no review-time URL: one is minted at Post', async () => {
     const { mint, create, tickets } = await setup();
-    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: fresh, row: { id: 'row-upFresh' } });
+    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: fresh, mintedAt: expect.any(Number), row: { id: 'row-upFresh' } });
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
@@ -72,7 +72,7 @@ describe('prepareUpload', () => {
 
   test.each(['upload_cancelled', 'upload_expired', 'upload_already_used', 'upload_not_found'])('a review-time URL refused as %s is replaced once', async (reason) => {
     const { mint, create, tickets } = await setup({ reviewed: true, create: (t) => (t === review ? Promise.reject(new Error(reason)) : Promise.resolve({ id: 'row-fresh' })) });
-    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: fresh, row: { id: 'row-fresh' } });
+    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: fresh, mintedAt: expect.any(Number), row: { id: 'row-fresh' } });
     expect(mint).toHaveBeenCalledTimes(1);
     expect(create.mock.calls.map(([t]) => t.uploadId)).toEqual(['upReview', 'upFresh']);
   });
@@ -124,7 +124,7 @@ describe('prepareUpload', () => {
     let calls = 0;
     const { mint, create, tickets } = await setup({ reviewed: true, create: (t) => (++calls === 1 ? Promise.reject(new Error('Network request failed')) : Promise.resolve({ id: `row-${t.uploadId}` })) });
     await expect(prepareUpload({ tickets, create })).rejects.toThrow('Network');
-    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: review, row: { id: 'row-upReview' } });
+    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: review, mintedAt: expect.any(Number), row: { id: 'row-upReview' } });
     expect(mint).not.toHaveBeenCalled();
   });
 });
