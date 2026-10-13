@@ -1068,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; R0 step A, the migration, deployed 13 Oct 02:12 UTC; R0 step B, the worker (`mux-cleanup` v4), deployed 13 Oct 02:30 UTC; clean-up off)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; R0 step A, the migration, deployed 13 Oct 02:12 UTC; R0 step B, the worker (`mux-cleanup` v4), deployed 13 Oct 02:30 UTC; CP0, test account T1 and its video V, 13 Oct; clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -2584,6 +2584,151 @@ picvoavfxnajfjkqawju --workdir <scratch>`.
   database accepts either version).
 - **R0 is complete.** The next step in the revised sequence is CP0, which needs Nemat's separate
   approval.
+
+**CP0: disposable test account T1 and one video V (13 Oct, 03:10 to 08:53 UTC; approved by Nemat:
+one invite, one test account, one new Mux asset).** Nemat signed up T1 and recorded and posted V on
+the iPhone (founder Release build from `ede68ed`); everything else was read-only, by the R0 method
+(Management API, `READ ONLY` transactions rolled back; Mux `GET`s only). The only write made from
+here was the invite. Cleanup switches, functions, secrets and Vault were not touched; no Mux call
+other than `GET`s; nothing pushed to git.
+
+*Preflight (03:10:32 to 03:11:07):*
+- Identical to the end of R0 step B, apart from cron run counters: 17 migrations; fingerprint 759 /
+  `10acc19f…`; `mux-cleanup` v4 `ACTIVE`; switch `off`; no `MUX_CLEANUP_MODE`; only the canary's
+  `done` job; 0 purge failures; founder hashes unchanged; HLS 200.
+- Health `warn`, only "has not run yet" for the three daily jobs.
+- **Mux headroom:** Shortcut Beta 1 asset (the founder's), spike 7. That is 8 of the free plan's
+  10 if the cap is account-wide (unconfirmed), so 9 after V.
+
+*Invite (03:11:48):* `public.team_create_invite(null, 'canggu', null, null)`, the call
+`scripts/create-invite.sh` makes, run with `supabase db query --linked --project-ref`. It ran in
+one transaction that first required exactly one existing invite and no unused one.
+- Invite `773dd3fc-95f0-4f18-b222-a4f20b1f05d3`: team-created (no inviter), cohort `canggu`,
+  valid to 20 Oct 03:11:48. Single-use by schema (one `redeemed_by`).
+- The call returned no rows (its last statement was the `commit`). A read-only check before
+  anything else confirmed exactly one new invite.
+
+*T1 sign-up (Nemat, iPhone, 08:30 to 08:32):*
+- **The founder signed out first** (Me → Sign out, about 08:30:45): the founder's `auth.users`
+  `updated_at` moved to 08:30:45, and its sessions and refresh tokens are gone. Every other
+  founder auth field is as on 10 Oct; the founder's account, profile, invite and place-follow rows
+  are byte-identical. The founder signs back in with an email code when needed.
+- **T1 = `b0c14e38-4e89-4dbd-a9a3-8a8c01872a78`** (username `test_t1`, name "test one").
+  - Auth: created 08:31:05; email confirmed 08:31:23 (a `+` alias of a Gmail address; the
+    address is not recorded here); one `email` identity; one session, `aal1`, method `otp`;
+    password null; not banned or deleted.
+  - Account: 18+ at 08:31:25; cohort `canggu`; moderation `active`; not deleted.
+  - Invite `773dd3fc…` redeemed by T1 at 08:31:33, once; T1 follows Canggu (`source` `cohort`),
+    as redemption does. Not on the waitlist.
+  - Profile at 08:31:47: no photo, no bio.
+- **Check at 08:33 to 08:35:**
+  - Fingerprint, functions, secrets, Mux and the queue all unchanged.
+  - Only `auth.users`, `accounts`, `profiles`, `invites` and `place_follows` changed, each +1
+    row (T1's); hashes over the other rows equal the preflight's.
+  - `analytics_events` 47 → 57, the 47 earlier rows identical.
+  - 0 responses, uploads or jobs added; 0 activity, follows or push tokens.
+- **Health 08:34:51: `ok`.** The four daily jobs had their first hosted runs at 03:15
+  (`purge-deleted-accounts`), 03:30, 03:40 (the prunes) and 04:45 (`mux-sweep`, which returned at
+  once with the switch `off`); all succeeded. No cron failure on any schedule.
+- *Seen:* `signup_started` was logged three times in one batch (08:31:28.789). Harmless for the
+  test, but it would triple-count sign-ups in the metrics. Not changed.
+
+*V, recorded and posted by T1 (08:42:34 to 08:43:10):*
+- **Deviation 1: V is a response to the prompt, not a video reply.** The plan was a reply to the
+  founder's response. `record_started` says `kind` `response`: T1 tapped Respond on Home (the
+  prompt T1 had not answered yet), not "Reply to Nemat" in the player. So V is T1's response to the
+  same prompt, with no activity row for the founder.
+  - Tests A, B and E act on a member's own video whichever kind it is (`mod_remove_video`,
+    `mod_restore_video`, account deletion and purge), so V serves them as planned.
+  - T1 has now responded to this prompt; another response from T1 would be refused
+    (`already_responded`). Nemat to accept V as is before Test A.
+- **V's identifiers (for Tests A, B and E):**
+  - Response `52bbaabb-6faa-4bd2-94f9-015e43be791d`: `kind` `response`, author T1, prompt
+    `ddd5a383-be11-475f-9576-0a6db79cabe3` (the founder's prompt), no caption, 5,744 ms; created
+    08:42:47, `live` 08:43:09.56.
+  - Ledger `9b41ba53-ac7e-4bfc-a3eb-ed4020e76bde`: `claimed` 08:42:47 by T1, linked to V.
+  - Mux upload `aoOFWQtNksIeQRlMpJYKdKa9O02EQG01OYFlHkjaxNMnE`: `asset_created`, passthrough T1,
+    public playback policy.
+  - Asset **a** = `01IyQdSiLvAbHXb01Xg1ZQISiMz9UvMxLMgfZDpscKMBw`: `ready`, 5.744 s, 1080p
+    `basic`, no errors; `upload_id` = the ledger's upload; passthrough T1.
+  - Public playback id **P1** = `fye4EdwnAEa3f5bPfhNDi9z9r8UA2lAbXk6al014PKI8`, the only one on
+    a; HLS **200**.
+  - `web_video(V)` `live` with P1 and author `test_t1`.
+  - `mux_playback_wanted(V, a)` true; `mux_asset_hold(a, u)` `infinity` (in use).
+- **Deviation 2: a second upload URL, minted by the app, not by a re-record.** Ledger
+  `352be921-42d7-4e46-9771-0b9aa8ce666d`, Mux upload
+  `QswMY9w2quyprnJqAGTY01UDCnJ4HE7pRsQP201ALMEAM`, owner T1: created 08:42:44.4 and `active` at
+  08:42:45.9 (the Mux round trip took 1.5 s). Unclaimed; Mux `waiting`, no asset; times out at Mux
+  about 09:42:44.
+  - **Cause:** Post Review starts `mintUpload()` on opening but stores the ticket only when it
+    resolves (`app/src/app/record/review.tsx`). T1 tapped Post on the disclosure sheet at 08:42:45.2
+    (phone clock), before the first mint answered. So `prepareUpload` got `ticket: null` and
+    minted the second URL (08:42:45.8), which V claimed.
+  - The same race is in the current code, not only the installed build. Not a clean-up target (no
+    asset, no job), and Test C1's count is unaffected (T1 is at 2 of 10 this hour).
+  - Not cancelled (not authorised); it times out by itself. Fix to be decided (below).
+- **Webhooks:** **not verified.** Nemat to read Dashboard → Edge Functions → `mux-webhook` →
+  Invocations for 08:42 to 08:44 (expected: only `POST` 200s).
+  - It is not recorded which path set V `live`: the `video.asset.ready` webhook or the app's
+    `mux-upload-status` poll. `live_at` is 08:43:09.56, and the phone logged `video_published` at
+    08:43:10.3.
+- **After (08:51 to 08:53):**
+  - **Mux:** Shortcut Beta has exactly **2 assets**, the founder's and a, so **+1**. Uploads 5:
+    V's `asset_created`, the stray `waiting`, plus the three earlier. 0 live streams.
+    - Founder: asset `GET` 200, HLS 200.
+    - Canary: asset and HLS 404.
+    - Spike: 7 assets, 25 uploads.
+  - **Database:**
+    - Fingerprint 759 / `10acc19f…`; 17 migrations; functions (versions, bundle hashes), secrets
+      and Vault identical.
+    - Only `responses` (+1, V), `video_uploads` (+2, both T1's), `accounts` (T1's row: the
+      disclosure acknowledged at 08:42:45, the notification ask `declined_once`) and
+      `analytics_events` (57 → 70) changed.
+  - **Founder:** account, profile, `auth.users` row (as after the sign-out), responses and uploads
+    hashes unchanged; response `c9918f82…` and ledger `9726bb8f…` `live` / `claimed`;
+    `web_video` `live`.
+  - **Cleanup:** switch `off` (12 Oct 17:16:21); no `MUX_CLEANUP_MODE`; queue only the canary's
+    `done` job; `mux_cleanup_runs` 0; pg_net queue 0, max answer id 3. Health `ok`, no problem.
+- *Script fix (scratch only):* the snapshot query picked "the founder's response" as the only
+  live response; with V live it now names the founder's response id.
+
+*Upload progress (investigated locally, no code changed).* Nemat saw no percentage, no bytes sent
+and no time remaining while V posted.
+- **What is approved:** board `PR-Posting` shows "Posting your response", a percentage, a bar and
+  "Keep Shortcut open until it's done." **No bytes and no time remaining.** Adding them is a design
+  change that needs a board first (design gate).
+- **What the code does:** `PostingBanner` (`app/src/ui/HomeStates.tsx`) draws
+  `round(progress × 100)%` and the bar. `putRecording` (`app/src/video/upload.ts`) feeds it from
+  expo-file-system 57's `File.createUploadTask` `onProgress` (`bytesSent` / `totalBytes`, field
+  names correct). The `processing` state sets the bar to 100%.
+- **Likely causes (unconfirmed without a device recording):**
+  - **The upload is too short to show:** 2.5 Mbit/s for 5.7 s is about 2 MB, which goes up in
+    well under a second on Wi-Fi.
+  - **Background `URLSession`:** the upload task uses expo-file-system's default `sessionType`,
+    `background` (`ios/FileSystemUploadTask.swift`), where progress comes from an out-of-process
+    daemon, throttled to 100 ms, and may arrive late or only at the end.
+  - **The banner then sits at 100% for about 20 s** (row 08:42:47 → `live` 08:43:09) while Mux
+    processes, with nothing saying it is processing. A jump from 0% to 100% and a long wait at
+    100% look like "no progress".
+- **Spec concern (SPEC.md Section 2 non-goals; line 552):** "There is no background upload that
+  survives closing the app."
+  - A background `URLSession` keeps uploading when the app is suspended or terminated by the
+    system (not when force-quit). On relaunch the app shows Retry for that post, which would send
+    the bytes a second time.
+  - The likely fix is `sessionType: 'foreground'` in `putRecording`. Needs Nemat's decision and a
+    new build.
+- **To confirm:** a screen recording of the banner during the next real upload; Test C2a (Network
+  Link Conditioner) slows the upload enough to see it. An `upload_progress` or upload-duration
+  event would also show it in the metrics.
+
+*Not checked:* the Edge Function logs (Dashboard sign-in needed): the `mux-webhook`,
+`mux-create-upload` and `mux-upload-status` invocations for 08:42 to 08:44.
+
+*Next:* Test A (A1 moderator removal, A2 dry run; then A3 playback revocation) needs Nemat's separate
+approval. Before it, Nemat to decide:
+- whether V, a response rather than a reply, is accepted as the test video;
+- the `mux-webhook` invocation check;
+- whether to fix the double mint and the session type now or after the Mux tests.
 
 ## Gates
 
