@@ -12,7 +12,7 @@ Postgres, Auth, Storage and Edge Functions for Shortcut. Everything here is repr
 | `seed.sql` | Local development seed only (test invite codes). Never applied to the hosted project. |
 | `tests/` | pgTAP tests. `supabase test db` runs them against the local stack. |
 | `functions/` | Edge Functions (Deno). `auth-signin-method` backs the E-Linked check; `mux-create-upload`, `mux-upload-status` and `mux-webhook` carry video; `mux-cleanup` deletes and revokes videos at Mux; `send-push` drains the push outbox. |
-| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network), `integration_test.ts`, `uploads_integration_test.ts` and `cleanup_integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
+| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network), `integration_test.ts`, `uploads_integration_test.ts`, `cleanup_integration_test.ts` and `idempotency_integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
 | `templates/` | Auth email templates. `sign_in_code.html` carries the 6-digit code and no link; it is used for the confirmation (new account), magic link (returning account) and recovery emails. |
 | `.env.example` | Names of the provider secrets the CLI needs. Copy to `.env` (git-ignored). |
 
@@ -43,7 +43,13 @@ The integration tests need the local stack's URL and keys (from `supabase status
 deno test --allow-env --allow-net supabase/functions/_tests/integration_test.ts
 deno test --allow-env --allow-net supabase/functions/_tests/uploads_integration_test.ts
 deno test --allow-env --allow-net supabase/functions/_tests/cleanup_integration_test.ts
+# Also needs DB_CONTAINER=supabase_db_<project> (one test holds a post open in psql); without it that test is ignored.
+deno test --allow-env --allow-net --allow-run supabase/functions/_tests/idempotency_integration_test.ts
 ```
+
+Posting idempotency (`20261013000200`) also has a rollback check, which applies the rollback file and
+the migration again on a local stack: `scripts/idempotency-rollback-check.sh [stack folder]`.
+Test C1 is rehearsed against a fake Mux with `scripts/c1-rehearsal.sh [stack folder]`.
 
 ## Video uploads
 
@@ -155,6 +161,10 @@ refuses any token from a password session.
 ```bash
 node scripts/auth-integration.mjs   # local stack only: sign-up, sign-in, refresh, the attacks above (~2.5 min)
 ```
+
+It takes the stack from `supabase status` in the current folder: run it from the folder of the
+stack under test, with `DB_CONTAINER` and `MAILPIT_URL` for that stack and its functions served
+(`auth-signin-method`), or it talks to whichever stack that folder names.
 
 ## Hosted project
 

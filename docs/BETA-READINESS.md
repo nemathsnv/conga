@@ -3744,7 +3744,7 @@ sign-out each fail tests.
 - **Sign out anyway, before the abort lands:** it now stops the upload first. If bytes already
   finished, the response still goes live: the row is not abandoned on sign-out (unchanged).
 
-### 17.3 Server-side idempotency for a lost answer (proposal only; not implemented)
+### 17.3 Server-side idempotency for a lost answer (proposal; implemented locally 13 Oct, section 18.2)
 
 **The case.** `post_response`, `post_reply` or `post_draft` commits (claim plus row), and the answer
 is lost. The app keeps the URL (section 16), and the next Post sends it again:
@@ -3833,7 +3833,7 @@ Deploy order (each step its own approval): migration and pgTAP locally → hoste
 (backward compatible) → app build. Optional, not proposed now: a sweep for `processing` rows
 whose upload expired without an asset (needs a Mux check first, like C2's worker).
 
-### 17.4 Test C1, revised (proposal; not run)
+### 17.4 Test C1, revised (proposal; script and local rehearsal 13 Oct, section 18.5; not run on hosted)
 
 C1 needs the hosted evidence of one thing: `mux-create-upload` retires the oldest unclaimed URL when
 a member holds 3. That is `begin_upload_cancellation`, Mux `GET`, `PUT /cancel`,
@@ -3914,6 +3914,274 @@ Run on: none of it on a device or simulator. No Mux, no hosted project.
    checks (interruption with Network Link Conditioner, Home screen mid-upload, force-quit and
    reopen, Retry). Each real post mints one URL and makes one asset; check the founder phone for an
    ownerless Upload failed post before installing.
+
+## 18. Upload reliability hardening, completed locally (13 Oct; not deployed)
+
+Asked for by Nemat after section 17.
+
+Approved: local implementation and testing only.
+- No push, hosted Supabase change, real Mux call, iPhone build or install, or cleanup switch change.
+- Product rule (`docs/DECISIONS.md`, 13 Oct): a second recording never silently replaces one that
+  is waiting; the first stays until it posts or is explicitly discarded.
+
+Commits (local, after `47be07e`):
+
+| Commit | What |
+|---|---|
+| `70f2a3b` | Server: forward migration `20261013000200_post_idempotency.sql`, its rollback file, pgTAP `0012`, `idempotency_integration_test.ts`, `scripts/idempotency-rollback-check.sh` |
+| `6506ab4` | App tests: Jest setup resolves expo's lazy `fetch` (random exit 1) |
+| `17830b1` | App: submission ids, lost-answer recovery, one waiting recording per member |
+| `56dde6f` | Scripts: Test C1 and its local rehearsal |
+| this one | Docs |
+
+### 18.1 Review of `b1132af` and `46cce26` (before the new work)
+
+| Check | Verdict |
+|---|---|
+| **Re-recording never reuses a URL after a transfer started** | **Confirmed.** No byte is sent before the app has the row's id, and the URL leaves the ticket store when the row answers (`consume`), before `run` starts. A URL can therefore never have carried a transfer while still in the store. One weaker spot, fixed in `17830b1`: a URL sent with an unanswered request stayed in the store, and only the server's single claim stopped the next recording using it. It now leaves the store with that post. New test: "re-recording never gets a URL a transfer could have started on, nor one sent with a lost answer". |
+| Account switching | **Held, one regression risk fixed.** `b1132af` kept one storage slot. A new member's Post deleted the recording a previous member had left (signed out without Sign out anyway). That conflicts with the 13 Oct rule. Now each member has their own slot (`shortcut.pendingPost.<member>`), and nothing is ever replaced across members. |
+| Recording ownership | Held (`ownerId`, now also the storage key). |
+| Upload expiration | Held (`mintedAt`). New: on Retry of a post with a submission, an expired URL is sent again *on purpose*. The server returns the row before it looks at the URL; if it then refuses the URL, a fresh one is minted at once. |
+| Foreground transfer | Held in code; device behaviour still unverified (17.2). |
+| Retry | **Held, one gap fixed.** "Bytes only after the row id is on the phone" was not guaranteed, because storage writes were best effort. The run's writes before sending now must succeed (`savePendingPostOrThrow`). `abandon_submission` relies on this. |
+
+**Other regression risks found:**
+- *Jest exited 1 at random* (1 of 3 runs at `46cce26`; every run once more suites existed).
+  Jest's teardown loaded expo's lazy `fetch` global and logged after the tests ended. Fixed in
+  `6506ab4`; 3 in-band and 3 parallel runs give exit 0.
+- *Flow change, for review:* a Post whose answer never arrives used to leave Post Review open
+  with no message. It now goes to the existing X-Upload-Failed banner (or A-Offline when offline),
+  with the post kept, like a post that got no URL. These are existing states; nothing new is drawn.
+
+### 18.2 Server: idempotent posting (`70f2a3b`)
+
+**`public.post_submissions`** (deny-all RLS): one row per submission id. It records the request as
+first made (member, kind, target, upload, trimmed caption, duration) and the row it created. The
+id, the upload and the row are each unique.
+
+**`post_response`, `post_reply`, `post_draft`** gain `p_submission uuid default null`; the
+four-argument versions are dropped. The order inside each:
+1. signed in;
+2. the member's own lock (the one `reserve_video_upload` takes);
+3. the account checks (profile, suspended, posting paused, deleted, disclosure);
+4. the submission;
+5. everything as before, with the submission recorded in the same transaction.
+
+How the brief's safeguards are met:
+
+| Safeguard | How |
+|---|---|
+| One stable UUID per recording, persisted | `Recording.submissionId` (expo-crypto) is stored with the pending post before the request. |
+| Unique for the author | The id is unique across all members, which is stronger. |
+| A retried request returns what was made | Same id and same request: the first answer, with `replayed: true`. This happens before `already_responded`, `upload_already_used`, `prompt_not_found`, and before a draft would replace itself. |
+| Reuse for another recording, prompt, owner or payload refused | Any difference in kind, target, upload, caption or duration, or another member's id, gives `submission_conflict`. It is one answer for all of these, so nothing about other members is revealed. A video abandoned, deleted, removed or replaced gives `submission_closed`. |
+| Auth and ownership first | Steps 1 to 3 run before the lookup, and the lookup checks ownership. A paused member gets `posting_paused`, not their row. |
+| Old clients during deployment | Four named arguments resolve to the new functions with `p_submission` null: exactly the old behaviour. pgTAP files 0001 to 0011 pass unchanged; the REST test covers it too. A new app on a database without the migration gets PGRST202 (nothing ran) and calls again without the id (`lib/content.ts`). |
+| No duplicate upload associations, replies or public posts | The ledger claims an upload once (as before), and `post_submissions` holds one row per upload and per row. A concurrent second attempt waits on the member lock and gets the first row (tested with the first held open). |
+| A lost answer recovered after a restart | The post is stored with its URL and submission before the request. Retry sends the same request and gets the row back. Tested in Jest (restart simulated) and on the database. |
+
+**`retry_response_upload`:** the upload already on the row is a no-op (a lost answer).
+
+**`abandon_submission(p_submission)`:** returns `abandoned`, `kept` or `not_found` (also for
+another member's id). It retires a row only when all of these hold:
+- the row is still `processing`, so not live, a draft, removed or deleted;
+- it has no asset (Mux has not reported a video);
+- it is still on the upload the submission claimed (no Retry has replaced it; a Retry means the
+  app knew the row and may have sent bytes);
+- the ledger shows that upload claimed by this row.
+
+Anything else is `kept`, untouched. It does not call Mux and does not change the ledger: the
+claimed URL, which only that phone had, times out unused. The app calls it only for a post whose
+row id it never received, and it never sends a byte without that id saved (18.1). So a row it
+abandons is one nothing was sent to.
+
+**Rollback:** `supabase/rollback/20261013000200_post_idempotency.down.sql` restores the
+four-argument functions verbatim and drops the rest. Rows posted while it was on stay as ordinary
+rows. New app builds fall back automatically (PGRST202).
+
+### 18.3 App (`17830b1`)
+
+`submitPost` (pure, `uploadRun.ts`), used by the posting provider:
+- **`post_pending`:** Post is refused while the member has another recording waiting (uploading,
+  processing, offline or Upload failed), and that recording stays as it was. Storage that cannot be
+  read is not treated as empty.
+- **Stored first:** the post, with its URL and submission, is stored before the row is asked for.
+  If that write fails, nothing is sent.
+- **No answer:** an Upload failed post (waiting, if offline). The URL goes with it and leaves the
+  ticket store.
+- **A refusal:** that attempt's record is removed and the refusal thrown, as before.
+- **One Post at a time per member** (`createQueue`).
+
+Supporting changes:
+- **`ServerError.refused`** tells a server refusal (an error code: it rolled back) from no answer.
+- **Retry without a row (`ensureUploadRow`):**
+  - with a submission, the URL already sent is sent again, even if old;
+  - a URL refused as expired, cancelled or unknown made no row, so a fresh one is used at once;
+  - `upload_already_used` for a URL already sent keeps the URL and mints nothing (a server without
+    submissions);
+  - without a submission (older build), the old rules apply, minus the auto-replacement.
+- **Discard and Sign out anyway:** `abandon_submission` for a post that never got an answer;
+  `abandon_response`, as before, when the row is known. Sign out anyway now also abandons the
+  member's row, as Discard always did. It is best effort: offline, the row stays (invisible).
+
+### 18.4 Waiting recordings: what is built, and the boards still needed
+
+Built (no UI change): a second Post while a recording waits is refused, and the first is kept until
+it posts, or until Discard or Sign out anyway removes it.
+
+**Not designed, needed before the beta (no UI was added without a board):**
+1. **Discard for a failed upload, with confirmation. Blocking.**
+   - X-Upload-Failed has only Retry, and nothing calls `discardFailed`. A post that can never
+     succeed stays forever and now blocks every later Post for that member. Examples: the recording
+     file is gone (`recording_missing`); the video was removed or deleted on the server
+     (`response_removed`, `response_deleted`); `submission_closed`.
+   - Today the only way out is Sign out anyway in Settings.
+   - Needs a board: a Discard action on X-Upload-Failed and a confirmation (PR-Discard's "Discard
+     this recording? It won't be saved anywhere." looks reusable, but that is a design decision).
+2. **Post refused because another recording waits.**
+   - Post Review stays open with no message (`post_pending` is logged only).
+   - Needs a board: what the person is told, and whether they may keep the new take, discard it,
+     or go to the waiting one.
+   - Optionally block earlier, at Record (R-Record), so nobody records a take they cannot post.
+3. **Sign-out warning on the other routes.**
+   - LV-SignOut (the warning before Sign out deletes an unposted recording) appears only in
+     Settings. LV-Suspended's Sign out, account deletion, and the onboarding sign-outs have none.
+   - With per-member storage, the recording now stays on the phone (hidden) after those sign-outs,
+     until the member signs back in.
+   - SPEC.md Section 19 says unposted recordings are deleted on sign-out "after a warning".
+     **Spec/board mismatch to decide:** keep them across these sign-outs, or add the warning (a
+     board) and delete.
+4. The ownerless post an older build may have stored (the single key `shortcut.pendingPost`) is
+   ignored and never deleted. Check the founder iPhone for an Upload failed banner before
+   installing a new build.
+
+### 18.5 Test C1 (`56dde6f`; rehearsed locally, not run on hosted)
+
+`scripts/c1-retire.mjs` calls `mux-create-upload` as one member:
+
+| Calls | When | Expected |
+|---|---|---|
+| 1 to 3 | back to back | 200 each |
+| 4 | at once, all three under 15 s old | 429 `upload_limit_active`, no Mux call |
+| 5 | once U1 is at least 16 s old (default 20) | 200 with U4; U1 retired |
+
+- It stops at the first different answer.
+- It never sends a byte to an upload URL.
+- It prints only ids, statuses and timings: no URL, token or key.
+- It refuses any host but localhost unless `C1_HOSTED_REF` matches and `C1_APPROVED_BY_NEMAT=yes`.
+
+**Rehearsal** (`scripts/c1-rehearsal.sh`: fake-only Edge runtime, fake Mux on the host), three
+provider answers for the oldest URL:
+
+| Mux reports | Result |
+|---|---|
+| `waiting` | U1 `cancelled` with `cancelled_at`, U2 to U4 `active`; Mux read U1 once, cancelled it once, created 4 uploads, nothing else |
+| `timed_out` | U1 freed without a cancel call |
+| `asset_created` | nothing cancelled, U1 back to `active`, the script stops with exit 1 |
+
+All three: no asset, no byte to an upload URL, at most 3 unused URLs held, and no secret in the
+output. A hosted URL, and a wait under 16 s, are refused before any request.
+
+**Hosted run (needs its own approval; not done):**
+- **Before:** read-only checks.
+  - T1 holds no slot (no unclaimed unexpired URL, reservation or cancellation).
+  - T1 has used at most 6 this hour and 26 in 24 h.
+  - Shortcut Beta asset count; V's hashes.
+  - `mux-create-upload` version; the clean-up switch off.
+- **Run:** with T1's session, `C1_HOSTED_REF=picvoavfxnajfjkqawju C1_APPROVED_BY_NEMAT=yes`.
+- **After:** read-only checks.
+  - The ledger: U1 `cancelled`, U2 to U4 `active`.
+  - Mux `GET`s: U1 `cancelled` with no `asset_id`; U2 to U4 `waiting`.
+  - Asset count unchanged; V untouched.
+- **Cost at Mux:** 4 upload creates and 1 cancel; 0 assets.
+
+### 18.6 Verification (13 Oct, all local)
+
+Ran on an isolated local stack, `shortcut-idem` (ports 548xx, in the session scratchpad), started
+from the 17 earlier migrations with `20261013000200` applied as a forward step. The stacks other
+sessions use were not touched.
+
+| What | Result |
+|---|---|
+| Jest | **192/192**, exit 0 (163 before; 29 new) |
+| `tsc --noEmit`, `eslint src` | clean |
+| pgTAP (all 12 files) | **1180/1180** (0012: 91) |
+| Deno unit (`mux_test`, `cleanup_unit_test`) | 21/21, 11/11 |
+| `uploads_integration_test` | 32/32 |
+| `integration_test` | 20/20 |
+| `cleanup_integration_test` | 28/28 |
+| `idempotency_integration_test` | **12/12** (`DB_CONTAINER` set; none ignored) |
+| `scripts/idempotency-rollback-check.sh` | passed: down, old shape and 0001-0011 (1089), forward again, all 1180 |
+| `scripts/scheduler-integration.sh` (Edge runtime) | **13/13** (not run before) |
+| `scripts/auth-integration.mjs` (Edge runtime) | **37/37** |
+| `scripts/c1-rehearsal.sh` | all checks pass (3 scenarios and 2 guards) |
+
+**Mutation check:** removing the member lock from `post_response` makes the held-open race test
+fail with `upload_already_used`. (Section 17's app mutation checks were not re-run.)
+
+Not run: any device, simulator, hosted or real-Mux step.
+
+**Environment failures, now explained (not regressions):**
+- **Auth, 11 to 12 of 19 in section 17.5:** `auth-integration.mjs` takes its API from
+  `supabase status` in the *current folder*. Run from the worktree, it used the main `shortcut`
+  local stack (port 54321), while Mailpit and `DB_CONTAINER` pointed elsewhere. It created and
+  removed its 4 throwaway local accounts there. Run from the stack's own folder with the functions
+  served: 37/37.
+- **Scheduler:** needs a local Edge runtime; `scripts/scheduler-integration.sh` serves one. 13/13.
+- The isolated stack is still running. Stop it with `supabase stop` in its folder.
+
+### 18.7 Remaining risks
+
+- **The Discard board (18.4, item 1) is a beta blocker** under the new rule.
+- Unverified (17.2): what Mux and GCS do with a second full PUT to the same URL after a partial
+  transfer; iOS suspension timing; Retry depending on `mux-upload-status`.
+- **Discard or Sign out anyway while offline:** the row is not abandoned. For a response, its
+  prompt stays blocked for that member (`already_responded`) until a server sweep exists. None
+  exists; it would need a Mux check first, as C2's worker does.
+- **`abandon_submission` leaves the claimed URL valid at Mux until it expires.** Only that phone
+  had it, and the app never sends to it. If bytes did arrive (an app fault), the asset is an orphan
+  for the daily sweep.
+- **The member lock now also covers posting:** a member's posts and mints queue behind one another.
+  They are short transactions, but load was not tested.
+- **Server answers with no code:** a 5xx from PostgREST after the database committed would be read
+  as "no answer". That is safe: Retry replays the submission.
+- **Old app builds** (`ede68ed`) get no replay: the lost-answer duplicate (section 16) remains for
+  them until the new build is installed.
+
+### 18.8 Deployment sequence (each step its own approval; STOP here)
+
+1. **Review** `70f2a3b`, `6506ab4`, `17830b1` and `56dde6f`.
+   - Decide 18.4 items 1 to 3; item 1 at least before beta testers.
+   - Decide the flow change in 18.1 (unanswered Post goes to X-Upload-Failed).
+2. **Hosted preflight (read-only):**
+   - schema fingerprint;
+   - `20261013000100` is the last applied migration;
+   - `post_response(uuid, text, text, integer)` exists and `post_submissions` does not;
+   - functions and secrets unchanged.
+3. **Migration:**
+   - `supabase db push --linked --dry-run`, expecting exactly `20261013000200_post_idempotency.sql`;
+     then `supabase db push --linked --yes`.
+   - Backward compatible: the installed `ede68ed` keeps working.
+   - No Edge Function, secret or switch changes.
+4. **Hosted verification (read-only):**
+   - the five-argument signatures, grants and SECURITY DEFINER settings;
+   - `post_submissions` RLS on with no policies;
+   - the four-argument signatures gone;
+   - the PostgREST schema reloaded (the migration sends `notify pgrst`): `GET /rest/v1/` with the
+     service key lists `post_response` with `p_submission`.
+5. **Founder iPhone build** from the reviewed commit, after step 3. If 18.4 item 1 is not built,
+   accept that a permanently failed post can only be cleared by Sign out anyway.
+6. **Device checks** (each real post mints one URL and makes one asset):
+   - Post while offline, then online;
+   - airplane mode during Post, then Retry, after force-quitting in between (the same row
+     replayed);
+   - a second take while one waits (refused, the first kept);
+   - Home screen mid-upload, force-quit and reopen, Retry (section 17).
+   - After each, a read-only ledger and `post_submissions` check: one row per recording, one claim
+     per upload.
+7. **Test C1 on hosted** with T1 (18.5): 4 upload creates and 1 cancel at Mux, 0 assets.
+8. **If rollback is needed:** copy the rollback file into a new forward migration and push it.
+   New builds fall back on their own.
 
 ## Gates
 
