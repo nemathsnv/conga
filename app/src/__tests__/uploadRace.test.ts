@@ -1,8 +1,11 @@
 // One recording, one upload URL (CP0, 13 Oct: Post Review's request and Post's raced and minted
 // two). Deterministic: every mint answers only when the test resolves it.
-import { createGate, createOncePerKey, ensureUploadRow, prepareUpload } from '@/video/postingFlow';
+import { createGate, createOncePerKey, createQueue, ensureUploadRow, prepareUpload } from '@/video/postingFlow';
 import { createTicketStore, TICKET_MAX_AGE_MS } from '@/video/ticketStore';
 import type { UploadTicket } from '@/video/upload';
+
+/** What lib/content throws: refused (the server answered with an error code) or not (no answer). */
+const serverError = (message: string, refused: boolean) => Object.assign(new Error(message), { refused });
 
 type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void };
 function deferred<T>(): Deferred<T> {
@@ -288,20 +291,49 @@ describe('review of fee64ec: the URL\'s age and a member change', () => {
     await expect(a).resolves.toMatchObject({ ticket: ticket(3) });
   });
 
-  test('a URL sent with a post whose answer was lost is not given to the next recording silently', async () => {
+  test('re-recording never gets a URL a transfer could have started on, nor one sent with a lost answer', async () => {
     let n = 0;
     const store = createTicketStore(() => Promise.resolve(ticket(++n)));
-    // Recording 1: the row is created, the answer is lost.
-    const lost = jest.fn(() => Promise.reject(new Error('Network request failed')));
-    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: lost })).rejects.toThrow('Network');
-    // Re-record, then Post recording 2: the server says the URL is used. It is not replaced
-    // automatically (it is held by recording 1's row); the next Post asks for a new one.
-    const used = jest.fn(() => Promise.reject(new Error('upload_already_used')));
-    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: used })).rejects.toThrow('upload_already_used');
-    expect(used).toHaveBeenCalledWith(ticket(1));
+    // Recording 1 posts: its URL leaves the store as the row answers, before any byte is sent.
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: (t) => Promise.resolve({ id: t.uploadId }) })).resolves.toMatchObject({ ok: true, ticket: ticket(1) });
+    // Recording 2: the row is asked for and the answer is lost. Its URL goes with that post.
+    const lost = jest.fn(() => Promise.reject(serverError('TypeError: Network request failed', false)));
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: lost })).resolves.toMatchObject({ ok: false, sent: { ticket: ticket(2) } });
+    // Re-record, then recording 3: a URL neither of them used.
     const create = jest.fn((t: UploadTicket) => Promise.resolve({ id: t.uploadId }));
-    await expect(prepareUpload({ tickets: store.forOwner('T1'), create })).resolves.toMatchObject({ ticket: ticket(2) });
-    expect(n).toBe(2);
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create })).resolves.toMatchObject({ ticket: ticket(3) });
+    expect(create).toHaveBeenCalledWith(ticket(3));
+  });
+
+  test('a URL kept after a refusal (nothing was made with it) is the one the next recording uses', async () => {
+    let n = 0;
+    const store = createTicketStore(() => Promise.resolve(ticket(++n)));
+    store.prefetch('T1');
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: () => Promise.reject(serverError('already_responded', true)) })).rejects.toThrow('already_responded');
+    await expect(prepareUpload({ tickets: store.forOwner('T1'), create: (t) => Promise.resolve({ id: t.uploadId }) })).resolves.toMatchObject({ ticket: ticket(1) });
+    expect(n).toBe(1);
+  });
+
+  test('Posts run one after another (createQueue): the second starts when the first has settled, even if it failed', async () => {
+    const queue = createQueue();
+    const order: string[] = [];
+    const first = deferred<void>();
+    const a = queue(async () => {
+      order.push('a start');
+      await first.promise;
+      order.push('a end');
+      throw new Error('a failed');
+    });
+    const b = queue(async () => {
+      order.push('b');
+      return 'b';
+    });
+    await flush();
+    expect(order).toEqual(['a start']);
+    first.resolve();
+    await expect(a).rejects.toThrow('a failed');
+    await expect(b).resolves.toBe('b');
+    expect(order).toEqual(['a start', 'a end', 'b']);
   });
 });
 
@@ -362,6 +394,43 @@ describe('Retry for a post that has no row yet (ensureUploadRow)', () => {
     await expect(ensureUploadRow(post, d)).resolves.toBe(post);
     expect(d.mint).not.toHaveBeenCalled();
     expect(d.create).not.toHaveBeenCalled();
+  });
+
+  describe('with a submission (replayable): a lost answer comes back as the same row', () => {
+    const sent: P = { responseId: null, uploadId: 'U0', uploadUrl: 'https://storage.example/0', uploadUrlExpiresAt: 1000 }; // long expired
+
+    test('a URL already sent is sent again as it is, even if old: the server returns the row it made', async () => {
+      const { d } = deps({ replayable: true, create: jest.fn((t: UploadTicket) => Promise.resolve({ id: `row-${t.uploadId}` })) });
+      await expect(ensureUploadRow(sent, d)).resolves.toMatchObject({ responseId: 'row-U0', uploadId: 'U0' });
+      expect(d.mint).not.toHaveBeenCalled();
+    });
+
+    test.each(['upload_expired', 'upload_cancelled', 'upload_not_found'])('refused as %s: no row was made with it, so a fresh URL is minted and used at once', async (reason) => {
+      const { d, saved } = deps({ replayable: true, create: jest.fn((t: UploadTicket) => (t.uploadId === 'U0' ? Promise.reject(serverError(reason, true)) : Promise.resolve({ id: `row-${t.uploadId}` }))) });
+      await expect(ensureUploadRow(sent, d)).resolves.toMatchObject({ responseId: 'row-U1', uploadId: 'U1' });
+      expect(d.mint).toHaveBeenCalledTimes(1);
+      expect(saved.find((p) => p.uploadId === 'U1' && p.responseId === null)).toBeTruthy(); // saved before the request
+    });
+
+    test('upload_already_used for a URL already sent (a server without submissions): kept, nothing minted, no second row', async () => {
+      const { d, saved } = deps({ replayable: true, create: jest.fn(() => Promise.reject(serverError('upload_already_used', true))) });
+      await expect(ensureUploadRow(sent, d)).rejects.toThrow('upload_already_used');
+      expect(d.mint).not.toHaveBeenCalled();
+      expect(saved.every((p) => p.uploadId === 'U0')).toBe(true);
+    });
+
+    test('the same for a recording without a submission (older build): never a second row', async () => {
+      const { d } = deps({ create: jest.fn(() => Promise.reject(serverError('upload_already_used', true))) });
+      await expect(ensureUploadRow({ ...sent, uploadUrlExpiresAt: 9e12 }, d)).rejects.toThrow('upload_already_used');
+      expect(d.mint).not.toHaveBeenCalled();
+    });
+
+    test('no answer again: the URL is kept for the next Retry', async () => {
+      const { d, saved } = deps({ replayable: true, create: jest.fn(() => Promise.reject(serverError('TypeError: Network request failed', false))) });
+      await expect(ensureUploadRow(sent, d)).rejects.toThrow('Network');
+      expect(d.mint).not.toHaveBeenCalled();
+      expect(saved).toEqual([]);
+    });
   });
 
   test('a mint refusal is thrown, as before (the banner shows the reason)', async () => {

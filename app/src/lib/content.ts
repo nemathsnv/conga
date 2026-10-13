@@ -152,14 +152,28 @@ export type FollowRow = ProfileCard & { is_following: boolean; follows_you: bool
 
 export type FollowSuggestion = ProfileCard & { response_count: number; prompt_text: string };
 
-function unwrap<T>(res: { data: T; error: { message: string } | null }): T {
+function unwrap<T>(res: { data: T; error: { message: string; code?: string } | null }): T {
   if (res.error) {
     // The server refuses everything from a suspended account (pre_request gate): the session
     // re-reads its state so the app lands on LV-Suspended.
     if (res.error.message.includes('suspended')) onSuspended();
-    throw new ServerError(res.error.message);
+    // PostgREST and Postgres answers carry a code; a network failure or a gateway error does not.
+    throw new ServerError(res.error.message, !!res.error.code);
   }
   return res.data;
+}
+
+/**
+ * Calls a posting function with the recording's submission id (20261013000200), so a call whose
+ * answer was lost returns the row it made instead of making another. A database without that
+ * migration (before it is applied, or after a rollback) answers PGRST202, no such function, having
+ * run nothing: the call is then made again without the id, as older builds do.
+ */
+async function postRpc<T>(fn: string, args: Record<string, unknown>, submissionId: string | null | undefined): Promise<T> {
+  if (!submissionId) return unwrap(await supabase.rpc(fn, args)) as T;
+  const res = await supabase.rpc(fn, { ...args, p_submission: submissionId });
+  if (res.error?.code === 'PGRST202') return unwrap(await supabase.rpc(fn, args)) as T;
+  return unwrap(res) as T;
 }
 
 let suspendedHandler: () => void = () => undefined;
@@ -200,8 +214,8 @@ export async function acknowledgeDisclosure(kind: 'response' | 'reply' | 'draft'
   track('disclosure_accepted', { kind });
 }
 
-export async function postResponse(promptId: string, uploadId: string, caption: string | null, durationMs: number): Promise<ResponseCard> {
-  return unwrap(await supabase.rpc('post_response', { p_prompt: promptId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs })) as ResponseCard;
+export async function postResponse(promptId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null): Promise<ResponseCard> {
+  return postRpc<ResponseCard>('post_response', { p_prompt: promptId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId);
 }
 
 export async function retryResponseUpload(responseId: string, uploadId: string): Promise<void> {
@@ -210,6 +224,12 @@ export async function retryResponseUpload(responseId: string, uploadId: string):
 
 export async function abandonResponse(responseId: string): Promise<void> {
   unwrap(await supabase.rpc('abandon_response', { p_response: responseId }));
+}
+
+/** Discarding a recording whose Post never got an answer: the server retires the row it may have
+ *  made, only if nothing can have been sent to it. 'abandoned', 'kept' or 'not_found'. */
+export async function abandonSubmission(submissionId: string): Promise<string> {
+  return unwrap(await supabase.rpc('abandon_submission', { p_submission: submissionId })) as string;
 }
 
 export async function getProfile(args: { id?: string; username?: string } = {}): Promise<Profile | null> {
@@ -270,8 +290,8 @@ export async function getVideo(id: string): Promise<Video | { status: 'unavailab
   return unwrap(await supabase.rpc('get_video', { p_id: id })) as never;
 }
 
-export async function postReply(replyToId: string, uploadId: string, caption: string | null, durationMs: number): Promise<ResponseCard> {
-  return unwrap(await supabase.rpc('post_reply', { p_reply_to: replyToId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs })) as ResponseCard;
+export async function postReply(replyToId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null): Promise<ResponseCard> {
+  return postRpc<ResponseCard>('post_reply', { p_reply_to: replyToId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId);
 }
 
 export async function commentsList(responseId: string): Promise<CommentsSheet> {
@@ -499,8 +519,8 @@ export async function mySuggestions(): Promise<MySuggestions> {
 export async function getSuggestion(id: string): Promise<Suggestion> {
   return unwrap(await supabase.rpc('get_suggestion', { p_id: id })) as Suggestion;
 }
-export async function postDraft(suggestionId: string, uploadId: string, caption: string | null, durationMs: number): Promise<{ id: string; status: string }> {
-  return unwrap(await supabase.rpc('post_draft', { p_suggestion: suggestionId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs })) as { id: string; status: string };
+export async function postDraft(suggestionId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null): Promise<{ id: string; status: string }> {
+  return postRpc<{ id: string; status: string }>('post_draft', { p_suggestion: suggestionId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId);
 }
 export async function publishDraft(suggestionId: string): Promise<ResponseCard> {
   return unwrap(await supabase.rpc('publish_draft', { p_suggestion: suggestionId })) as ResponseCard;

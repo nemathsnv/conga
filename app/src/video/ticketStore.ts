@@ -19,8 +19,8 @@ export type TicketLease = {
    *  Retry knows the URL's real age, not the age since Post. */
   mintedAt: number;
   /** The URL may be replaced once if the server refuses it as stale: it was minted before this
-   *  Post (by Post Review) and has never been sent with a post. A URL already sent may have been
-   *  claimed by a row whose answer was lost, so it is never replaced automatically. */
+   *  Post (by Post Review). A URL sent with a post whose answer never came is no longer in the
+   *  store (it went with that post), so a URL here was never claimed by a row. */
   replaceable: boolean;
 };
 
@@ -28,9 +28,7 @@ export type TicketLease = {
 export type TicketSource = {
   /** The member's URL: the one already minted, the request already running, or a new request. */
   get(): Promise<TicketLease>;
-  /** About to be sent with a post. */
-  sent(ticket: UploadTicket): void;
-  /** A posted row holds it now: never hand it out again. */
+  /** A posted row holds it, or it went with a post whose answer never came: never hand it out again. */
   consume(ticket: UploadTicket): void;
   /** The server refused it (expired, used, cancelled, unknown): the next get() asks for a new one. */
   drop(ticket: UploadTicket): void;
@@ -44,13 +42,13 @@ export type TicketStore = {
   reset(): void;
 };
 
-type Entry = { owner: string; promise: Promise<UploadTicket>; ticket?: UploadTicket; askedAt: number; sent: boolean };
+type Entry = { owner: string; promise: Promise<UploadTicket>; ticket?: UploadTicket; askedAt: number };
 
 export function createTicketStore(mint: () => Promise<UploadTicket>, now: () => number = Date.now): TicketStore {
   let entry: Entry | null = null;
 
   const start = (owner: string): Entry => {
-    const e: Entry = { owner, askedAt: now(), promise: mint(), sent: false };
+    const e: Entry = { owner, askedAt: now(), promise: mint() };
     entry = e;
     // A failed request is forgotten, so the next get() asks again; whoever waits on it sees the error.
     e.promise.then(
@@ -85,10 +83,7 @@ export function createTicketStore(mint: () => Promise<UploadTicket>, now: () => 
           const existing = current(owner);
           const e = existing ?? start(owner);
           const ticket = await e.promise;
-          return { ticket, mintedAt: e.askedAt, replaceable: !!existing && !e.sent };
-        },
-        sent(ticket) {
-          if (entry?.ticket?.uploadId === ticket.uploadId) entry.sent = true;
+          return { ticket, mintedAt: e.askedAt, replaceable: !!existing };
         },
         consume: forget,
         drop: forget,

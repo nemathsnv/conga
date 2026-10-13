@@ -18,6 +18,9 @@ export type RecordingSegment = {
 
 export type Recording = {
   id: string;
+  /** One per recording: sent with every attempt to post it, so a post whose answer was lost is
+   *  found again instead of made twice (20261013000200). Missing on recordings stored by older builds. */
+  submissionId?: string;
   promptId: string;
   segments: RecordingSegment[];
   /** Total length across segments. */

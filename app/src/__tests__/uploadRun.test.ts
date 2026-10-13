@@ -1,18 +1,17 @@
 // One posted recording from its row to live, every effect mocked (uploadRun.ts). Review of fee64ec
 // (13 Oct): a URL's real age, and a member who signs out or changes mid-upload.
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import { storeNewPendingPost } from '@/video/pendingPost';
 import { newPendingPost, pendingPostFor, resumeState, UPLOAD_URL_TTL_MS, uploadUrlUsable, type PendingPost } from '@/video/pendingPostState';
 import { createGate } from '@/video/postingFlow';
+import { createTicketStore } from '@/video/ticketStore';
 import type { Recording } from '@/video/types';
 import type { UploadStatus, UploadTicket } from '@/video/upload';
-import { runPendingPost, type PostingState, type RunDeps } from '@/video/uploadRun';
+import { runPendingPost, submitPost, type PostingState, type RunDeps, type SubmitDeps } from '@/video/uploadRun';
 
-jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() }));
+/** What lib/content throws: refused (the server answered with an error code) or not (no answer). */
+const serverError = (message: string, refused: boolean) => Object.assign(new Error(message), { refused });
 
 const MIN = 60_000;
-const recording = (id = 'rec-1'): Recording => ({ id, promptId: 'p1', segments: [{ uri: `file:///${id}.mp4`, facing: 'front', durationMs: 5000 }], durationMs: 5000, createdAt: 0 });
+const recording = (id = 'rec-1'): Recording => ({ id, submissionId: `sub-${id}`, promptId: 'p1', segments: [{ uri: `file:///${id}.mp4`, facing: 'front', durationMs: 5000 }], durationMs: 5000, createdAt: 0 });
 const ticket = (n: number): UploadTicket => ({ uploadId: `U${n}`, uploadUrl: `https://storage.example/${n}` });
 const flush = () => new Promise<void>((r) => setImmediate(() => r()));
 
@@ -123,21 +122,6 @@ describe('a post belongs to the member who posted it', () => {
     expect(pendingPostFor(legacy as unknown as PendingPost, 'A')).toBeNull();
   });
 
-  test('a new post replacing another member\'s stored post deletes that recording from the phone', async () => {
-    const other = posted({ ownerId: 'A', recording: recording('rec-A') });
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(other));
-    const deleteFiles = jest.fn();
-    await storeNewPendingPost(posted({ ownerId: 'B', recording: recording('rec-B') }), deleteFiles);
-    expect(deleteFiles).toHaveBeenCalledWith(recording('rec-A'));
-    expect(AsyncStorage.setItem).toHaveBeenLastCalledWith('shortcut.pendingPost', expect.stringContaining('rec-B'));
-  });
-
-  test('a new post replacing the member\'s own stored post leaves that recording alone', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(posted({ recording: recording('rec-old') })));
-    const deleteFiles = jest.fn();
-    await storeNewPendingPost(posted({ recording: recording('rec-new') }), deleteFiles);
-    expect(deleteFiles).not.toHaveBeenCalled();
-  });
 });
 
 describe('signing out (or another member signing in) mid-upload', () => {
@@ -341,5 +325,147 @@ describe('foreground uploads: interruption, backgrounding, closing, reopening an
     await runPendingPost(resumeState(posted({ state: 'waiting' })), deps, new AbortController().signal);
     expect(deps.status).not.toHaveBeenCalled();
     expect(deps.put).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Post (submitPost): a recording is never lost and never replaced (Nemat, 13 Oct), and a lost
+// answer is recovered with the same submission, even after a restart.
+describe('Post: one waiting recording per member, stored before the request, a lost answer kept', () => {
+  function posting(over: Partial<SubmitDeps> & { slot?: PendingPost | null; mint?: () => Promise<UploadTicket> } = {}) {
+    const box = { slot: over.slot ?? null, online: true, aborted: false };
+    let n = 0;
+    const mint = jest.fn(over.mint ?? (() => Promise.resolve(ticket(++n))));
+    const store = createTicketStore(mint);
+    store.prefetch('A'); // Post Review asked for a URL
+    const writes: (PendingPost | null)[] = [];
+    const deps: SubmitDeps = {
+      stored: jest.fn(async () => box.slot),
+      store: jest.fn(async (p: PendingPost) => {
+        box.slot = p;
+        writes.push(p);
+      }),
+      clear: jest.fn(async () => {
+        box.slot = null;
+        writes.push(null);
+      }),
+      createRow: jest.fn((_p: PendingPost, t: UploadTicket) => Promise.resolve({ id: `row-${t.uploadId}` })),
+      online: () => box.online,
+      track: jest.fn(),
+      aborted: () => box.aborted,
+      ...over,
+    };
+    const args = (rec = recording()) => ({ ownerId: 'A', recording: rec, promptId: 'p1', promptText: 'Prompt', caption: null, tickets: store.forOwner('A') });
+    return { box, deps, mint, store, writes, args };
+  }
+  const waitingFirst = (state: PendingPost['state']) => posted({ recording: recording('rec-first'), state });
+
+  test.each(['uploading', 'processing', 'waiting', 'failed'] as const)('a second recording while the first is %s: refused, the first kept exactly as it was, nothing sent', async (state) => {
+    const first = waitingFirst(state);
+    const { box, deps, writes, args } = posting({ slot: first });
+    await expect(submitPost(args(recording('rec-second')), deps)).rejects.toThrow('post_pending');
+    expect(box.slot).toBe(first);
+    expect(writes).toEqual([]);
+    expect(deps.createRow).not.toHaveBeenCalled();
+  });
+
+  test('storage that cannot be read is not taken as empty: nothing is replaced or sent', async () => {
+    const { deps, writes, args } = posting({ stored: () => Promise.reject(new Error('storage_failed')) });
+    await expect(submitPost(args(), deps)).rejects.toThrow('storage_failed');
+    expect(writes).toEqual([]);
+    expect(deps.createRow).not.toHaveBeenCalled();
+  });
+
+  test('the post is on the phone, with its URL and submission, before the row is asked for', async () => {
+    const { box, deps, args } = posting();
+    let atRequest: PendingPost | null = null;
+    (deps.createRow as jest.Mock).mockImplementation(async (_p: PendingPost, t: UploadTicket) => {
+      atRequest = box.slot;
+      return { id: `row-${t.uploadId}` };
+    });
+    await submitPost(args(), deps);
+    expect(atRequest).toMatchObject({ ownerId: 'A', responseId: null, uploadId: 'U1', recording: { submissionId: 'sub-rec-1' } });
+  });
+
+  test('storing fails before the request: nothing is sent', async () => {
+    const { deps, args } = posting({ store: () => Promise.reject(new Error('storage_failed')) });
+    await expect(submitPost(args(), deps)).rejects.toThrow('storage_failed');
+    expect(deps.createRow).not.toHaveBeenCalled();
+  });
+
+  test('a normal Post: stored with its row, uploading, and handed to the upload', async () => {
+    const { box, deps, args } = posting();
+    const result = await submitPost(args(), deps);
+    expect(result?.upload).toMatchObject({ responseId: 'row-U1', uploadId: 'U1', state: 'uploading' });
+    expect(box.slot).toBe(result?.upload);
+  });
+
+  test('a lost answer: an Upload failed post with the URL and submission (not a silent Post), and the URL is no other recording\'s', async () => {
+    const { box, deps, store, args } = posting({ createRow: () => Promise.reject(serverError('TypeError: Network request failed', false)) });
+    const result = await submitPost(args(), deps);
+    expect(result?.show).toMatchObject({ kind: 'failed', post: { responseId: null, uploadId: 'U1', failedReason: 'TypeError: Network request failed' } });
+    expect(result?.upload).toBeUndefined();
+    expect(box.slot).toMatchObject({ state: 'failed', uploadId: 'U1', recording: { submissionId: 'sub-rec-1' } });
+    await expect(store.forOwner('A').get()).resolves.toMatchObject({ ticket: ticket(2) });
+  });
+
+  test('a lost answer while offline: waiting, and it starts by itself when the connection returns', async () => {
+    const { box, deps, args } = posting({ createRow: () => Promise.reject(serverError('TypeError: Network request failed', false)) });
+    box.online = false;
+    const result = await submitPost(args(), deps);
+    expect(result?.show).toMatchObject({ kind: 'waiting', post: { uploadId: 'U1', failedReason: null } });
+  });
+
+  test('after a lost answer and an app restart, Retry gets the same row back: no second row, no new URL', async () => {
+    // Post: the server makes row-U1, the answer is lost.
+    const made = new Map<string, string>(); // submission -> row, as the server keeps it
+    const server = jest.fn(async (p: PendingPost, t: UploadTicket) => {
+      const existing = made.get(p.recording.submissionId ?? '');
+      if (existing) return { id: existing };
+      made.set(p.recording.submissionId ?? '', `row-${t.uploadId}`);
+      throw serverError('TypeError: Network request failed', false);
+    });
+    const { box, deps, args } = posting({ createRow: server });
+    await submitPost(args(), deps);
+    // The app is closed and opened again: what is on the phone is all there is.
+    const reopened = resumeState(JSON.parse(JSON.stringify(box.slot)) as PendingPost);
+    expect(reopened).toMatchObject({ state: 'failed', responseId: null, uploadId: 'U1' });
+    const { deps: run, last } = harness({ createRow: server, mint: jest.fn() });
+    await runPendingPost(reopened, run, new AbortController().signal);
+    expect(server).toHaveBeenCalledTimes(2);
+    expect(server.mock.calls[1][1]).toEqual(ticket(1));
+    expect(made.size).toBe(1);
+    expect(run.mint).not.toHaveBeenCalled();
+    expect(run.put).toHaveBeenCalledTimes(1);
+    expect(last()).toBeNull();
+  });
+
+  test.each(['already_responded', 'prompt_not_found', 'posting_paused', 'submission_conflict'])('a refusal (%s): thrown as before, and the record of this attempt is removed', async (reason) => {
+    const { box, deps, writes, args } = posting({ createRow: () => Promise.reject(serverError(reason, true)) });
+    await expect(submitPost(args(), deps)).rejects.toThrow(reason);
+    expect(box.slot).toBeNull();
+    expect(writes[writes.length - 1]).toBeNull();
+  });
+
+  test('another attempt at the same recording (after a refusal) is not blocked by its own record', async () => {
+    const own = posted({ recording: recording(), responseId: null, state: 'uploading' });
+    const { deps, args } = posting({ slot: own });
+    await expect(submitPost(args(), deps)).resolves.toMatchObject({ upload: { responseId: 'row-U1' } });
+  });
+
+  test('no URL could be had (an upload limit): Upload failed with the reason, nothing sent', async () => {
+    const { box, deps, args } = posting({ mint: () => Promise.reject(new Error('upload_limit_hour')) });
+    const result = await submitPost(args(), deps);
+    expect(result?.show).toMatchObject({ kind: 'failed', post: { uploadId: '', failedReason: 'upload_limit_hour' } });
+    expect(box.slot).toMatchObject({ uploadId: '', responseId: null });
+    expect(deps.createRow).not.toHaveBeenCalled();
+  });
+
+  test('the member changes during the request: nothing is shown or uploaded for anyone', async () => {
+    const { box, deps, args } = posting();
+    (deps.createRow as jest.Mock).mockImplementation(async (_p: PendingPost, t: UploadTicket) => {
+      box.aborted = true;
+      return { id: `row-${t.uploadId}` };
+    });
+    await expect(submitPost(args(), deps)).resolves.toBeNull();
   });
 });

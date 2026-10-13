@@ -1,5 +1,7 @@
 // Post-time rules (security stage 2): no silent Post. A refused upload URL becomes a failed post
 // with its reason; a stale review-time URL is replaced once; restrictions still reach Post Review.
+// 13 Oct: a server refusal (ServerError.refused) is told apart from no answer, which may have
+// made the row: that URL goes with the post, for Retry to send the same request again.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { loadPendingPost } from '@/video/pendingPost';
@@ -11,7 +13,11 @@ jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn
 
 const review: UploadTicket = { uploadId: 'upReview', uploadUrl: 'https://storage.example/review' };
 const fresh: UploadTicket = { uploadId: 'upFresh', uploadUrl: 'https://storage.example/fresh' };
-const fail = (reason: string) => () => Promise.reject(new Error(reason));
+/** What lib/content throws for a server refusal (it answered with an error code: nothing happened). */
+const refusal = (reason: string) => Object.assign(new Error(reason), { refused: true });
+const fail = (reason: string) => () => Promise.reject(refusal(reason));
+/** No answer (a network failure): the row may or may not exist. */
+const noAnswer = () => Object.assign(new Error('TypeError: Network request failed'), { refused: false });
 
 /**
  * The real ticket store with a mocked mint. reviewed: Post Review asked for a URL (and got
@@ -71,7 +77,7 @@ describe('prepareUpload', () => {
   });
 
   test.each(['upload_cancelled', 'upload_expired', 'upload_already_used', 'upload_not_found'])('a review-time URL refused as %s is replaced once', async (reason) => {
-    const { mint, create, tickets } = await setup({ reviewed: true, create: (t) => (t === review ? Promise.reject(new Error(reason)) : Promise.resolve({ id: 'row-fresh' })) });
+    const { mint, create, tickets } = await setup({ reviewed: true, create: (t) => (t === review ? Promise.reject(refusal(reason)) : Promise.resolve({ id: 'row-fresh' })) });
     await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: fresh, mintedAt: expect.any(Number), row: { id: 'row-fresh' } });
     expect(mint).toHaveBeenCalledTimes(1);
     expect(create.mock.calls.map(([t]) => t.uploadId)).toEqual(['upReview', 'upFresh']);
@@ -106,26 +112,41 @@ describe('prepareUpload', () => {
     expect(mint).not.toHaveBeenCalled();
   });
 
-  test('lost answer: a URL already sent with a post is never replaced automatically (no second row)', async () => {
-    // First Post: the row is created server-side but the answer is lost. Second Post: the same URL
-    // is refused as already used; it is not swapped for a new one behind the person's back.
-    let calls = 0;
-    const { mint, create, tickets } = await setup({
-      reviewed: true,
-      create: () => (++calls === 1 ? Promise.reject(new Error('Network request failed')) : Promise.reject(new Error('upload_already_used'))),
-    });
-    await expect(prepareUpload({ tickets, create })).rejects.toThrow('Network request failed');
-    await expect(prepareUpload({ tickets, create })).rejects.toThrow('upload_already_used');
-    expect(create.mock.calls.map(([t]) => t.uploadId)).toEqual(['upReview', 'upReview']);
+  test('lost answer: the URL goes with the post (sent), leaves the store, and nothing is minted or replaced', async () => {
+    const { mint, create, tickets } = await setup({ reviewed: true, create: () => Promise.reject(noAnswer()) });
+    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: false, reason: 'TypeError: Network request failed', sent: { ticket: review, mintedAt: expect.any(Number) } });
     expect(mint).not.toHaveBeenCalled();
+    // The next recording's Post never gets that URL: it may be held by the first recording's row.
+    await expect(tickets.get()).resolves.toMatchObject({ ticket: fresh });
+    expect(mint).toHaveBeenCalledTimes(1);
   });
 
-  test('a network failure keeps the URL: the next Post tries the same one, without minting', async () => {
-    let calls = 0;
-    const { mint, create, tickets } = await setup({ reviewed: true, create: (t) => (++calls === 1 ? Promise.reject(new Error('Network request failed')) : Promise.resolve({ id: `row-${t.uploadId}` })) });
-    await expect(prepareUpload({ tickets, create })).rejects.toThrow('Network');
-    await expect(prepareUpload({ tickets, create })).resolves.toEqual({ ok: true, ticket: review, mintedAt: expect.any(Number), row: { id: 'row-upReview' } });
-    expect(mint).not.toHaveBeenCalled();
+  test('an error that is not a server refusal is treated as no answer (the row may exist), never as a refusal', async () => {
+    const { create, tickets } = await setup({ reviewed: true, create: () => Promise.reject(new Error('anything')) });
+    await expect(prepareUpload({ tickets, create })).resolves.toMatchObject({ ok: false, sent: { ticket: review } });
+  });
+
+  test('a stale URL replaced after a refusal: the fresh one is the one that goes with the post if its answer is lost', async () => {
+    const { create, tickets } = await setup({ reviewed: true, create: (t) => Promise.reject(t === review ? refusal('upload_expired') : noAnswer()) });
+    await expect(prepareUpload({ tickets, create })).resolves.toMatchObject({ ok: false, sent: { ticket: fresh } });
+  });
+
+  test('beforeSend runs before each request for a row, with the URL about to be sent', async () => {
+    const order: string[] = [];
+    const { tickets } = await setup({ reviewed: true });
+    const create = jest.fn(async (t: UploadTicket) => {
+      order.push(`create ${t.uploadId}`);
+      if (t === review) throw refusal('upload_cancelled');
+      return { id: 'row' };
+    });
+    await prepareUpload({ tickets, create, beforeSend: async (s) => void order.push(`store ${s.ticket.uploadId}`) });
+    expect(order).toEqual(['store upReview', 'create upReview', 'store upFresh', 'create upFresh']);
+  });
+
+  test('beforeSend failing (storage) sends nothing', async () => {
+    const { create, tickets } = await setup({ reviewed: true });
+    await expect(prepareUpload({ tickets, create, beforeSend: () => Promise.reject(new Error('storage_failed')) })).rejects.toThrow('storage_failed');
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
@@ -148,17 +169,24 @@ describe('uploadFailedDetail (the Upload failed banner, X-Upload-Failed)', () =>
 });
 
 describe('loadPendingPost', () => {
-  const base = { kind: 'response', draftFor: null, replyToId: null, replyToName: null, promptId: 'p', promptText: 't', recording: { segments: [], durationMs: 5000 }, caption: null, uploadId: '', uploadUrl: '', uploadUrlExpiresAt: 0, playbackId: null, state: 'failed', attempts: 0, failedReason: 'upload_limit_hour' };
+  const base = { ownerId: 'member', kind: 'response', draftFor: null, replyToId: null, replyToName: null, promptId: 'p', promptText: 't', recording: { segments: [], durationMs: 5000 }, caption: null, uploadId: '', uploadUrl: '', uploadUrlExpiresAt: 0, playbackId: null, state: 'failed', attempts: 0, failedReason: 'upload_limit_hour' };
   test('a failed post that never got a row survives a restart', async () => {
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(JSON.stringify({ ...base, responseId: null }));
-    await expect(loadPendingPost()).resolves.toMatchObject({ responseId: null, failedReason: 'upload_limit_hour' });
+    await expect(loadPendingPost('member')).resolves.toMatchObject({ responseId: null, failedReason: 'upload_limit_hour' });
   });
   test('a posted one still does', async () => {
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(JSON.stringify({ ...base, responseId: 'r1' }));
-    await expect(loadPendingPost()).resolves.toMatchObject({ responseId: 'r1' });
+    await expect(loadPendingPost('member')).resolves.toMatchObject({ responseId: 'r1' });
+  });
+  test('it is read from the member\'s own slot; another member\'s post is not theirs', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(JSON.stringify({ ...base, responseId: 'r1' }));
+    await loadPendingPost('member');
+    expect(AsyncStorage.getItem).toHaveBeenLastCalledWith('shortcut.pendingPost.member');
+    await expect(loadPendingPost('someone-else')).resolves.toBeNull();
+    await expect(loadPendingPost(null)).resolves.toBeNull();
   });
   test('anything else is ignored', async () => {
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(JSON.stringify({ ...base, responseId: 42 }));
-    await expect(loadPendingPost()).resolves.toBeNull();
+    await expect(loadPendingPost('member')).resolves.toBeNull();
   });
 });

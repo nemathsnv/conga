@@ -1,42 +1,65 @@
 // A recording that has been posted but has not finished uploading (SPEC.md Section 19):
-// it stays on the phone until it posts or the person deletes it. One at a time in v1:
-// the Upload failed banner shows the recording that is waiting.
+// it stays on the phone until it posts or the person deletes it. One at a time per member in v1:
+// the Upload failed banner shows the recording that is waiting, and a second recording never
+// replaces it (Nemat, 13 Oct).
+//
+// Each member has their own slot, so one member's post is never read, shown, retried or replaced
+// for another. A post stored under the single key builds before 13 Oct used has no owner and is
+// left where it is.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { pendingPostFor, type PendingPost } from './pendingPostState';
-import type { Recording } from './types';
 
 export type { PendingPost } from './pendingPostState';
 
-const KEY = 'shortcut.pendingPost';
+const keyFor = (ownerId: string) => `shortcut.pendingPost.${ownerId}`;
 
-export async function loadPendingPost(): Promise<PendingPost | null> {
+export async function loadPendingPost(ownerId: string | null): Promise<PendingPost | null> {
   try {
-    const raw = await AsyncStorage.getItem(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as PendingPost;
-    return parsed && (typeof parsed.responseId === 'string' || parsed.responseId === null) ? parsed : null;
+    return await loadPendingPostOrThrow(ownerId);
   } catch {
     return null;
   }
 }
 
-export async function savePendingPost(value: PendingPost | null): Promise<void> {
+/** For the check before a new post: storage that cannot be read must not be taken as empty. */
+export async function loadPendingPostOrThrow(ownerId: string | null): Promise<PendingPost | null> {
+  if (!ownerId) return null;
+  let raw: string | null;
   try {
-    if (value) await AsyncStorage.setItem(KEY, JSON.stringify(value));
-    else await AsyncStorage.removeItem(KEY);
+    raw = await AsyncStorage.getItem(keyFor(ownerId));
   } catch {
-    // Best effort; the in-memory copy still drives this launch.
+    throw new Error('storage_failed');
+  }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as PendingPost;
+    return parsed && (typeof parsed.responseId === 'string' || parsed.responseId === null) ? pendingPostFor(parsed, ownerId) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Best effort: a failure leaves the in-memory copy to drive this launch. */
+export async function savePendingPost(ownerId: string, value: PendingPost | null): Promise<void> {
+  try {
+    await savePendingPostOrThrow(ownerId, value);
+  } catch {
+    // Best effort.
   }
 }
 
 /**
- * Stores a new post for its member. A stored post of anyone else (a member who signed out without
- * Sign out anyway, or one from before posts had an owner) can no longer be reached once replaced,
- * so its recording is deleted from the phone rather than left behind.
+ * For the steps that must be on the phone before the next one: the request for a row, and any
+ * byte sent. A post is only ever sent once the phone holds its row id, so a post stored without
+ * one has provably sent nothing (what abandon_submission relies on).
  */
-export async function storeNewPendingPost(post: PendingPost, deleteFiles: (recording: Recording) => void): Promise<void> {
-  const stored = await loadPendingPost();
-  if (stored && stored.recording?.id !== post.recording.id && !pendingPostFor(stored, post.ownerId)) deleteFiles(stored.recording);
-  await savePendingPost(post);
+export async function savePendingPostOrThrow(ownerId: string, value: PendingPost | null): Promise<void> {
+  if (value && value.ownerId !== ownerId) throw new Error('pending_post_owner');
+  try {
+    if (value) await AsyncStorage.setItem(keyFor(ownerId), JSON.stringify(value));
+    else await AsyncStorage.removeItem(keyFor(ownerId));
+  } catch {
+    throw new Error('storage_failed');
+  }
 }

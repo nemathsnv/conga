@@ -11,7 +11,6 @@ import { ActionSheet } from '@/ui/ActionSheet';
 import { ActivityTabIcon, ChevronLeft, ChevronRightIcon, PersonIcon, PlacePinIcon, PlusIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { loadPendingPost } from '@/video/pendingPost';
-import { pendingPostFor } from '@/video/pendingPostState';
 import { usePosting } from '@/video/posting';
 
 export default function SettingsScreen() {
@@ -23,7 +22,7 @@ export default function SettingsScreen() {
 
   const onSignOut = async () => {
     // Only this member's own unposted recording counts.
-    const pending = pendingPostFor(await loadPendingPost(), session?.user.id ?? null);
+    const pending = await loadPendingPost(session?.user.id ?? null);
     if (pending) {
       setSignOutAsk(1);
       return;

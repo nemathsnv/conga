@@ -8,24 +8,25 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { track } from '@/lib/analytics';
 import { isOnline, subscribeOnline } from '@/lib/connectivity';
-import { abandonResponse, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
+import { abandonResponse, abandonSubmission, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { useSession } from '@/lib/session';
-import { loadPendingPost, savePendingPost, storeNewPendingPost } from './pendingPost';
-import { newPendingPost, pendingPostFor, resumeState, type PendingPost } from './pendingPostState';
-import { createGate, createOncePerKey, prepareUpload } from './postingFlow';
+import { loadPendingPost, loadPendingPostOrThrow, savePendingPost, savePendingPostOrThrow } from './pendingPost';
+import { resumeState, type PendingPost } from './pendingPostState';
+import { createGate, createOncePerKey, createQueue } from './postingFlow';
 import type { TicketSource } from './ticketStore';
 import type { Recording } from './types';
 import { checkUploadStatus, deleteRecordingFiles, mintUpload, putRecording, waitUntilLive, type UploadTicket } from './upload';
-import { runPendingPost, type PostingState } from './uploadRun';
+import { runPendingPost, submitPost, type PostingState } from './uploadRun';
 import { uploadTickets } from './uploadTickets';
 
 export type { PostingState } from './uploadRun';
 
 type PostingContextValue = {
   state: PostingState;
-  /** Post is tapped: create the row (a response, or a video reply when replyTo is set), then upload. Resolves once the row exists.
-   *  The upload URL comes from the member's ticket store (the one Post Review asked for). A recording is posted once: posting it
-   *  again gets the first call's promise, unless that call threw. */
+  /** Post is tapped: create the row (a response, or a video reply when replyTo is set), then upload. Resolves once the post is
+   *  kept on the phone (with its row, or as Upload failed). Throws 'post_pending' while another recording of the member waits:
+   *  it is never replaced. The upload URL comes from the member's ticket store (the one Post Review asked for). A recording is
+   *  posted once: posting it again gets the first call's promise, unless that call threw. */
   post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; tickets: TicketSource; replyTo?: { id: string; name: string }; draftFor?: string }) => Promise<void>;
   retry: () => Promise<void>;
   /** Give up on a failed post: the recording is deleted from the phone. */
@@ -40,17 +41,34 @@ const PostingContext = createContext<PostingContextValue | null>(null);
 
 const IDLE: PostingState = { kind: 'idle' };
 
-/** Creates the posted row (a response, a video reply or a draft) for an upload URL. */
+/** Creates the posted row (a response, a video reply or a draft) for an upload URL, with the recording's submission. */
 function createRow(post: Pick<PendingPost, 'draftFor' | 'replyToId' | 'promptId' | 'caption' | 'recording'>, t: UploadTicket): Promise<{ id: string }> {
-  const durationMs = post.recording.durationMs;
-  if (post.draftFor) return postDraft(post.draftFor, t.uploadId, post.caption, durationMs);
-  if (post.replyToId) return postReply(post.replyToId, t.uploadId, post.caption, durationMs);
-  return postResponse(post.promptId, t.uploadId, post.caption, durationMs);
+  const { durationMs, submissionId } = post.recording;
+  if (post.draftFor) return postDraft(post.draftFor, t.uploadId, post.caption, durationMs, submissionId);
+  if (post.replyToId) return postReply(post.replyToId, t.uploadId, post.caption, durationMs, submissionId);
+  return postResponse(post.promptId, t.uploadId, post.caption, durationMs, submissionId);
 }
 
-/** The signed-in member as the provider sees it: one upload at a time, stopped when they change. */
-type Member = { id: string | null; abort: AbortController; gate: ReturnType<typeof createGate> };
-const newMember = (id: string | null): Member => ({ id, abort: new AbortController(), gate: createGate() });
+/**
+ * Discard (X-Upload-Failed) or Sign out anyway: the recording leaves the phone, and the row the
+ * server may hold for it is retired. A row the phone knows is abandoned as before. A Post that
+ * never got an answer may have made one: abandon_submission retires it only if nothing can have
+ * been sent to it. Best effort: offline, the row stays (invisible) and the recording still goes.
+ */
+async function forgetPost(ownerId: string, post: PendingPost): Promise<void> {
+  deleteRecordingFiles(post.recording);
+  await savePendingPost(ownerId, null);
+  try {
+    if (post.responseId) await abandonResponse(post.responseId);
+    else if (post.uploadId && post.recording.submissionId) await abandonSubmission(post.recording.submissionId);
+  } catch {
+    // The row stays "processing" server-side; invisible to others.
+  }
+}
+
+/** The signed-in member as the provider sees it: one upload and one Post at a time, stopped when they change. */
+type Member = { id: string | null; abort: AbortController; gate: ReturnType<typeof createGate>; queue: ReturnType<typeof createQueue> };
+const newMember = (id: string | null): Member => ({ id, abort: new AbortController(), gate: createGate(), queue: createQueue() });
 
 export function PostingProvider({ children }: { children: ReactNode }) {
   const { session } = useSession();
@@ -64,12 +82,13 @@ export function PostingProvider({ children }: { children: ReactNode }) {
   /** One run at a time per member: a second call (Retry twice, the connection returning) joins the first. */
   const run = useCallback((post: PendingPost) => {
     const m = member.current;
-    if (m.id === null || post.ownerId !== m.id) return Promise.resolve();
+    const owner = m.id;
+    if (owner === null || post.ownerId !== owner) return Promise.resolve();
     return m.gate(() =>
       runPendingPost(
         post,
         {
-          persist: savePendingPost,
+          persist: (p) => savePendingPostOrThrow(owner, p),
           show: (s) => setOwned({ owner: m.id, state: s }),
           mint: mintUpload,
           createRow,
@@ -95,8 +114,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     member.current = m;
     uploadTickets.reset();
     if (!ownerId) return;
-    void loadPendingPost().then((stored) => {
-      const mine = pendingPostFor(stored, ownerId);
+    void loadPendingPost(ownerId).then((mine) => {
       if (!mine || m.abort.signal.aborted) return;
       const resumed = resumeState(mine);
       if (resumed.state === 'processing') void run(resumed);
@@ -104,39 +122,28 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     });
   }, [ownerId, run]);
 
-  const post = useCallback<PostingContextValue['post']>((args) => oncePerRecording(args.recording.id, async () => {
-    const { recording, promptId, caption, tickets, replyTo, draftFor } = args;
+  const post = useCallback<PostingContextValue['post']>((args) => oncePerRecording(args.recording.id, () => {
     const m = member.current;
-    if (!m.id) throw new Error('not_signed_in');
     const owner = m.id;
-    const show = (s: PostingState) => {
-      if (!m.abort.signal.aborted) setOwned({ owner, state: s });
-    };
-    const target = { draftFor: draftFor ?? null, replyToId: replyTo?.id ?? null, promptId, caption, recording };
-    const prepared = await prepareUpload({ tickets, create: (t) => createRow(target, t) });
-    if (m.abort.signal.aborted) return;
-    if (!prepared.ok) {
-      // No upload URL: never a silent Post. Offline, it waits for the connection like any post
-      // tapped offline (A-Offline; Nemat, 9 Oct). Otherwise the recording is kept on the phone and
-      // the Upload failed banner says why (an upload limit, or the connection), with Retry.
-      const waitsOffline = !isOnline() && !prepared.reason.startsWith('upload_limit');
-      if (!waitsOffline) track('upload_failed', { reason: prepared.reason.slice(0, 80) });
-      const failed = newPendingPost({ ...args, ownerId: owner }, null, waitsOffline ? 'waiting' : 'failed', waitsOffline ? null : prepared.reason);
-      await storeNewPendingPost(failed, deleteRecordingFiles);
-      show(waitsOffline ? { kind: 'waiting', post: failed } : { kind: 'failed', post: failed });
-      return;
-    }
-    const { ticket: t, mintedAt, row } = prepared;
-    const pending = newPendingPost({ ...args, ownerId: owner }, { responseId: row.id, uploadId: t.uploadId, uploadUrl: t.uploadUrl, mintedAt }, 'uploading');
-    if (!isOnline()) {
-      // Offline at Post: keep the recording and wait while the app is open (Nemat, 9 Oct).
-      const waiting: PendingPost = { ...pending, state: 'waiting' };
-      await storeNewPendingPost(waiting, deleteRecordingFiles);
-      show({ kind: 'waiting', post: waiting });
-      return;
-    }
-    await storeNewPendingPost(pending, deleteRecordingFiles);
-    void run(pending);
+    if (!owner) return Promise.reject(new Error('not_signed_in'));
+    // One Post at a time per member, so two recordings cannot both pass the one-waiting check.
+    return m.queue(async () => {
+      const result = await submitPost(
+        { ...args, ownerId: owner },
+        {
+          stored: () => loadPendingPostOrThrow(owner),
+          store: (p) => savePendingPostOrThrow(owner, p),
+          clear: () => savePendingPostOrThrow(owner, null),
+          createRow,
+          online: isOnline,
+          track,
+          aborted: () => m.abort.signal.aborted,
+        },
+      );
+      if (!result || m.abort.signal.aborted) return;
+      setOwned({ owner, state: result.show });
+      if (result.upload) void run(result.upload);
+    });
   }), [run, oncePerRecording]);
 
   // The connection comes back while a post waits: start it by itself.
@@ -160,14 +167,8 @@ export function PostingProvider({ children }: { children: ReactNode }) {
   }, [state, run]);
 
   const discardFailed = useCallback(async () => {
-    if (state.kind !== 'failed') return;
-    deleteRecordingFiles(state.post.recording);
-    await savePendingPost(null);
-    try {
-      if (state.post.responseId) await abandonResponse(state.post.responseId);
-    } catch {
-      // The row stays "processing" server-side; harmless and invisible to others.
-    }
+    if (state.kind !== 'failed' || !ownerId) return;
+    await forgetPost(ownerId, state.post);
     setOwned({ owner: ownerId, state: IDLE });
   }, [state, ownerId]);
 
@@ -176,11 +177,8 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     const m = member.current;
     m.abort.abort();
     member.current = newMember(m.id);
-    const mine = pendingPostFor(await loadPendingPost(), m.id);
-    if (mine) {
-      deleteRecordingFiles(mine.recording);
-      await savePendingPost(null);
-    }
+    const mine = await loadPendingPost(m.id);
+    if (m.id && mine) await forgetPost(m.id, mine);
     setOwned({ owner: m.id, state: IDLE });
   }, []);
 

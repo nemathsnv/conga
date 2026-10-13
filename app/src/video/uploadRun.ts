@@ -2,8 +2,9 @@
 // no network). posting.tsx supplies the effects, so interruption, Retry and signing out can be
 // tested with mocks.
 import type { EventName, EventProps } from '@/lib/analytics';
-import { ensureUploadRow, errorReason } from './postingFlow';
-import { UPLOAD_URL_TTL_MS, uploadUrlUsable, type PendingPost } from './pendingPostState';
+import { ensureUploadRow, errorReason, prepareUpload, type SentUrl } from './postingFlow';
+import { newPendingPost, UPLOAD_URL_TTL_MS, uploadUrlUsable, type PendingPost } from './pendingPostState';
+import type { TicketSource } from './ticketStore';
 import type { Recording } from './types';
 import type { UploadStatus, UploadTicket } from './upload';
 
@@ -17,6 +18,7 @@ export type PostingState =
   | { kind: 'live'; post: PendingPost; playbackId: string };
 
 export type RunDeps = {
+  /** Must succeed (throws otherwise): the row id is on the phone before any byte is sent. */
   persist: (post: PendingPost | null) => Promise<void>;
   show: (state: PostingState) => void;
   mint: () => Promise<UploadTicket>;
@@ -92,6 +94,7 @@ export async function runPendingPost(post: PendingPost, deps: RunDeps, signal: A
         usable: (p) => uploadUrlUsable(p, now()),
         mint: deps.mint,
         create: (t) => deps.createRow(current, t),
+        replayable: !!current.recording.submissionId,
         save: async (p) => {
           current = p;
           await persist(p);
@@ -123,7 +126,7 @@ export async function runPendingPost(post: PendingPost, deps: RunDeps, signal: A
     const playbackId = await deps.waitUntilLive(current.uploadId, { until: current.kind === 'draft' ? 'ready' : 'live', signal });
     if (signal.aborted) return;
     deps.deleteFiles(current.recording);
-    await persist(null);
+    await persist(null).catch(() => undefined);
     show({ kind: 'live', post: { ...current, playbackId }, playbackId });
     deps.track('video_published', { kind: current.kind, prompt_id: current.promptId, duration_s: Math.round(current.recording.durationMs / 1000), has_caption: !!current.caption });
   } catch (e) {
@@ -131,7 +134,93 @@ export async function runPendingPost(post: PendingPost, deps: RunDeps, signal: A
     const reason = errorReason(e);
     deps.track('upload_failed', { reason: reason.slice(0, 80) });
     const failed: PendingPost = { ...current, state: 'failed', failedReason: reason };
-    await persist(failed);
+    await persist(failed).catch(() => undefined);
     show({ kind: 'failed', post: failed });
   }
+}
+
+export type SubmitArgs = {
+  ownerId: string;
+  recording: Recording;
+  promptId: string;
+  promptText: string;
+  caption: string | null;
+  replyTo?: { id: string; name: string };
+  draftFor?: string;
+  tickets: TicketSource;
+};
+
+export type SubmitDeps = {
+  /** The member's stored post. Throws if storage cannot be read (nothing may be replaced blind). */
+  stored: () => Promise<PendingPost | null>;
+  /** Must succeed (throws otherwise). */
+  store: (post: PendingPost) => Promise<void>;
+  clear: () => Promise<void>;
+  createRow: (post: PendingPost, t: UploadTicket) => Promise<{ id: string }>;
+  online: () => boolean;
+  track: (name: EventName, props: EventProps) => void;
+  /** The member changed while this ran. */
+  aborted: () => boolean;
+};
+
+/** What Post leaves: the banner state to show, and a post to upload now. Null: nothing to show. */
+export type Submitted = { show: PostingState; upload?: PendingPost } | null;
+
+/**
+ * Post is tapped. A recording is never lost and never replaced:
+ * - Refused ('post_pending') while the member has another recording waiting (uploading,
+ *   processing, offline or Upload failed). It stays until it posts or is discarded (Nemat, 13 Oct).
+ * - The post is stored before the row is asked for, with its URL and submission. A lost answer,
+ *   or the app closing mid-request, leaves an Upload failed post whose Retry sends the same
+ *   request, and the server returns the row it made.
+ * - No answer from the server: an Upload failed post (waiting, if offline), not a silent Post.
+ * - A refusal: the stored record of this attempt is removed and the refusal thrown, as before
+ *   (A-Restricted, LV-Suspended, or Post Review staying open).
+ */
+export async function submitPost(args: SubmitArgs, deps: SubmitDeps): Promise<Submitted> {
+  const stored = await deps.stored();
+  if (stored && stored.recording.id !== args.recording.id) throw new Error('post_pending');
+  const base = newPendingPost(args, null, 'uploading');
+  const withUrl = (sent: SentUrl): PendingPost => ({ ...base, uploadId: sent.ticket.uploadId, uploadUrl: sent.ticket.uploadUrl, uploadUrlExpiresAt: sent.mintedAt + UPLOAD_URL_TTL_MS });
+  let recorded = false;
+  let prepared;
+  try {
+    prepared = await prepareUpload({
+      tickets: args.tickets,
+      create: (t) => deps.createRow(base, t),
+      beforeSend: async (sent) => {
+        await deps.store(withUrl(sent));
+        recorded = true;
+      },
+    });
+  } catch (e) {
+    // Refused: the request rolled back, nothing was made. Post Review keeps the recording.
+    if (recorded) await deps.clear().catch(() => undefined);
+    throw e;
+  }
+  if (deps.aborted()) return null;
+  if (!prepared.ok) {
+    // Never a silent Post. Offline, it waits for the connection like any post tapped offline
+    // (A-Offline; Nemat, 9 Oct). Otherwise the recording is kept on the phone and the Upload failed
+    // banner says why (an upload limit, or the connection), with Retry.
+    const waitsOffline = !deps.online() && !prepared.reason.startsWith('upload_limit');
+    if (!waitsOffline) deps.track('upload_failed', { reason: prepared.reason.slice(0, 80) });
+    const kept: PendingPost = {
+      ...(prepared.sent ? withUrl(prepared.sent) : base),
+      state: waitsOffline ? 'waiting' : 'failed',
+      failedReason: waitsOffline ? null : prepared.reason,
+    };
+    await deps.store(kept);
+    return { show: waitsOffline ? { kind: 'waiting', post: kept } : { kind: 'failed', post: kept } };
+  }
+  const { ticket: t, mintedAt, row } = prepared;
+  const pending = newPendingPost(args, { responseId: row.id, uploadId: t.uploadId, uploadUrl: t.uploadUrl, mintedAt }, 'uploading');
+  if (!deps.online()) {
+    // Offline at Post: keep the recording and wait while the app is open (Nemat, 9 Oct).
+    const waiting: PendingPost = { ...pending, state: 'waiting' };
+    await deps.store(waiting);
+    return { show: { kind: 'waiting', post: waiting } };
+  }
+  await deps.store(pending);
+  return { show: { kind: 'uploading', post: pending, progress: 0 }, upload: pending };
 }

@@ -1,5 +1,6 @@
 // Recording helpers around expo-camera. The screen owns the CameraView; these functions
 // own the file handling and the limits so the camera library can be swapped later.
+import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 
 import type { CameraFacing, Recording, RecordingSegment } from './types';
@@ -23,6 +24,7 @@ export function keepSegment(tempUri: string, facing: CameraFacing, durationMs: n
 export function makeRecording(promptId: string, segments: RecordingSegment[]): Recording {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    submissionId: Crypto.randomUUID(),
     promptId,
     segments,
     durationMs: segments.reduce((sum, s) => sum + s.durationMs, 0),

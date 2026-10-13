@@ -21,7 +21,10 @@ export type UsernameStatus = 'available' | 'taken' | 'invalid';
 
 /** Error raised by a server function, e.g. "username_taken". */
 export class ServerError extends Error {
-  constructor(public readonly code: string) {
+  /** refused: the server answered with an error code, so nothing it was asked to do happened (the
+   *  transaction rolled back). False when there was no such answer (no connection, a gateway
+   *  error): the request may or may not have been carried out. */
+  constructor(public readonly code: string, public readonly refused: boolean = true) {
     super(code);
   }
 }
