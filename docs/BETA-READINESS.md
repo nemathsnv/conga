@@ -1068,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; R0 step A, the migration, deployed 13 Oct 02:12 UTC; R0 step B, the worker (`mux-cleanup` v4), deployed 13 Oct 02:30 UTC; CP0, test account T1 and its video V, 13 Oct; Test A1, V removed by a moderator and its playback revocation dry-run against real Mux, 13 Oct 09:12 to 09:21 UTC; Test A2, the first real playback revocation (P1), 13 Oct 09:38 UTC, Nemat approved; Test B1, V restored by a moderator and its playback restoration dry-run against real Mux, 13 Oct 09:59 to 10:11 UTC; clean-up off)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; R0 step A, the migration, deployed 13 Oct 02:12 UTC; R0 step B, the worker (`mux-cleanup` v4), deployed 13 Oct 02:30 UTC; CP0, test account T1 and its video V, 13 Oct; Test A1, V removed by a moderator and its playback revocation dry-run against real Mux, 13 Oct 09:12 to 09:21 UTC; Test A2, the first real playback revocation (P1), 13 Oct 09:38 UTC, Nemat approved; Test B1, V restored by a moderator and its playback restoration dry-run against real Mux, 13 Oct 09:59 to 10:11 UTC; Test B2, the first real playback restoration (P2), 13 Oct 10:33 UTC, Nemat approved; clean-up off)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -3303,6 +3303,177 @@ action; P1 is gone, so there is nothing to revoke).
 *Next:* **Test B2**, creating one new public playback id P2 at Mux for asset a, needs Nemat's
 separate approval. Before it, Nemat may want to decide whether the two observations above
 (T1's empty player by direct id, and no restore notice) need a board or a spec note.
+
+**Test B2: the first real Mux playback restoration, a new public playback id P2 for V (13 Oct,
+10:30 to 10:41 UTC; approved by Nemat: one playback-id creation on asset a, job
+`96ba6614-adf1-4604-861f-3e81974653f4` (J3); nothing else).** Same branch and method as before, and
+the same guarded procedure as Test A2 (the `live.py` driver, adapted for J3). The writes were:
+1. the function variable `MUX_CLEANUP_MODE=live`;
+2. one guarded transaction: the database switch `live` and one drain;
+3. the switch back `off`;
+4. the variable unset.
+
+The worker made exactly one change at Mux, the playback-id `POST`. No sweep, no second drain, no
+revocation, asset deletion, upload cancellation or new video. No secret value was printed or
+committed; nothing was pushed to git. The restore UI and the missing restore notice (Test B1) were
+left as they are, as instructed.
+
+*Final preflight (10:30:40 to 10:31:30), identical to the end of Test B1* (10:11, apart from cron
+run counters):
+- **Schema and configuration:**
+  - 17 migrations, latest `20261013000100`; fingerprint **759 / `10acc19f…`** line for line.
+  - Functions: `mux-cleanup` v6 `5adecf46…`; the others v8 to v10, bundles unchanged.
+  - The same 11 secrets (names, digests, times), **no `MUX_CLEANUP_MODE`**; database switch `off`
+    (10:01:13); Vault; every table hash and `auth.users`.
+- **V:** restored (`live`, `removed_action_id` null, no playback id, asset a, upload u);
+  `mux_playback_wanted` true; `mux_asset_hold` `infinity`.
+- **Queue:**
+  - J2 `skipped` (`kept`, "restored by a moderator: the removal's retention ended").
+  - J3 the only open job, `pending`, 0 attempts, with its plan: `restore`, `owner_verified`,
+    asset a, `public_playback_ids` `[]`, `would_create` `public`.
+  - J1 and the canary `done`.
+- **Mux (`GET`s):**
+  - Asset a `ready`, passthrough T1, `upload_id` u, **`playback_ids` `[]`**.
+  - P1: API 404, HLS 404, thumbnail 404.
+  - Founder `L7KxG29…` [`8UqSC…`], HLS 200.
+  - Shortcut Beta 2 assets; spike 7 (hash `a441d4c1…`), 25 uploads.
+- **Health:** `ok`, `off`.
+- **The transaction's precondition block,** run alone read-only at 10:31: passed.
+
+*Execution (`live_b2.py`; one attempt, never retried; off and unset in a `finally` block):*
+- **10:32:15.3:** `supabase secrets set MUX_CLEANUP_MODE=live`, with the database still `off`.
+  - Checked 10:32:22: 12 secrets; `MUX_CLEANUP_MODE` digest = sha256(`live`), `updated_at`
+    10:32:15.657; the other 11 digests unchanged.
+  - Every function moved up one version with an unchanged bundle, all `ACTIVE` (`mux-cleanup` v7).
+- **10:32:23.7, Mux re-check (`GET`):** asset a `ready`, passthrough T1, upload u, playback ids
+  `[]`. The switch was still `off`.
+- **10:33:03, just after the 10:33:00 cron tick:** one transaction.
+  1. It re-checked everything:
+     - the switch `off`;
+     - exactly 4 jobs, with J3 the only open one, its fields and its restore plan;
+     - J2 `skipped`; J1 and the canary `done`;
+     - V restored with no playback id, and `wanted` true;
+     - the founder's hashes;
+     - pg_net queue empty; runs unchanged.
+  2. It ran `mux_cleanup_set_mode('live', 'Nemat: stage 3 Test B2 playback restoration (Claude
+     Code)')` and checked that **exactly one job was due and that it was J3**.
+  3. It ran one `run_mux_cleanup('drain')` and checked that it queued exactly one request.
+
+  The transaction committed at **10:33:04.11**: request **7**, mode `live`.
+- **Worker result:** pg_net id 7, created 10:33:04.15, **HTTP 200**, not timed out:
+  `{"ok":true,"mode":"live","claimed":1,"done":1,"found_asset":0,"retry":0,"release":0,"skipped":0,
+  "failed":0,"stale":0,"unrecorded":0}`.
+- **What the worker did:**
+  1. It leased J3 (attempt 1) and `GET` the asset; ownership passed (id a, passthrough T1, upload u)
+     and there were no public ids.
+  2. `mux_cleanup_check` answered `live`, `wanted` true.
+  3. It sent `POST /video/v1/assets/a/playback-ids` `{"policy": "public"}`.
+  4. It asked the database again (still wanted) and finished J3 at **10:33:09.10**: `done`,
+     `{"outcome": "restored"}`.
+  5. `mux_cleanup_finish` re-checked `wanted` under V's row lock and recorded P2 on V.
+- **10:33:11.61, switch `off`.** A separate select at 10:33:15 read `off`. **The database switch was
+  `live` for about 7.5 s** (10:33:04.1 to 10:33:11.6).
+- **10:33:17, read-only (after `off`):** J3 `done`, 1 attempt, `{"outcome": "restored"}`;
+  V `mux_playback_id` = P2. Database and Mux agreed, so nothing was ambiguous.
+- **10:33:17 to 10:33:24, `supabase secrets unset MUX_CLEANUP_MODE`:**
+  - 11 secrets, no `MUX_CLEANUP_MODE`.
+  - Every function up one more version, bundles unchanged.
+  - The variable was `live` for about 1 min 5 s, of which the database allowed changes for the
+    7.5 s above. **Both switches have been non-live since 10:33:24.**
+- **Scheduler:** the 10:32:00 and 10:33:00 ticks fell while the database was `off`; only requests
+  4 to 7 exist. The controlled drain was the only one.
+
+**P2 = `tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo`**, a new id, different from P1.
+
+*Mux's actual responses (`GET`s, 10:33:46, and again at 10:41):*
+- **`GET /video/v1/assets/a`:** 200, `ready`. The same id, `created_at` `1791880987`, 5.744 s,
+  passthrough T1, `upload_id` u, no errors. **`playback_ids` exactly `[{"policy": "public", "id":
+  "tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo"}]`.**
+- **`GET /video/v1/assets/a/playback-ids/P2`:** **200**, `{"data": {"policy": "public", "id":
+  "tu8ooWH…dmo"}}`.
+- **P2 plays:**
+  - `stream.mux.com/P2.m3u8` **200** (`application/vnd.apple.mpegurl`, `#EXTM3U`, `no-store`,
+    `MISS`).
+  - At 10:40, its first rendition playlist 200 and that playlist's first segment 200 (`video/mp4`,
+    1,170,411 bytes).
+  - `image.mux.com/P2/thumbnail.jpg` **200** (`image/jpeg`).
+- **P1 is still gone:** `GET …/playback-ids/P1` **404** ("Playback ID not found"); HLS **404**
+  ("Invalid Playback ID", `MISS`); thumbnail **404**.
+- **No new asset:**
+  - Shortcut Beta still **2 assets**: a, with [P2], and the founder's `L7KxG29…` with
+    [`8UqSC…`], `GET` 200, **HLS 200**.
+  - Upload u still `asset_created` with `asset_id` a; uploads otherwise as at the end of B1.
+  - 0 live streams.
+- **Spike untouched:** 7 assets, inventory hash `a441d4c1…` unchanged, 25 uploads.
+- **Not visible from here:** the `POST`'s raw response. The worker keeps only the id it returned
+  (now on V, and listed by Mux). The invocation log has the line (Dashboard sign-in needed).
+
+*Database after (10:33:17, and full postflight 10:40:40 to 10:41:10, after one monitoring
+interval):*
+- **J3:** `done` **exactly once**: 1 attempt, `{"outcome": "restored"}`, finished 10:33:09.10.
+  Owner and response cleared (the minimal record kept 30 days). No `recorded: false`, so P2 was
+  recorded.
+- **V:** `live`, `removed_action_id` null; **`mux_playback_id` = P2**; asset a, upload u and
+  `live_at` 08:43:09.56 unchanged. Its ledger row is unchanged.
+- **The former deletion J2:** still `skipped` (`kept`), finished 09:59:09.90, untouched. J1 `done` /
+  `revoked`, untouched.
+- **Queue:**
+  - `mux_asset_hold(a, u)` `infinity` (in use).
+  - 0 due, running, failed, review or stuck; nothing in `dry_run_planned`.
+  - No open job of any kind. The B1 note about a `warn` on 14 Oct no longer applies.
+- **Shortcut shows V again:**
+  - `web_video(V)` anonymously: **`live`** with P2, in SQL and over HTTP. V is back in the
+    founder's `web_video` "more".
+  - As the founder: `get_video` and `get_response` `live`; the `prompt_responses` entry `live`, V
+    listed (with the founder's response); `profile_responses(T1)` lists V.
+  - As T1: `get_video` and `get_response` `live` with P2; `prompt_responses` entry `live`;
+    `profile_responses` lists V.
+  - The empty-player window of Test B1 is over.
+- **T1's records:**
+  - T1's removal notice (`get_notice(M)`) now carries P2, so it would draw a blurred thumbnail of
+    the restored video.
+  - T1's Activity is unchanged: still only M's `removed`, and still no restore notice (recorded in
+    B1, not changed).
+- **Tables:** fingerprint **759 / `10acc19f…`** line for line. Only these changed:
+  - `responses` (V's row only);
+  - `mux_cleanup_jobs` (J3);
+  - `mux_cleanup_runs` (+request 7);
+  - `mux_cleanup_settings`.
+
+  Every other table hash, `auth.users`, counts, the founder's and the canary's rows, and Vault are
+  unchanged.
+- **Founder untouched:** response `c9918f82…` `live`, ledger `9726bb8f…` `claimed`.
+- **Monitor:** collected request 7 at 10:40:00: `ok`, 200, `live`, `claimed` 1, `done` 1.
+- **Cron:** since 09:12, 0 failures on any schedule (`mux-cleanup` and `send-push` 90 runs each,
+  monitor and `tonight-prompt` 9).
+- **Health (10:41): `ok`**, mode `off`, no problems; `requests_24h` 4, 0 errors, timeouts or
+  no-responses.
+- **pg_net:** answers 4 to 7, queue 0.
+
+*Version and timestamp changes (platform behaviour, not configuration):*
+- Every function moved up two versions with identical bundle hashes: one for the set, one for the
+  unset. Now `auth-signin-method` v10, `mux-cleanup` v8, `mux-create-upload` v10,
+  `mux-upload-status` v11, `mux-webhook` v12, all `ACTIVE`, `verify_jwt` false.
+- The secrets list is byte-identical to the preflight (names, digests, `updated_at`).
+
+*Final cleanup modes:* database switch **`off`** (10:33:11.61, "stage 3 Test B2 playback
+restoration finished"); **`MUX_CLEANUP_MODE` unset**, so the worker's own mode is `dry_run` and the
+effective mode is `off`. No real configuration change remains.
+
+*Not checked:* the Edge Function logs (Dashboard sign-in needed).
+- Expected: one `mux-cleanup` invocation at about 10:33:04, `POST` 200, logging J3 `done` /
+  `restored` with `tu8o…`.
+- Possibly a Mux webhook answered `ignored`: `mux-webhook` acts only on `video.asset.ready`, and the
+  database shows no change from it.
+
+Also not checked: V in the app on a device.
+
+*Tests A and B are complete.* V went live → removed → P1 revoked → restored → P2 created, on the
+same asset. Each Mux change was approved separately, and both switches are now non-live. Mux:
+Shortcut Beta 2 assets, spike 7, so 9 of the free plan's 10 if the cap is account-wide.
+
+*Next* (each needs Nemat's separate approval): C1, C2, E1 to E3 in the plan above. Open from B1:
+the restore notice and T1's empty player before a new id exists.
 
 ## Gates
 
