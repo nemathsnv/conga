@@ -1068,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; not deployed)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; R0 step A, the migration, deployed 13 Oct 02:12 UTC; worker not redeployed)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -2383,6 +2383,92 @@ so the local result of applying `20261013000100` is the expected hosted result:
 *Not checked in this preflight:* the Edge Function, gateway and Postgres logs (Dashboard sign-in
 needed); a byte-for-byte comparison of deployed function sources (see above); the Mux plan's
 cap (still to confirm on Billing).
+
+**R0 step A: cleanup reliability migration deployed (13 Oct, 02:12:31 to 02:12:38 UTC; approved by
+Nemat: database only).** From `6f54277` (clean tree). The migration was pushed from a `git archive`
+of `HEAD` in a scratch folder: `supabase/migrations`, `config.toml` and `templates`. Read-only
+checks used the R0 preflight method (Management API, `READ ONLY` transactions rolled back,
+`scripts/schema-fingerprint.sql`; Mux `GET`s only). No Edge Function, secret, Vault entry,
+environment variable or switch was changed; no Mux call other than `GET`s; nothing pushed to git.
+
+*Final preflight (02:11 to 02:12):*
+- **Bytes:** migration md5 `7d91d842572978b0143580daf32b6195`, as reviewed.
+- **Schema:** fingerprint **741**, line for line the tested stage 3 listing (`ca21f2cd…`).
+- **State, tables, functions, secrets, Mux:** identical to the 01:56 preflight, apart from cron's
+  run counters.
+- **Switches:** `off`, no `MUX_CLEANUP_MODE`.
+- **Queue:** only the canary's `done` job; 0 purge failures.
+- **Cron:** 7 jobs, 0 failures.
+- **pg_net:** queue 0, 3 old answers.
+- **Founder:** hashes unchanged, `web_video` `live`, HLS 200.
+- **Mux:** Shortcut Beta has the founder's asset alone; spike 7 assets, 25 uploads. Canary 404.
+- **Dry run:** a fresh `db push --dry-run` listed exactly `20261013000100`, seeds `[]`, roles
+  `[]`.
+
+*Push:* `supabase db push --linked --project-ref picvoavfxnajfjkqawju --workdir <scratch> --yes`,
+from 02:12:31 to 02:12:38 UTC. Output: "Applying migration 20261013000100_cleanup_reliability.sql",
+"Finished supabase db push"; exit 0, no error.
+
+*Post-deployment verification (02:12:50 to 02:13:34):*
+- **Migrations:** 17, latest `20261013000100`.
+- **Schema fingerprint: 759 objects, line for line identical to the tested post-migration listing**
+  (md5 `10acc19ffaef4d3ebe549d37b2c2199c`). Against the pre-deployment listing:
+  - **737 unchanged**, including the 7 earlier cron jobs: schedule, command, active and user.
+  - **4 changed**: `mod_restore_video`, `mux_forget_video`, `mux_cleanup_sweep`,
+    `run_mux_cleanup`.
+  - **18 added**: table `mux_cleanup_runs` with 9 columns, 2 constraints and 2 indexes; functions
+    `mux_cleanup_health`, `mux_cleanup_collect_runs` and `mux_cleanup_try_jsonb`; cron
+    `mux-cleanup-monitor`.
+  - **Nothing removed.**
+- **Monitor schedule:** `mux-cleanup-monitor` is job 8, `*/10 * * * *`,
+  `select public.mux_cleanup_collect_runs()`, user `postgres`, active.
+- **Grants:**
+  - `mux_cleanup_health()` is executable by `service_role` and by neither `authenticated` nor
+    `anon`.
+  - `mux_cleanup_collect_runs()` is executable by no API role.
+  - `mux_cleanup_runs` has RLS on and is not readable by `authenticated` or `anon`.
+- **Switches:** database `off`; secrets identical (the same 11 names and digests, still no
+  `MUX_CLEANUP_MODE`), so the worker stays `dry_run`.
+- **No outbound cleanup request:** pg_net queue 0, still the 3 answers of 12 Oct (max id 3);
+  `mux_cleanup_runs` 0 rows.
+- **Queue:** unchanged, only the canary's `done` job; 0 purge failures; no new failure. Cron since
+  the push: `mux-cleanup` and `send-push` ran and succeeded, 0 failures.
+- **Data:** every `public` table hash and `auth.users` identical to before; the only new table is
+  `mux_cleanup_runs`, empty.
+  - **Founder:** response `md5(row_to_json)` `c9918f82…`, ledger `md5(u::text)` `9726bb8f…`, both
+    unchanged and `live`. `web_video` `live` with playback `8UqSC…`, **HLS 200**.
+  - **Canary:** `web_video` `unavailable`; asset and HLS 404.
+- **Unchanged since the preflight:** the Mux inventory (Shortcut Beta and spike, ids, statuses,
+  playback ids); the Edge Functions (`mux-cleanup` v3 and the other four, same bundle hashes and
+  deploy times); the secrets (names, digests, times); Vault (2 secrets, created 15:49:18 12 Oct).
+- **`mux_cleanup_health()` (02:13:33): `warn`**, mode `off`. Its only problems are
+  "has not run yet" for `mux-cleanup-monitor` (created a minute earlier), `mux-sweep`,
+  `prune-mux-cleanup-jobs` and `prune-moderation-records`. Those three daily jobs have never run on
+  hosted; first runs are due 13 Oct 03:30, 03:40 and 04:45 UTC. All of this is expected and none
+  of it is a deployment failure. No alert: 0 failed or stuck jobs, nothing due, 0 purge failures,
+  no worker request; `mux-cleanup` last ran 02:13:00; `purge-deleted-accounts` last ran 12 Oct
+  03:15, within its 26 hours.
+- **One scheduled monitoring interval observed:**
+  - `mux-cleanup-monitor` ran at **02:20:00** and **succeeded** in 18 ms ("1 row": the function's
+    return value, 0 answers copied).
+  - It wrote nothing: `mux_cleanup_runs` still 0 rows, pg_net queue 0 and still 3 answers.
+  - Health at 02:21:04: `warn`, now only the three daily jobs not yet run (`mux-sweep`,
+    `prune-mux-cleanup-jobs`, `prune-moderation-records`).
+  - Cron from the push to 02:21: `mux-cleanup` 9 runs, `send-push` 9, `tonight-prompt` 1,
+    monitor 1; 0 failures.
+  - A full snapshot at 02:21:48 was identical to the post-deployment one: fingerprint
+    759 / `10acc19f…`, every table hash, functions, secrets, Vault, founder, canary, queue and Mux.
+    Switch `off`, 17 migrations.
+- **Side effects of the method:** the CLI's temporary login role was refreshed on each linked
+  command; link files written in the scratch folders were deleted.
+- **Not checked:** the Postgres log for the migration and the Edge Function logs (Dashboard sign-in
+  needed). The daily jobs' first runs on hosted (03:15 purge, 03:30 and 03:40 prunes, 04:45 sweep)
+  come after this record; with the switch `off` the sweep returns before any request, and the
+  prunes have nothing to delete.
+- **Rollback:** not needed; available as reviewed
+  (`supabase/rollback/20261013000100_cleanup_reliability.down.sql` as a new forward migration).
+- **Next:** step B (redeploy `mux-cleanup` with the G1 plans) needs Nemat's separate approval. The
+  hosted worker is still the `faf1a41` code (v3), which the new schema was tested to accept.
 
 ## Gates
 
