@@ -271,7 +271,7 @@ Deno.test("worker restart: a job cut off mid-call is leased again once its lease
   stall = (method, path) => method === "DELETE" && path.endsWith(v.asset.id) ? gate : null;
   const before = await lastResponseId();
   await sql("select public.run_mux_cleanup('drain')");
-  await waitFor("the worker to reach Mux", async () => calls.some((c) => c.method === "DELETE" && c.path.endsWith(v.asset.id)));
+  await waitFor("the worker to reach Mux", () => Promise.resolve(calls.some((c) => c.method === "DELETE" && c.path.endsWith(v.asset.id))));
   assertEquals((await job(v.asset.id)).status, "running");
   // The Edge runtime dies while the call is in flight (scripts/scheduler-integration.sh serves it
   // in a loop, so it comes back as a platform restart would).
@@ -331,6 +331,33 @@ Deno.test("daily orphan clean-up: the sweep queues a proven orphan, reports an u
   await waitFor("the orphan's deletion", async () => (await job(orphan.id)).status === "done");
   assert(!assets.has(orphan.id) && assets.has(stranger.id) && assets.has(live.asset.id), "only the orphan is deleted");
   assertEquals(applied.filter((a) => a.includes(stranger.id) || a.includes(live.asset.id)), []);
+});
+
+Deno.test("monitoring: every call to the worker is recorded; its answer collected; errors show in the health check", async () => {
+  const since = await sql("select now()");
+  const v = await video(owner);
+  await setMode("live");
+  await setSecrets(WORKER_URL, "not-the-key");
+  await viaCron("drain");
+  await setSecrets(`http://${GATEWAY}:9/functions/v1/mux-cleanup`, KEY);
+  await viaCron("drain");
+  await setSecrets(WORKER_URL, KEY);
+  await viaCron("drain");
+  await waitFor("the deletion", async () => (await job(v.asset.id)).status === "done");
+  assertEquals(Number(await sql(`select count(*) from public.mux_cleanup_runs where requested_at >= ${lit(since)}`)), 3, "three requests recorded");
+  assert(Number(await sql("select public.mux_cleanup_collect_runs()")) >= 3, "their answers collected");
+  const rows = (await sql(`select coalesce(status_code::text, 'none') || '|' || coalesce(ok::text, 'null') || '|' || (error is not null)::text || '|' || coalesce(summary->>'claimed', '-') from public.mux_cleanup_runs where requested_at >= ${lit(since)} order by request_id`)).split("\n");
+  assertEquals(rows[0], "401|null|false|-", "the wrong key: 401");
+  assert(rows[1].startsWith("none|null|true"), `unreachable: an error, no status (${rows[1]})`);
+  assertEquals(rows[2], "200|true|false|1", "the right key: 200, ok, one job claimed");
+  assertEquals(await sql(`select count(*) from public.mux_cleanup_runs where requested_at >= ${lit(since)} and summary::text like '%${v.asset.id}%'`), "0", "no Mux id kept from the answers");
+  const health = JSON.parse(await sql("select public.mux_cleanup_health()"));
+  assertEquals(health.status, "alert");
+  const worker = health.problems.find((p: { check: string }) => p.check === "worker_errors");
+  assert(worker && Number(worker.detail.split(" ")[0]) >= 2, JSON.stringify(health.problems));
+  assert(Number(health.metrics.worker.requests_24h) >= 3);
+  assertEquals(health.metrics.schedules["mux-cleanup"].active, true);
+  await sql(`delete from public.mux_cleanup_runs where requested_at >= ${lit(since)}`);
 });
 
 Deno.test("cleanup: switch off, secrets removed, this run's rows removed", async () => {
