@@ -1,6 +1,7 @@
 // Pure rules for getting an upload URL and the posted row when Post is tapped (no React, no
 // storage), so they can be tested on their own. Security stage 2: the server can refuse a URL
 // (limits, account state) and refuses a URL that is expired, used or was retired as abandoned.
+import type { TicketSource } from './ticketStore';
 import type { UploadTicket } from './upload';
 
 /** Refusals Post Review answers with A-Restricted or LV-Suspended (and the deleted-account path). */
@@ -20,41 +21,130 @@ export function isRestriction(reason: string): boolean {
 export type Prepared<Row> = { ok: true; ticket: UploadTicket; row: Row } | { ok: false; reason: string };
 
 /**
- * Mints a URL if Post Review has none, then creates the row. A URL Post Review minted earlier that
- * the server now refuses (left open over an hour, or retired as abandoned) is replaced once.
- * A refused or failed mint is not thrown: the post becomes a failed post, kept on the phone with
- * the reason, so the Upload failed banner can say why. Restrictions are thrown, as before, for
- * Post Review to show A-Restricted or LV-Suspended. Errors creating the row are thrown as before.
+ * Gets the member's upload URL from the ticket store (the one Post Review asked for, still running
+ * or already minted, else a new request), then creates the row. A Post Review URL the server now
+ * refuses as stale (left open over an hour, or retired as abandoned) is replaced once, unless it
+ * was already sent with a post: then it may be held by a row whose answer was lost, and replacing
+ * it could post the recording twice. A refused or failed request is not thrown: the post becomes
+ * a failed post, kept on the phone with the reason, so the Upload failed banner can say why.
+ * Restrictions are thrown, as before, for Post Review to show A-Restricted or LV-Suspended. Errors
+ * creating the row are thrown as before, and the URL stays in the store for the next Post.
  */
 export async function prepareUpload<Row>(args: {
-  ticket: UploadTicket | null;
-  mint: () => Promise<UploadTicket>;
+  tickets: TicketSource;
   create: (ticket: UploadTicket) => Promise<Row>;
 }): Promise<Prepared<Row>> {
-  const mintOrFail = async (): Promise<UploadTicket | { reason: string }> => {
+  const { tickets } = args;
+  const leaseOrFail = async () => {
     try {
-      return await args.mint();
+      return await tickets.get();
     } catch (e) {
       const reason = errorReason(e);
       if (isRestriction(reason)) throw e;
       return { reason };
     }
   };
+  const attempt = async (ticket: UploadTicket): Promise<Row> => {
+    tickets.sent(ticket);
+    const row = await args.create(ticket);
+    tickets.consume(ticket);
+    return row;
+  };
 
-  let ticket = args.ticket;
-  if (!ticket) {
-    const minted = await mintOrFail();
-    if ('reason' in minted) return { ok: false, reason: minted.reason };
-    ticket = minted;
+  const first = await leaseOrFail();
+  if ('reason' in first) return { ok: false, reason: first.reason };
+  try {
+    return { ok: true, ticket: first.ticket, row: await attempt(first.ticket) };
+  } catch (e) {
+    if (!STALE_TICKET.test(errorReason(e))) throw e;
+    tickets.drop(first.ticket);
+    if (!first.replaceable) throw e;
+  }
+  const fresh = await leaseOrFail();
+  if ('reason' in fresh) return { ok: false, reason: fresh.reason };
+  try {
+    return { ok: true, ticket: fresh.ticket, row: await attempt(fresh.ticket) };
+  } catch (e) {
+    if (STALE_TICKET.test(errorReason(e))) tickets.drop(fresh.ticket);
+    throw e;
+  }
+}
+
+/**
+ * The URL and row for a post that has no row yet (no URL could be had at Post), on Retry or when
+ * the connection returns. The URL is saved with the post before the row is created, so a failed
+ * attempt reuses it next time instead of minting another; one the server refuses as stale is
+ * forgotten, so the next attempt mints a new one.
+ */
+export async function ensureUploadRow<Post extends { responseId: string | null; uploadId: string; uploadUrl: string; uploadUrlExpiresAt: number }>(
+  post: Post,
+  deps: {
+    usable: (post: Post) => boolean;
+    mint: () => Promise<UploadTicket>;
+    create: (ticket: UploadTicket) => Promise<{ id: string }>;
+    save: (post: Post) => Promise<void>;
+    ttlMs: number;
+    now?: () => number;
+  },
+): Promise<Post> {
+  if (post.responseId) return post;
+  let current = post;
+  if (!current.uploadId || !current.uploadUrl || !deps.usable(current)) {
+    const minted = await deps.mint();
+    current = { ...current, uploadId: minted.uploadId, uploadUrl: minted.uploadUrl, uploadUrlExpiresAt: (deps.now ?? Date.now)() + deps.ttlMs };
+    await deps.save(current);
   }
   try {
-    return { ok: true, ticket, row: await args.create(ticket) };
+    const row = await deps.create({ uploadId: current.uploadId, uploadUrl: current.uploadUrl });
+    current = { ...current, responseId: row.id };
+    await deps.save(current);
+    return current;
   } catch (e) {
-    if (!args.ticket || !STALE_TICKET.test(errorReason(e))) throw e;
+    if (STALE_TICKET.test(errorReason(e))) {
+      const cleared = { ...current, uploadId: '', uploadUrl: '', uploadUrlExpiresAt: 0 };
+      await deps.save(cleared);
+    }
+    throw e;
   }
-  const fresh = await mintOrFail();
-  if ('reason' in fresh) return { ok: false, reason: fresh.reason };
-  return { ok: true, ticket: fresh, row: await args.create(fresh) };
+}
+
+/**
+ * One run at a time: while a run is in progress, further calls get that run's promise instead of
+ * starting another. Post Review's Post and the disclosure sheet's Post share one, so taps that
+ * land before the screen re-renders cannot submit twice.
+ */
+export function createGate(): (fn: () => Promise<void>) => Promise<void> {
+  let running: Promise<void> | null = null;
+  return (fn) => {
+    if (running) return running;
+    const run = (async () => {
+      try {
+        await fn();
+      } finally {
+        running = null;
+      }
+    })();
+    running = run;
+    return run;
+  };
+}
+
+/**
+ * Once per key: a second call with the same key gets the first call's promise. A call that throws
+ * is forgotten, so the same key can be tried again. Used so one recording is posted once.
+ */
+export function createOncePerKey(): <T>(key: string, fn: () => Promise<T>) => Promise<T> {
+  const calls = new Map<string, Promise<unknown>>();
+  return <T,>(key: string, fn: () => Promise<T>) => {
+    const existing = calls.get(key) as Promise<T> | undefined;
+    if (existing) return existing;
+    const call = fn();
+    calls.set(key, call);
+    call.catch(() => {
+      if (calls.get(key) === call) calls.delete(key);
+    });
+    return call;
+  };
 }
 
 /**

@@ -4,7 +4,7 @@
 // PR-Draft: a private first response for a suggestion in review, with "Save draft".
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,8 +18,10 @@ import { ReplyCard } from '@/ui/ReplyCard';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { usePosting } from '@/video/posting';
+import { createGate } from '@/video/postingFlow';
 import { getCurrentRecording, setCurrentRecording } from '@/video/recordingStore';
-import { deleteRecordingFiles, mintUpload, type UploadTicket } from '@/video/upload';
+import { deleteRecordingFiles } from '@/video/upload';
+import { uploadTickets } from '@/video/uploadTickets';
 
 const CAPTION_MAX = 150;
 
@@ -27,7 +29,8 @@ export default function ReviewScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const posting = usePosting();
-  const { state: sessionState, refresh } = useSession();
+  const { session, state: sessionState, refresh } = useSession();
+  const ownerId = session?.user.id ?? null;
   const current = getCurrentRecording();
   const [caption, setCaption] = useState('');
   const [editing, setEditing] = useState(false);
@@ -35,16 +38,14 @@ export default function ReviewScreen() {
   const [discardAsk, setDiscardAsk] = useState(false);
   const [disclosure, setDisclosure] = useState(false);
   const [busy, setBusy] = useState(false);
-  const ticket = useRef<UploadTicket | null>(null);
+  // Post and the disclosure sheet's Post run one at a time: taps before the re-render join the first.
+  const [gate] = useState(createGate);
 
-  // Mint the upload URL now, while the person reviews, so Post does not wait for it.
+  // Ask for the upload URL now, while the person reviews, so Post does not wait for it. Post uses
+  // this same request (or the URL it gave), even if it is still running: one URL per post.
   useEffect(() => {
-    void mintUpload()
-      .then((t) => {
-        ticket.current = t;
-      })
-      .catch((e) => console.warn('mint on review failed; Post will mint', e));
-  }, []);
+    if (ownerId) uploadTickets.prefetch(ownerId);
+  }, [ownerId]);
 
   useEffect(() => {
     if (!current) router.replace('/(tabs)');
@@ -67,10 +68,10 @@ export default function ReviewScreen() {
   };
 
   const submit = async () => {
-    if (busy) return;
+    if (!ownerId) return;
     setBusy(true);
     try {
-      await posting.post({ recording, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, ticket: ticket.current, replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined, draftFor });
+      await posting.post({ recording, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, tickets: uploadTickets.forOwner(ownerId), replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined, draftFor });
       setCurrentRecording(null);
       if (draftFor) router.dismissTo('/suggestions');
       else router.dismissTo('/(tabs)');
@@ -89,7 +90,7 @@ export default function ReviewScreen() {
     }
   };
 
-  const onPost = async () => {
+  const onPost = () => gate(async () => {
     if (busy) return;
     // A private draft is not a public video: no disclosure until it is published (C-Draft).
     if (draftFor) {
@@ -108,9 +109,10 @@ export default function ReviewScreen() {
       return;
     }
     await submit();
-  };
+  });
 
-  const onDisclosurePost = async () => {
+  const onDisclosurePost = () => gate(async () => {
+    if (busy) return;
     try {
       await acknowledgeDisclosure(replyTo ? 'reply' : 'response');
       setDisclosure(false);
@@ -118,7 +120,7 @@ export default function ReviewScreen() {
     } catch (e) {
       console.error('acknowledge_disclosure failed', e);
     }
-  };
+  });
 
   const localUri = recording.segments[0]?.uri;
 

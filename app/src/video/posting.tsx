@@ -9,7 +9,8 @@ import { isOnline, subscribeOnline } from '@/lib/connectivity';
 import { abandonResponse, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { loadPendingPost, savePendingPost } from './pendingPost';
 import { resumeState, uploadUrlUsable, type PendingPost } from './pendingPostState';
-import { errorReason, prepareUpload } from './postingFlow';
+import { createOncePerKey, ensureUploadRow, errorReason, prepareUpload } from './postingFlow';
+import type { TicketSource } from './ticketStore';
 import type { Recording } from './types';
 import { deleteRecordingFiles, mintUpload, putRecording, waitUntilLive, type UploadTicket } from './upload';
 
@@ -24,8 +25,10 @@ export type PostingState =
 
 type PostingContextValue = {
   state: PostingState;
-  /** Post is tapped: create the row (a response, or a video reply when replyTo is set), then upload. Resolves once the row exists. */
-  post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; ticket: UploadTicket | null; replyTo?: { id: string; name: string }; draftFor?: string }) => Promise<void>;
+  /** Post is tapped: create the row (a response, or a video reply when replyTo is set), then upload. Resolves once the row exists.
+   *  The upload URL comes from the member's ticket store (the one Post Review asked for). A recording is posted once: posting it
+   *  again gets the first call's promise, unless that call threw. */
+  post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; tickets: TicketSource; replyTo?: { id: string; name: string }; draftFor?: string }) => Promise<void>;
   retry: () => Promise<void>;
   /** Give up on a failed post: the recording is deleted from the phone. */
   discardFailed: () => Promise<void>;
@@ -48,6 +51,7 @@ function createRow(post: Pick<PendingPost, 'draftFor' | 'replyToId' | 'promptId'
 export function PostingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PostingState>({ kind: 'idle' });
   const running = useRef(false);
+  const [oncePerRecording] = useState(createOncePerKey);
 
   const persist = useCallback(async (post: PendingPost | null) => {
     await savePendingPost(post);
@@ -61,11 +65,18 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     try {
       if (!current.responseId) {
         // No URL could be had when Post was tapped (an upload limit, or no connection): get one now
-        // and create the row, as Post would have.
-        const fresh = await mintUpload();
-        const row = await createRow(current, fresh);
-        current = { ...current, responseId: row.id, uploadId: fresh.uploadId, uploadUrl: fresh.uploadUrl, uploadUrlExpiresAt: Date.now() + UPLOAD_URL_TTL_MS };
-        await persist(current);
+        // and create the row, as Post would have. The URL is saved first, so a failed attempt
+        // reuses it rather than minting another.
+        current = await ensureUploadRow(current, {
+          usable: (p) => uploadUrlUsable(p),
+          mint: mintUpload,
+          create: (t) => createRow(current, t),
+          save: async (p) => {
+            current = p;
+            await persist(p);
+          },
+          ttlMs: UPLOAD_URL_TTL_MS,
+        });
       } else if (!uploadUrlUsable(current)) {
         const fresh = await mintUpload();
         await retryResponseUpload(current.responseId, fresh.uploadId);
@@ -105,9 +116,10 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     });
   }, [run]);
 
-  const post = useCallback<PostingContextValue['post']>(async ({ recording, promptId, promptText, caption, ticket, replyTo, draftFor }) => {
+  const post = useCallback<PostingContextValue['post']>((args) => oncePerRecording(args.recording.id, async () => {
+    const { recording, promptId, promptText, caption, tickets, replyTo, draftFor } = args;
     const target = { draftFor: draftFor ?? null, replyToId: replyTo?.id ?? null, promptId, caption, recording };
-    const prepared = await prepareUpload({ ticket, mint: mintUpload, create: (t) => createRow(target, t) });
+    const prepared = await prepareUpload({ tickets, create: (t) => createRow(target, t) });
     if (!prepared.ok) {
       // No upload URL: never a silent Post. Offline, it waits for the connection like any post
       // tapped offline (A-Offline; Nemat, 9 Oct). Otherwise the recording is kept on the phone and
@@ -164,7 +176,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     }
     await persist(pending);
     void run(pending);
-  }, [persist, run]);
+  }), [persist, run, oncePerRecording]);
 
   // The connection comes back while a post waits: start it by itself.
   useEffect(() => {

@@ -23,6 +23,8 @@ run on a device), **partly verified** (some of the check has run on a device; th
 | Post refused while creating the row (security stage 2 follow-up) | open | When the server refuses the post itself for a reason other than a restriction or a stale upload URL (for example `already_responded`, `prompt_not_found`, `video_not_found`), or the connection drops at that step, Post Review still only logs it: Post does nothing visible. Pre-existing; left out of stage 2 by decision (Nemat, 12 Oct). Needs a decided state or copy. | Each refusal shows something on Post Review or Home; nothing is silent. |
 | Restricted on Retry (security stage 2 follow-up) | open | A post that never got a row (an upload limit at Post) and is retried after the member has been restricted or suspended shows the Upload failed banner's generic line, not A-Restricted or LV-Suspended. Rare; left out of stage 2 by decision (Nemat, 12 Oct). | Retry by a restricted member opens A-Restricted; by a suspended one, LV-Suspended. |
 | Deleted reply stays in Me → Replies (seen 12 Oct, stage 3 step 4A) | open | After Nemat deleted a test video reply on the iPhone (founder build `ede68ed`), its card stayed in Me → Replies; opening it showed "This video is not available."; it was gone only after the app restarted. The server is right (`profile_replies` no longer returns it, `get_video` answers `unavailable`); the app does not refresh the profile's lists after `delete_video` (only Home is marked dirty). Not fixed during the security verification (Nemat, 12 Oct). | Delete your own reply (and response): it leaves Me → Replies (and Responses) at once, without a restart. |
+| Duplicate upload URLs (seen 12 Oct step 4A and 13 Oct CP0) | fixed locally 13 Oct, not built | Post Review's URL request raced Post's; double taps and the disclosure sheet's Post could submit twice; Retry minted on each attempt. App-only fix in section 16 (one URL per member at a time, single-flight Post, once per recording). Needs review, a founder build and the device checks in section 16. | On the iPhone: Post at once, double-tap, the disclosure Post and two re-records each leave exactly one `video_uploads` row per post. |
+| iOS uploads run in a background `URLSession` (SPEC.md Sections 2 and 19) | needs decision | `putRecording` uses expo-file-system's default `sessionType` (`background`), so an upload can continue after the app closes, against the spec's non-goal; Retry after reopening can PUT again or leave an orphan asset. Proposed: `sessionType: 'foreground'` (section 16). Not changed. | Decided by Nemat; if changed, a device test of going to the Home screen and force-quitting mid-upload shows Retry and one upload, no orphan. |
 | App icon | needs input (branding) | The Expo template icon is development-only and must not go to outside testers or the stores (Nemat, 9 Oct). Replaced once the name and brand are approved (section 5). | The icon in `app/assets` is the approved one before any outside build. |
 
 Everything else in SPEC.md Sections 3 to 21 is built. No feature phase remains; Nemat asked for no
@@ -3474,6 +3476,176 @@ Shortcut Beta 2 assets, spike 7, so 9 of the free plan's 10 if the cap is accoun
 
 *Next* (each needs Nemat's separate approval): C1, C2, E1 to E3 in the plan above. Open from B1:
 the restore notice and T1's empty player before a new id exists.
+
+## 16. Duplicate upload URLs and background uploads (13 Oct; built and tested locally, not deployed)
+
+Asked for by Nemat after Tests A and B: fix the upload-URL duplication seen in step 4A (12 Oct,
+ledger `72561473…`) and in CP0 (13 Oct, ledger `352be921…`) before Tests C1 and C2. Investigate the
+iOS background upload, without changing it.
+
+Authorised: local implementation and testing only.
+- No hosted query, deployment, Mux call, minted URL, video or switch change.
+- App code only; no server or migration change.
+- No board, copy or visual state changed.
+
+**Reproduced first** (a scratch Jest test on the unchanged code, with mints answering only when the
+test released them; not committed):
+1. **The CP0 race.** Post Review mints on open and keeps the URL only when Mux answers. A Post
+   tapped before then passes no URL, and `prepareUpload` mints a second one. Result: 2 mints, the
+   first URL left unused (CP0's stray upload).
+2. **Double tap.** `busy` is React state, so two taps from one render both submit.
+   - The second sends the same URL and is refused as `upload_already_used`, which counts as a
+     stale URL, so it mints a new one.
+   - Result: 2 mints and 2 rows for one recording: a second video reply, or `already_responded`
+     for a response.
+   - The disclosure sheet's Post had no guard at all.
+3. **Lost answer.** Post creates the row, but the answer is lost (the connection drops). Post again
+   gets `upload_already_used` and silently mints a replacement and a second row. The first row
+   stays `processing`, invisible, with no bytes.
+4. **Retry with no row** (by reading `posting.tsx`): a post that never got a row minted a new URL
+   on every Retry, because the URL was not saved before the row was created.
+
+**Fix** (app only):
+- **`app/src/video/ticketStore.ts` (new, pure):** one upload URL at a time for the signed-in member.
+  - `prefetch` starts a request unless one is running or a usable URL is held.
+  - `get` returns the held URL, joins the running request, or starts one. Concurrent callers share
+    one request.
+  - The URL is scoped to the member (another member never gets it) and is handed out for 50
+    minutes (the server's slot and Mux's URL last 60).
+  - It leaves the store when a row holds it (`consume`) or the server refuses it (`drop`).
+  - A failed request is forgotten, so the next `get` asks again; a prefetch failure nobody waits
+    for is not an unhandled rejection.
+- **`app/src/video/uploadTickets.ts` (new):** the app's one store, minting through the existing
+  `mintUpload`.
+- **`prepareUpload` (`postingFlow.ts`)** takes the member's ticket source instead of a raw URL.
+  - Post, and the disclosure sheet's Post, use the request Post Review started, even while it is
+    still running.
+  - A Post Review URL refused as stale is replaced once, as before. **A URL already sent with a
+    post is never replaced automatically** (case 3): it may be held by a row whose answer was
+    lost.
+  - A network failure keeps the URL for the next Post, instead of minting.
+  - Limits, refusals and restrictions behave as before (failed post with the reason; A-Restricted
+    and LV-Suspended thrown).
+- **`createGate` (`postingFlow.ts`), used by Post Review:** Post and the disclosure sheet's Post run
+  one at a time, and taps before the re-render join the first run.
+- **`createOncePerKey` (`postingFlow.ts`), used by the posting provider:** a recording is posted
+  once. Posting the same recording again gets the first call's promise, unless that call threw.
+- **`ensureUploadRow` (`postingFlow.ts`), used by Retry for a post with no row:** the URL is saved
+  with the post before the row is created, so a failed attempt reuses it. One refused as stale is
+  cleared, so the next attempt mints.
+- **`review.tsx`:** Post Review prefetches through the store for `session.user.id`, instead of
+  minting into a ref.
+- **Re-record, Discard and leaving Post Review:** a URL nobody posted with stays for the member's
+  next take, so re-recording no longer leaves an unused URL at Mux each time. The store is in
+  memory, so an app restart starts afresh.
+
+**Preserved:**
+- **Server checks:** every URL is still minted by `mux-create-upload` (ownership, reservation,
+  limits, the stage 2 retire of an abandoned URL) and claimed once by `post_response`,
+  `post_reply` or `post_draft`.
+- **Abandoned uploads:** `abandon_response`, Discard and the Upload failed banner are unchanged.
+
+**Tests (all local):**
+- **App, Jest: 123/123** (96 before):
+  - `uploadRace.test.ts`, new, 24 tests: the CP0 race; the disclosure path; shared slow answers;
+    StrictMode double prefetch; rapid taps (one `prepareUpload`, one mint, one row); the gate
+    reopening after success and failure; once per recording; failed prefetch while Post waits (one
+    request, failed post) and before Post (one more request); restrictions; re-record after and
+    during the request; Post Review unmounted before the answer; a new URL after a post; the
+    50-minute limit; member scoping; Retry's saved URL (reuse, stale clear, old URL, a row already
+    there, refusal).
+  - `postingFlow.test.ts`: the 11 old `prepareUpload` cases ported to the store, plus 3 new: the
+    posted URL leaves the store; lost answer (no automatic replacement); a network failure keeps
+    the URL.
+- **Typecheck and lint:** `tsc --noEmit` clean; `eslint src` clean.
+- **Server (unchanged code), against the local stack `shortcut-s3r`** (17 migrations, the same as
+  this branch; Mux stubbed):
+  - Deno unit 32/32;
+  - `uploads_integration_test` 32/32;
+  - `integration_test` 20/20;
+  - `cleanup_integration_test` 28/28.
+- **`scripts/auth-integration.mjs`: 36/37.** The one failure is "auth-signin-method reports google
+  (E-Linked)", HTTP 503: that stack runs no Edge Functions runtime, so the function was not served.
+  It is not related to this change and was not re-run with the function served.
+- **Not run:** a component render of Post Review (no React Native testing library is a dependency;
+  none was added). The screen's logic is in the pure helpers above. The UI behaviour needs a device
+  check.
+
+**Background upload on iOS (investigated; not changed).**
+- **The setting:** `putRecording` (`app/src/video/upload.ts`) calls expo-file-system 57.0.7's
+  `File.createUploadTask` without `sessionType`, so iOS uses the default, **`background`**: a
+  `URLSessionConfiguration.background` session with `sessionSendsLaunchEvents` true and
+  `isDiscretionary` false (`NetworkTaskSessionManager`). The transfer is run by the system's
+  `nsurlsessiond`, outside the app. Android ignores the option: OkHttp in the app's process.
+- **The conflict:** SPEC.md Section 2 lists "Background uploads that survive closing the app" as a
+  non-goal, and Section 19 says "There is no background upload that survives closing the app."
+- **What happens if the app is closed during a transfer (iOS; from Apple's documented
+  background-session behaviour and the library code; not tried on a device):**
+  - *Sent to the background, or suspended:* the upload continues. The app's JS promise and progress
+    resume only if the app was not terminated.
+  - *Terminated by the system while in the background:* the upload continues in `nsurlsessiond`.
+    iOS may relaunch the app in the background when it ends. The new JS runtime has no task for it
+    (the library says the JS task is not restored), so the app learns nothing.
+  - *Force-quit by the person (swiped away):* iOS cancels the session's transfers. Nothing more is
+    sent.
+  - *Android, any close:* the upload stops with the process.
+- **Duplicate transfers after reopening:** `resumeState` turns a post stored as `uploading` into
+  Upload failed (`interrupted`), and Retry PUTs the file again. Two cases:
+  - *The URL is under 55 minutes old:* Retry PUTs to the **same** URL, possibly while the first
+    transfer is still running in `nsurlsessiond`, or after it finished. What Mux does with a second
+    PUT to the same direct-upload URL (rejected, ignored, or replacing) is **not verified**. If the
+    first transfer had finished, the video may already be live while the banner says Upload failed.
+  - *The URL is older (`retry_response_upload` mints a new one):* a first transfer that finishes
+    later still makes an asset at Mux for the old upload. The row now points at the new upload, so
+    that asset is an **orphan**: one more asset against the free plan's 10, until the daily sweep
+    queues it (a day old) and clean-up deletes it.
+- **Proposed correction (not made; needs Nemat's review):**
+  - Pass `sessionType: 'foreground'` in `putRecording`: a default `URLSession` in the app's process,
+    so the upload stops when iOS suspends or ends the app, as on Android and as the spec says.
+  - The existing rule stays: a post stored as `uploading` comes back as Upload failed with Retry,
+    and the recording stays on the phone.
+  - Cost: switching apps mid-upload interrupts it, and the person taps Retry. That is what PR-Posting
+    asks for ("Keep Shortcut open until it's done.").
+  - It would also make the progress bar report from the app's own session, which may explain CP0's
+    missing percentage.
+  - Needs: a new build, then a device test (start a slow upload with Network Link Conditioner, go
+    to the Home screen, come back; force-quit mid-upload and reopen; check the hosted ledger and
+    Mux for one upload and no orphan asset). Mux's answer to a repeated PUT on a direct-upload URL
+    should be confirmed in that test or with Mux.
+
+**Residual (not fixed here):**
+- *A lost answer followed by a deliberate second Post:* the URL already sent is not replaced
+  automatically (the person's next tap gets `upload_already_used`), and the next Post after that
+  mints a new URL. One recording can still leave one invisible `processing` row with no bytes,
+  which happens only if the connection drops after the server committed. The real fix is
+  server-side: the server would hand back the member's own row for a URL it already claimed for
+  them. That is a migration with its own review; not done.
+- The server comment in `mux-create-upload` ("each re-record leaves an unused URL behind") is
+  out of date for the new app build. Left unchanged so the deployed function's source matches.
+
+**Recommended deployment plan** (each step needs Nemat's approval):
+1. **Review** the diff (app only: `review.tsx`, `posting.tsx`, `postingFlow.ts`, `ticketStore.ts`,
+   `uploadTickets.ts`, two test files). No Supabase deployment, migration, Edge Function or secret
+   change is needed.
+2. **Before installing the new build, decide Test C1.** C1 opened Post Review 4 times to reach the
+   stage 2 retire. With this fix, reopening Post Review reuses the unused URL, so C1 no longer
+   reaches it that way. Either:
+   - run C1 on the build installed now (`ede68ed`) first; or
+   - with the new build, reach it by killing and reopening the app between Post Review visits (the
+     store is in memory, so each launch mints once).
+3. **Build** the founder iPhone build (`app/scripts/founder-ios.sh`) from the reviewed commit and
+   install it.
+4. **Device checks, under their own approval** (each real post mints one URL and creates one Mux
+   asset; Shortcut Beta is at 2, account-wide 9 of 10 if the cap is account-wide):
+   - tap Post the instant Post Review opens;
+   - double-tap Post, and Post on the disclosure sheet (needs an account that has not acknowledged
+     it);
+   - Re-record twice, then Post.
+
+   Each must leave exactly one new `video_uploads` row for the post (read-only hosted query) and
+   one asset. Also: with no connection at Post, then Retry, the same `upload_id` is kept across the
+   failed attempts.
+5. **The background-session decision** (above) is separate: a later change and build.
 
 ## Gates
 
