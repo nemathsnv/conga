@@ -1068,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct, not deployed)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct; R0 read-only hosted preflight 13 Oct; not deployed)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -2148,6 +2148,241 @@ data as after 4B):
 - B1 expects the retention deletion closed.
 - E3 no longer waits on G2.
 - The asset budget is unchanged: 1 new asset.
+
+**R0 hosted preflight (13 Oct, 01:55 to 02:04 UTC; read-only; nothing deployed or written).**
+Approved by Nemat as a read-only preflight only. From `6739b3c` plus the fingerprint script
+(clean tree).
+
+*Method:*
+- SQL through the Management API (`supabase db query --linked --project-ref picvoavfxnajfjkqawju`,
+  from a scratch folder), each query inside `begin transaction read only … rollback`
+  (`transaction_read_only` = `on` confirmed).
+- Edge Functions and secrets with `supabase functions list` / `secrets list` / `functions download`.
+- `supabase db push --dry-run` from a `git archive` of `HEAD`.
+- Mux `GET`s only, with the Shortcut Beta token, and the spike token for the spike count. No value
+  was printed.
+
+*Side effects:* the CLI's temporary login role was refreshed (as on every linked command); link
+files were written in the scratch folders and deleted afterwards. Nothing else.
+
+*Schema fingerprint, rebuilt.* The script used for the earlier fingerprints was not kept, so it was
+rebuilt from their description and committed as `scripts/schema-fingerprint.sql`: functions,
+tables, columns, constraints, indexes, triggers (public, `auth.users`, `auth.identities`),
+policies, cron jobs, extensions, schema and default privileges, and the `authenticator` setting.
+- It reproduces the recorded counts exactly: **657** objects on the stage 2 schema and **741** on
+  stage 3, with the recorded differences (+3 tables, +21 functions, +30 columns, +17 constraints,
+  +7 indexes, +2 triggers, +4 cron jobs).
+- Its md5 values differ from the old script's (`e7d34c92…`, `8d15eb8e…`) and cannot be compared
+  with them. The comparison that matters is line for line, against a local stack built from the
+  same migrations.
+
+*1. Hosted baseline, every item as expected:*
+- **Migrations:** 16, latest `20261012000200`.
+- **Schema:** fingerprint **741 objects, line for line identical to the local stage 3 schema**
+  (md5 of the listing `ca21f2cd8c146f7f65205bdd6e08fe6a`).
+- **Pending:** `db push --dry-run` from a clean copy of `HEAD` lists exactly
+  `20261013000100_cleanup_reliability.sql` (md5 `7d91d842572978b0143580daf32b6195`,
+  byte-identical to the tested file); seeds `[]`, roles `[]`.
+- **Switches:** database `off` (17:16:21 12 Oct, "step 4B canary deletion finished"). 11 function
+  secrets with **no `MUX_CLEANUP_MODE`**, so the worker's own switch is `dry_run`, never `live`.
+  `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` match `.env.mux-hosted` by digest; `MUX_CLEANUP_KEY`
+  matches `.env.mux-cleanup` and the Vault `mux_cleanup_key`.
+- **Queue:** one job, the canary's (`done`, `{"outcome": "deleted"}`, 1 attempt, owner and response
+  cleared). Overview: nothing due, stuck, failed, in review or in dry run. 0 purge failures.
+- **Cron:** the 7 jobs, all active, 0 failed runs ever recorded. `mux-cleanup` 625 runs in 24 h.
+  `mux-sweep`, `prune-moderation-records` and `prune-mux-cleanup-jobs` have **never run** (first
+  runs due 13 Oct 03:30, 03:40 and 04:45 UTC). `purge-deleted-accounts` last ran 12 Oct 03:15.
+- **pg_net:** queue 0; 3 stored answers, the three 200s of 12 Oct.
+- **Vault:** the same two secrets, created 15:49:18 12 Oct, unchanged; the URL's digest is that of
+  `https://picvoavfxnajfjkqawju.supabase.co/functions/v1/mux-cleanup`.
+- **Edge Functions**, versions and last deploys exactly as at the end of 4B:
+
+  | Function | Version | Last deployed (UTC) |
+  |---|---|---|
+  | `auth-signin-method` | v6 | 10 Oct 04:52 |
+  | `mux-create-upload` | v6 | 12 Oct 10:40 |
+  | `mux-cleanup` | v3 | 12 Oct 15:47 |
+  | `mux-webhook` | v8 | 12 Oct 15:49 |
+  | `mux-upload-status` | v7 | 12 Oct 15:50 |
+
+  All `ACTIVE`, `verify_jwt` false. Bundle hashes recorded: `mux-cleanup` `2f53c7a7…`,
+  `mux-webhook` `e4679407…`, `mux-upload-status` `aaa0aab6…`, `mux-create-upload` `bd0a6937…`,
+  `auth-signin-method` `e4894bcb…`.
+  **Not byte-compared this time:** CLI 2.119's `functions download` returns transpiled JavaScript
+  (types, comments and blank lines removed), so sources can no longer be compared byte for byte.
+  The deployed `mux-cleanup` was spot-checked: it has the change guard and the ownership checks,
+  and not the G1 plan code, as expected.
+- **Data:**
+  - 1 auth user and account (not deleted); responses: 1 live, 1 deleted; ledger: 2 claimed,
+    1 active (the expired second URL); 0 open upload URLs.
+  - 0 comments, reports, moderation actions, review requests or tombstones; push outbox 0 unsent;
+    analytics 47.
+  - **Founder:** response `live`, `md5(row_to_json)` `c9918f8241a2c45eefb106b5d0ec0a8f`,
+    `md5(r::text)` `b34c6351…`; ledger `claimed`, `md5(u::text)`
+    `9726bb8fdf8d9eb0cb759d13ce59c8b6`; author = ledger owner. All identical to the recorded values.
+    `web_video` gives `live` with playback `8UqSC…`.
+  - **Canary:** reply still `deleted`, asset and playback id cleared, `md5(row_to_json)`
+    `ee0ba987…` (as after 4B); `web_video` `unavailable`.
+  - Per-table hashes recorded for the post-deployment comparison (scratch `tables_before.json`;
+    for example `responses` 2 `b64c9c284818`, `video_uploads` 3 `4ddb9601382c`, `mux_cleanup_jobs`
+    1 `e7c667618890`).
+- **Mux (Shortcut Beta):**
+  - 1 asset, the founder's: `ready`, 9.91 s, passthrough the founder, upload `ka5YEhF…`, one
+    public playback id `8UqSC…6JU`; asset `GET` 200, HLS **200**.
+  - Canary asset **404**, canary HLS **404** (`no-cache, no-store`).
+  - 3 uploads: the canary's and the founder's `asset_created`; `Tm01xbK…` now `timed_out`, as
+    expected. 0 live streams.
+  - Spike environment: 7 assets, 25 uploads. 8 assets in all, if the free plan's cap is
+    account-wide.
+
+*2. The forward migration against hosted.* The hosted schema is the local stage 3 schema (above),
+so the local result of applying `20261013000100` is the expected hosted result:
+- **Expected fingerprint after: 759 objects** (md5 of the listing
+  `10acc19ffaef4d3ebe549d37b2c2199c`, this script): 244 columns, 162 constraints, 8 cron jobs, 6
+  default privileges, 7 extensions, 187 functions, 70 indexes, 24 policies, 1 role setting, 1
+  schema, 30 tables, 19 triggers. Of these, **737 unchanged**.
+- **4 changed** (functions, same signatures, owners, `SECURITY DEFINER`, `search_path` and grants):
+  `mod_restore_video(uuid,text,text,text)`, `mux_forget_video(uuid,text,text,uuid,text)`,
+  `mux_cleanup_sweep(jsonb,integer,boolean)`, `run_mux_cleanup(text)`.
+- **18 added:**
+  - Table `mux_cleanup_runs`: RLS on, no policy; `anon` and `authenticated` revoked;
+    `service_role` keeps the default grant, like `mux_cleanup_jobs`.
+  - Its 9 columns, 2 constraints (primary key, mode check) and 2 indexes.
+  - Functions `mux_cleanup_health()` (`stable`, `SECURITY DEFINER`, executable by `service_role`
+    only), `mux_cleanup_collect_runs()` and `mux_cleanup_try_jsonb(text)` (executable by no API
+    role; the schedule runs as `postgres`).
+  - Cron `mux-cleanup-monitor` (`*/10 * * * *`, `select public.mux_cleanup_collect_runs()`,
+    user `postgres`).
+- **Removed:** nothing. No trigger, policy, extension or privilege outside the new objects
+  changes.
+- **No user data is changed:** the migration has no `insert`, `update` or `delete` on existing
+  tables (only `create`, `create or replace`, one `alter table … enable row level security` on the
+  new table, `revoke` / `grant`, and `cron.schedule`). Rehearsed with hosted-like data: every
+  `public` table and `auth.users` hash identical before and after, only `cron.job` 7 → 8.
+
+*3. Monitoring.*
+- **While clean-up is `off`, the monitor writes nothing to `public`.** `run_mux_cleanup` returns
+  before any request, so `mux_cleanup_runs` stays empty, and the collector updates and deletes
+  nothing.
+- **Its only writes** are pg_cron's own run log: one `cron.job_run_details` row per run, 144 a day.
+- **Permissions on hosted** (checked): `postgres` (not a superuser; owner of every function and of
+  every cron job) can read `cron.job`, `cron.job_run_details` and `net._http_response`, and can
+  call `net.http_post` and `cron.schedule`. pg_net 0.20.4 has the columns the collector reads
+  (`id, status_code, content, timed_out, error_msg, created`). pg_cron 1.6.4 has `log_run` on.
+- **Retention and growth:**
+  - `mux_cleanup_runs` holds one row per worker request (only when jobs are due, plus one sweep a
+    day), pruned at 14 days. At most about 20,000 rows if jobs were due every minute; tens in normal
+    use.
+  - **`cron.job_run_details` is never pruned on hosted:** 6,530 rows (1.1 MB) since 9 Oct, about
+    2,200 a day before the monitor, 144 more with it. The health check needs 26 hours of history,
+    so this is ample; but it grows by about 800,000 rows a year, and the health check's per-job
+    lookups scan it (its only index is the run id).
+  - Pruning cron history (for example older than 30 days) is a separate, small decision; not
+    needed before R0.
+- **pg_net retention:** `pg_net.ttl` is `6 hours`, and the three answers from 12 Oct are still
+  there (expiry is lazy, so 6 hours is a minimum, not an exact time). Collection every 10 minutes
+  and "no answer" after 15 minutes sit well inside it.
+- **Failure handling:**
+  - A collector error fails that cron run, which the health check reports (`schedule_failing`,
+    alert); the next run retries, because nothing is marked collected until copied.
+  - A body that is not JSON is stored with no counts; a request never answered becomes
+    `no_response` (warn).
+  - The health check itself only reads, so it cannot break anything.
+- **Sensitive data:**
+  - Kept from the worker's answer: its `ok` flag and a fixed list of scalar counts and short
+    strings (`mode`, `claimed`, `done`, …, `listError`); never arrays, so no `would_queue` or
+    `would_review` asset ids; no headers; no request body (so not the key).
+  - pg_net's `error_msg` (at most 500 characters) is a transport error such as "couldn't
+    connect", which can name the worker's URL (not secret).
+  - The table is readable only by the service role.
+  - The health check returns counts, times, schedule names and thresholds: no Mux, playback or
+    member id.
+- **Expected health check right after R0:** `warn`, not `alert`. The never-run schedules
+  (`mux-sweep` and the two prunes, until 04:45 UTC on 13 Oct; the monitor, until its first tick
+  within 10 minutes) show as "has not run yet". `purge-deleted-accounts` is within its 26 hours if
+  the 03:15 run happens. With the switch `off` there is no backlog alert and no sweep warning.
+  Deploying after 05:00 UTC leaves only the monitor's warning, for at most 10 minutes.
+
+*4. Deployment compatibility* (tested locally on `shortcut-s3r`):
+- **Interfaces unchanged:**
+  - The worker's RPCs (`mux_cleanup_claim`, `mux_cleanup_check`, `mux_cleanup_finish`,
+    `mux_cleanup_overview`, `mux_cleanup_sweep`) keep their signatures and grants.
+  - `mux_cleanup_sweep`'s answer only gains `held` and `unresolved` when non-zero; the old worker
+    passes the answer through, and no reader parses it.
+  - `run_mux_cleanup` calls the worker with the same URL, body and Vault key, so authentication
+    is unchanged.
+  - The app's RPCs (`delete_video`, `abandon_response`, `discard_draft`, `post_draft`,
+    `retry_response_upload`) and the moderation functions keep their signatures and grants.
+  - `mark_response_live` (`mux-webhook`, `mux-upload-status`) and the stage 2 upload functions
+    (`mux-create-upload`) are untouched.
+- **Old worker (the deployed `faf1a41` code) on the new schema:** its own stage 3 integration
+  tests **24/24**, and its scheduler test **12/12** through pg_cron → pg_net → the real Edge runtime
+  serving the old worker. The new run record captured those calls (15 requests, 12 of them 2xx; the
+  others are the tests' deliberate 401 and unreachable cases).
+- **New worker on the old schema:** 25 of the 28 stage 3 tests pass (all 24 old ones and G1). The
+  3 that fail are G2 and G5 behaviour, which lives in the migration, not the worker.
+- **So neither order breaks anything.** There is no window in which either worker version
+  misprocesses work: the worker only changes what a dry run records, and with the switch `off`
+  nothing is leased or called anyway.
+- **Recommended order: the migration first, then the worker.** The database fixes take effect as
+  soon as they exist. The worker step is then small and independently reversible, and the order
+  matches the rehearsals.
+
+*5. Deployment plan for R0 (needs Nemat's approval; two steps, each stoppable):*
+
+- **Pre-deployment checks** (read-only, immediately before):
+  - Fingerprint 741, line for line the stage 3 listing.
+  - `db push --dry-run` from a fresh `git archive` lists exactly `20261013000100` (md5
+    `7d91d842…`), no seeds or roles.
+  - Switch `off`; no `MUX_CLEANUP_MODE`.
+  - Queue exactly the canary's `done` job; 0 failures; the 7 cron jobs, 0 failures.
+  - Founder hashes as above, `web_video` `live`, HLS 200.
+  - Functions, secrets (names and digests) and Vault as above.
+  - Mux: the founder's asset alone; spike 7.
+- **Step A, migration:** `supabase db push --linked --project-ref picvoavfxnajfjkqawju --workdir
+  <scratch> --yes`. Immediately after:
+  - Fingerprint **759**, line for line the local listing (`10acc19f…`); 17 migrations.
+  - Switch still `off`; no `MUX_CLEANUP_MODE`; queue unchanged (1 `done` job).
+  - Every table hash and `auth.users` as before; `mux_cleanup_runs` empty.
+  - `cron.job` 8, the new one active; founder hashes, `web_video` `live`, HLS 200.
+  - Then `select public.mux_cleanup_health()`: `warn` with only "has not run yet" lines.
+  - After the next 10-minute tick: `mux-cleanup-monitor` succeeded and `mux_cleanup_runs` is
+    still empty.
+- **Step B, worker:** `supabase functions deploy mux-cleanup --no-verify-jwt --project-ref
+  picvoavfxnajfjkqawju`, from a `git archive` of `HEAD`'s `supabase/` folder. No secret is changed,
+  so only `mux-cleanup` moves (v3 → v4, new bundle hash); the other four keep their versions and
+  bundles. Immediately after:
+  - The 405 and 401 answers as in step 2 of the earlier rollout.
+  - Optionally one keyed `drain` with the switch `off`: `{"ok": true, "mode": "off", "claimed":
+    0}`, with no Mux call possible.
+  - Founder HLS 200; Mux inventory unchanged; health as after step A.
+- **Throughout:** the database switch stays `off`, `MUX_CLEANUP_MODE` stays unset, and no job is
+  created. Neither step calls Mux, and the founder's video keeps playing (checked before, between
+  and after).
+- **Stop at once, and do not continue to the next step, if:**
+  - the dry run lists anything else, or the push errors;
+  - the post-migration fingerprint differs from the local listing in any line;
+  - any existing table hash, the founder's row, its ledger row or its HLS changes;
+  - the switch is anything but `off`, or `MUX_CLEANUP_MODE` appears;
+  - a job appears;
+  - `mux_cleanup_runs` gains rows while `off`;
+  - the health check errors or reports `alert`;
+  - a cron run fails;
+  - the function deploy changes any function but `mux-cleanup`;
+  - the Mux inventory changes.
+- **Rollback limitations:**
+  - **Step A:** `supabase/rollback/20261013000100_cleanup_reliability.down.sql` as a new forward
+    migration. It never refuses, and was rehearsed to give a `public` schema and data identical to
+    stage 3. It drops `mux_cleanup_runs` with whatever it recorded. It cannot reopen jobs a
+    restore closed, or delay deletions an author's deletion made due; neither exists on hosted
+    today.
+  - **Step B:** redeploy `mux-cleanup` from `faf1a41`. The database accepts either version.
+  - **Neither** rollback touches the stage 3 rollback's own preconditions: no tombstone or
+    anonymised record exists, and R0 creates none.
+
+*Not checked in this preflight:* the Edge Function, gateway and Postgres logs (Dashboard sign-in
+needed); a byte-for-byte comparison of deployed function sources (see above); the Mux plan's
+cap (still to confirm on Billing).
 
 ## Gates
 
