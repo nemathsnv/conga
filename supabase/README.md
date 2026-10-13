@@ -72,11 +72,11 @@ and done by the `mux-cleanup` Edge Function:
 |---|---|
 | An author deletes or abandons a video, or replaces a draft or an upload | The asset is deleted (or the upload cancelled, if Mux has no asset yet) |
 | A moderator removes a video | Public playback is deleted now; the asset is deleted 30 days after the case closes (the removal, or the review decision; a pending review keeps it) |
-| A moderator restores it (or a review reverses it) | A new public playback id, while the asset is kept |
+| A moderator restores it (or a review reverses it) | A new public playback id, while the asset is kept; the removal's retention ends, so a later deletion by the author is immediate |
 | An account is deleted / restored by signing in | Playback off for all its videos / back on |
 | The purge (day 30) | Every asset of the account is deleted; a removed video keeps its retention |
 | A ready event for an upload no video took, or for a deleted video | The asset is deleted (an unused URL only once it has expired) |
-| The daily sweep finds an asset nothing uses | Deleted if the ledger proves whose it is; otherwise listed for review, never touched |
+| The daily sweep finds an asset nothing uses | Deleted if the ledger proves whose it is; otherwise listed for review, never touched. Assets with a failed job, or of a removed video whose review is pending, are left alone (counted `unresolved` and `held`) |
 
 Before any change the worker reads the object at Mux and checks that its passthrough and upload id
 are the recorded owner's, then asks the database again (`mux_cleanup_check`) immediately before
@@ -119,12 +119,22 @@ select public.mux_cleanup_set_mode('live', '<who>');
 select public.mux_cleanup_set_mode('off', '<who>');       -- stops it at once, at any time
 ```
 
-What the queue is doing, and retrying a failed job (service role, SQL editor):
+What the queue is doing, whether clean-up is healthy, and retrying a failed job (service role, SQL
+editor):
 
 ```sql
-select public.mux_cleanup_overview();      -- counts, due, stuck, failed, review, purge failures
+select public.mux_cleanup_overview();      -- counts, due, stuck, failed, review, purge failures, dry-run plans
+select public.mux_cleanup_health();        -- ok / warn / alert, with the reasons and thresholds (reads only)
 select public.mux_cleanup_retry('<job id>');
 ```
+
+A dry-run plan says what a live run would do: for playback, `direction` `revoke`, `restore` or
+`keep`, the asset and the playback ids involved; for a deletion or a cancellation, its asset or
+upload. The function log shortens playback ids. `mux_cleanup_health()` checks failed and stuck
+jobs, the backlog, the schedules (`cron.job_run_details`) and the worker's answers: every request
+`run_mux_cleanup` makes is recorded in `mux_cleanup_runs`, and the `mux-cleanup-monitor` schedule
+(every 10 minutes) copies pg_net's answer there (counts only) before pg_net discards it. Nothing is
+sent anywhere; see `docs/BETA-READINESS.md` section 15 for the thresholds and the proposed alerts.
 
 Locally, `scripts/scheduler-integration.sh` runs the whole scheduled path (pg_cron, pg_net, the
 function in the local Edge runtime) against a fake Mux; `MUX_API_BASE` points the function at the

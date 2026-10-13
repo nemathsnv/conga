@@ -1068,7 +1068,7 @@ videos stay playable at Mux; errored assets stay `processing`; direct reads of `
 `follows` and `comments` (section 13). (Deleted videos at Mux: built locally in stage 3, section
 15; not deployed.)
 
-## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan drafted 13 Oct, not run)
+## 15. Security stage 3: video deletion and the account purge (built 12 Oct; database migration deployed, worker configured, a first dry run, a canary dry run against real Mux and the first real Mux deletion (the canary) 12 Oct, Nemat approved each; clean-up off; remaining-operations test plan accepted 13 Oct; reliability fixes G1, G2, G5, G6 built locally 13 Oct, not deployed)
 
 Branch `claude/video-deletion-account-purge-d2b8ee`, on top of the deployed stage 2 head
 (`5fabfaf`). Architecture accepted for continued local development (Nemat, 12 Oct); **hosted
@@ -1732,14 +1732,14 @@ web (list assets, free plan). Nothing here is approved; each checkpoint needs Ne
 
 *Audit findings (by reading; G2 and G5 not reproduced yet):*
 
-- **G1, dry-run plans of playback jobs are too thin to approve from.** A `sync_playback` dry run
+- **G1, dry-run plans of playback jobs are too thin to approve from.** *(Fixed locally 13 Oct, below.)* A `sync_playback` dry run
   records only `{"would": {"act": "sync"}}`: the same for a revoke and a restore, and without the
   playback ids it would delete. `playback_wanted` is sent to the worker but not kept. Without a
   fix, the evidence has to be rebuilt by hand (`mux_playback_wanted` in SQL, plus a Mux `GET` of the
   asset's playback ids). Fix: record `playback_wanted`, `would_revoke: [ids]` or `would_create`,
   and the public ids seen. Worker only, a redeploy of `mux-cleanup`. **Recommended before Test A,
   not strictly required.**
-- **G2, an author's deletion after a moderator's restore waits up to 30 days.** A removal queues a
+- **G2, an author's deletion after a moderator's restore waits up to 30 days.** *(Reproduced and fixed locally 13 Oct, below.)* A removal queues a
   `delete_asset` (`moderation_removed`). With no review, the first claim reschedules it to the
   case's close + 30 days, and a restore leaves it pending. If the author then deletes the video,
   `mux_cleanup_enqueue` merges into that open job and keeps the *later* time. The asset and its
@@ -1760,14 +1760,14 @@ web (list assets, free plan). Nothing here is approved; each checkpoint needs Ne
   1 plus spike 7 makes **8 of 10**. Uploads that never become assets (waiting, cancelled, timed
   out) are assumed not to count. Nemat to confirm both points on Billing or with Mux support. At
   the cap, the founder could not upload either.
-- **G5, the sweep re-queues what it should leave alone.** `mux_cleanup_sweep` skips an asset only
+- **G5, the sweep re-queues what it should leave alone.** *(Fixed locally 13 Oct, below.)* `mux_cleanup_sweep` skips an asset only
   if it has a `pending`, `running` or `review` job. An asset whose last job ended `failed` (for
   example `not_verified`) gets a new `sweep` deletion every day. The ownership check fails it again,
   and failed jobs are never pruned. A removed video whose case is still open gets a new deletion
   daily, which is `skipped` (kept) at claim. No Mux change either way, but the queue and the
   overview fill with duplicates. Fix: also skip assets with a `failed` job, and assets whose only
   user is a removed video in an open case. **Before clean-up is left on.**
-- **G6, no monitoring.** Nobody is told about a failed job, a stuck lease, a `review` orphan, a purge
+- **G6, no monitoring.** *(Health check built locally 13 Oct, below; no alerts sent.)* Nobody is told about a failed job, a stuck lease, a `review` orphan, a purge
   failure, a failed cron run or a non-200 from pg_net. pg_net keeps responses only for hours.
   Needs at least a read-only health check (script or SQL) with thresholds, run daily.
   **Before clean-up is left on.**
@@ -1775,7 +1775,7 @@ web (list assets, free plan). Nothing here is approved; each checkpoint needs Ne
   a worktree; it names `--project-ref` instead. The hosted moderation calls below are written as
   explicit SQL, sent by that method, inside a transaction that checks preconditions (as in 4B).
   The script is not used.
-- **G8, local test gaps for the sweep:** more than 100 assets (pages of exactly 100, then a partial
+- **G8, local test gaps for the sweep:** *(Covered 13 Oct, below.)* more than 100 assets (pages of exactly 100, then a partial
   one); a list error on page 2 (`complete` false, only page 1 judged); an asset with no
   `upload_id` or `passthrough`; G5's cases. The fake Mux already pages. Mux still documents `page`,
   next to `cursor`/`next_cursor`. `created_at` is Unix seconds as text, which the SQL parses.
@@ -1814,7 +1814,7 @@ decides to (not authorised here).
 | E3 | T1 removed for good (purge) | asset `DELETE` | 0 (frees V) | both, one drain | hosted, day 31+ |
 | D | Orphan sweep | asset `DELETE` (orphan) | 0 | n/a | **local only**; on hosted at most one dry-run sweep (`GET`s only) |
 
-**Order:** local work first (G1 and G8; G2, G5 and G6 can follow) → CP0 → A → B → C1 → C2 → E1 →
+**Order:** local work (done 13 Oct: G1, G2, G5, G6, G8) → R0, deploying the fixes (below) → CP0 → A → B → C1 → C2 → E1 →
 E2 → (30 days) → E3. A and B are first by priority and leave V live and restored for E. C1 is free
 and independent. C2 goes after B so a mishap in C2 cannot touch V. E3 waits for the real 03:15 purge.
 
@@ -1871,8 +1871,8 @@ queue empty. Stop if a second asset appears.
   1. The `delete_asset` job is not leased: it is moved to M's time + 30 days (G3), and
   `mux_asset_hold(a, u)` equals that time. The `sync_playback` plan has no `not_verified`.
   Evidence: the job's fields; `mux_playback_wanted(V, a)` false; a Mux `GET` of a showing
-  passthrough T1, `upload_id` u and exactly one public id, P1 (with G1, the plan says
-  `would_revoke [P1]`).
+  passthrough T1, `upload_id` u and exactly one public id, P1. The recorded plan (G1) reads
+  `direction` `revoke`, `asset_id` a, `public_playback_ids` and `would_revoke` [P1].
 - *A3 (approval: delete one playback id, irreversible; the asset stays).* Preconditions: exactly 1
   due job, the `sync_playback` with its dry-run plan; the deletion not due until M + 30 days.
   Expected:
@@ -1889,10 +1889,11 @@ queue empty. Stop if a second asset appears.
   call. Use it only if Nemat wants the review notice seen too. Expected:
   - V `live`, `removed_action_id` null, playback id still null, so V is hidden until B3.
   - A `restore` action, and a new `sync_playback` (`moderation_restored`) due now.
-  - The old deletion still pending at M + 30 days (G2), with `mux_asset_hold` now `infinity`. When
-    due it will be `skipped`, never run: the stale job cannot remove the restored video.
-- *B2 (dry run).* `claimed` 1. `mux_playback_wanted` true. Mux shows no public id on a (G1:
-  `would_create`).
+  - The removal's retention deletion closed at once (`skipped`, "restored by a moderator: the
+    removal's retention ended"; G2 fix), and `mux_asset_hold` now `infinity`. No stale job is left
+    that could remove the restored video or delay a later deletion by its author.
+- *B2 (dry run).* `claimed` 1. `mux_playback_wanted` true. Mux shows no public id on a; the plan
+  reads `direction` `restore`, `would_create` `public` (G1).
 - *B3 (approval: create one public playback id).* Expected:
   - `POST` gives a new P2; the worker's second check still wants it; job `restored`; V's
     `mux_playback_id` = P2.
@@ -1950,24 +1951,23 @@ would be queued or reviewed.
     and V's row go.
   - T1's two moderation records are **anonymised**, so the rollback file refuses from then on
     (Nemat to accept that first; prune deletes them 90 days later).
-  - One `delete_asset` for a with owner T1. By then the old retention job is past its time (or already `skipped`), so the merge does not delay it.
+  - One `delete_asset` for a with owner T1, due at the purge (the retention job was closed at B1).
   - With clean-up still off, the job waits. Then a dry run (passthrough T1, plan `delete`) and one
     live drain: asset `DELETE`, a 404, HLS 404. Shortcut Beta back to the founder's asset alone.
   - Fallback if 30 days is too long: delete T1's Auth user in the Dashboard (`account_removed`, the
-    same trigger). The deletion then waits for M + 30 days (G2's merge, unless G2 is fixed first),
-    and the 03:15 purge stays unverified.
+    same trigger). The deletion is then due at once (the retention job was closed at B1), but the
+    03:15 purge stays unverified.
 
-*Approval checkpoints, one per change:* CP0 (invite, T1, V); A1 (+A2 dry run); **A3**; B1 (+B2);
+*Approval checkpoints, one per change:* R0 (the migration; then the worker); CP0 (invite, T1, V); A1 (+A2 dry run); **A3**; B1 (+B2);
 **B3**; **C1**; C2a (+C2b); **C2c**; E1 (+dry run); **E1 live**; E2 (+dry run); **E2 live**;
 E3 decision (rollback); **E3 live**. Bold: a change at Mux. A dry run never shares an approval with
 a live step.
 
 *Leaving clean-up on, staged rollout:*
 
-1. **Fix locally first:** G1, G2, G5, G6 (health check: overview `due`, `oldest_due_seconds`,
-   `stuck`, `failed`, `review`, `purge_failures`; `cron.job_run_details` failures for `mux-cleanup`,
-   `mux-sweep` and the 03:xx jobs; pg_net non-2xx and timeouts; Mux asset count against the
-   database), G8; deploy under their own approval.
+1. **Fix locally first:** G1, G2, G5, G6, G8, done 13 Oct (below); deploy under their own approval
+   (R0). The Mux asset count against the database is still a manual check (a Mux `GET`), not part of
+   the health check.
 2. **Tests A to E2** as above.
 3. **Continuous dry run, 3 to 7 days:** database `dry_run`, variable unset. Every pending job is
    re-planned hourly (Mux `GET`s only), and the 04:45 sweep dry-runs daily. Health check daily.
@@ -1988,6 +1988,166 @@ a live step.
    - Rate limits: Mux's limits for these endpoints are not verified; a 429 is retried with backoff.
 6. **Before any outside tester** (Gate 5), clean-up must be live, or left on in dry run with a
    decision recorded. Until then a deleted or removed video stays public at Mux by its playback id.
+
+**Reliability fixes G1, G2, G5, G6 (built 13 Oct; local only, not deployed).** Approved for local
+work by Nemat (13 Oct; `docs/DECISIONS.md`). Commits `11a6e8c` (migration, rollback, pgTAP),
+`a20f917` (worker), `69be07d` (integration tests). Nothing was deployed, no hosted query was run, no
+switch or secret changed, no account, invite, upload or Mux object created, nothing pushed.
+
+- **G2, reproduced first.** pgTAP `0011` on the unchanged schema: after removal, the claim's
+  rescheduling, restore and the author's deletion, the asset's deletion kept reason
+  `moderation_removed` and a time 30 days out, and the worker could not lease it (tests 11 to 14
+  failed). **Fix** (migration `20261013000100_cleanup_reliability.sql`): `mod_restore_video`, and
+  so a reversing `mod_decide_review`, closes the pending deletion of the asset it restores
+  (`skipped`, "restored by a moderator: the removal's retention ended"). `mux_forget_video` (author
+  deletion, abandoning, discarding or replacing a draft) makes any deletion of the asset still
+  waiting in the future due now, with the author's reason. The claim still works out every hold from
+  the rows, so a video that stays removed, or under review, keeps its asset; and the explicit
+  retention `prepare_account_removal` gives a purged account's removed videos is untouched (that
+  path does not call `mux_forget_video`). No backfill: a hosted queue holding the old state (none
+  does today) is resolved by the claim as before.
+- **G5.** `mux_cleanup_sweep` now also leaves alone an asset with a `failed` job (counted
+  `unresolved`; it stays in `mux_cleanup_overview().failed` and alerts in the health check until
+  `mux_cleanup_retry`) and the asset of a removed video whose case is open (counted `held`; the
+  review decision queues the deletion or restores the video). `held` and `unresolved` appear in the
+  answer only when non-zero, so the existing answers are unchanged.
+- **G1.** A dry run's recorded plan now reads, for playback, `{"act": "sync", "direction":
+  "revoke" | "restore" | "keep", "asset_id", "asset_status", "owner_verified": true,
+  "playback_wanted", "public_playback_ids", "would_revoke" | "would_create": "public" |
+  "would_record"}`; for a deletion `{"act": "delete", "asset_id", "upload_id"}`; for a cancellation
+  `{"act": "cancel", "upload_id", "upload_status"}`. A restore cannot name the new id before Mux
+  makes it. The ownership check is unchanged and still comes first: a mismatch is the plan
+  (`not_verified`) with nothing to act on. The function log shortens every playback id to its first
+  four characters (`forLog`); the job's result in the database keeps them whole (service role only,
+  as before). `act` is unchanged, so existing readers still work.
+- **G6.** Detection only:
+  - `run_mux_cleanup` records each request it makes (`mux_cleanup_runs`: pg_net's id, drain or
+    sweep, when).
+  - A new schedule, `mux-cleanup-monitor` (every 10 minutes, `mux_cleanup_collect_runs()`), copies
+    pg_net's answer before pg_net discards it (6 hours): status, timeout, error, the worker's `ok`
+    and its counts only. No Mux id or playback id is kept, even if a body held one (tested). A
+    request with no answer after 15 minutes becomes `no_response`. Runs are kept 14 days.
+  - `mux_cleanup_health()` (service role; `stable`; reads only) returns `ok`, `warn` or `alert`
+    with each problem and the thresholds:
+
+  | Check | Level | Threshold |
+  |---|---|---|
+  | Failed jobs | alert | any |
+  | Purge failures | alert | any |
+  | Stuck jobs | alert | a lease run out more than 10 min ago |
+  | Backlog, live | alert | a job due for more than 15 min |
+  | Backlog, live | warn | more than 100 due, or 50 more created than finished in 24 h |
+  | Waiting, not live | warn | a job waiting more than 24 h (its video is still at Mux) |
+  | Orphans for review | warn | any |
+  | Schedules | alert | `mux-cleanup` inactive, failing or late by 5 min; a daily job (sweep, purge, prunes) inactive, failing or late by 26 h |
+  | Schedules | warn | the monitor late by 30 min; a job that has never run (new) |
+  | Worker | alert | unreachable, a non-2xx status, or `"ok": false` in 24 h |
+  | Worker | warn | a timeout or no answer in 24 h; answers not collected for 30 min; no sweep requested in 26 h while not off |
+
+- *Notification, proposed, not built or activated:* until clean-up is left on, run
+  `select public.mux_cleanup_health()` by the read-only method in every step's preflight and
+  postflight, and daily during the continuous dry run. Before leaving clean-up live, the proposal
+  is an hourly pg_cron job that posts only `status` and the problem `check` names (no ids) through
+  pg_net to one webhook URL kept in Vault (`mux_cleanup_alert_url`). It would post when the status
+  becomes `alert` and once a day while it stays `alert`, and do nothing without the secret, like the
+  worker. The channel (an email through Resend's API, or a Slack or Discord incoming webhook) is
+  Nemat's choice. It needs its own approval; nothing is sent today.
+- *Not covered by the health check:* the Mux asset count against the database (needs a Mux `GET`;
+  stays a manual step); the function's own `MUX_CLEANUP_MODE` (not visible from the database); Edge
+  Function logs.
+
+*Tests* (isolated local stack `shortcut-s3r`, ports 557xx, fake Mux everywhere; the default
+`shortcut` stack and the earlier `shortcut-s3` containers, which Docker restarted, were not
+touched):
+
+- pgTAP **1089/1089**: 0001 to 0010 unmodified (986), new `0011_cleanup_reliability.sql` **103**:
+  - G2: no review; review and reversal, then an open report; a deletion during a running restore
+    (one job per asset, the restore's last check refusing, then the deletion leased with no hold).
+  - The retention kept for a video that stays removed.
+  - G5: a failed asset unresolved and not queued again, an open case held, unproven owners for
+    review, repeated sweeps, a retry with no duplicate.
+  - G6: privileges, RLS, `stable`, the schedule; requests recorded only when the switch allows;
+    answers collected with counts only; a lost request; the health check's alert and warn cases,
+    including an inactive schedule.
+  - The founder's row unchanged.
+
+  Four full runs passed. One earlier full run failed `0003` tests 26 and 27, an unmodified phase-4
+  file: the order of two video replies created in one transaction (equal `created_at`, so the
+  order is not fixed). That flake predates these changes.
+- Deno unit **32/32**: `mux_test.ts` 21 unmodified; `cleanup_unit_test.ts` 11, 3 new: revoke,
+  restore and keep plans with their ids, a signed id ignored, a delete and a cancel plan,
+  ownership first, log shortening.
+- Integration: stage 1 **20/20** and stage 2 **32/32** (unmodified). Stage 3
+  `cleanup_integration_test.ts` **28/28** on four runs, 4 new:
+  - G1: removal and restore dry runs through the worker, with the log checked for the id.
+  - G2: remove, restore, re-report, author deletion: asset `GET` then `DELETE` at once, the report
+    still open.
+  - G2: an author deletion while Mux creates the restored id.
+  - G5: 230 assets over three pages (100, 100, 30); page 2 failing (`listed` 100, `complete`
+    false, `mux_500`, nothing beyond page 1 judged); assets with no passthrough or no upload id
+    for review; repeated sweeps; a `not_verified` failure left alone on two daily sweeps, then
+    retried once and deleted; held and review assets never changed.
+- Scheduler path (`scripts/scheduler-integration.sh`) **13/13** on two runs, 1 new. Through pg_cron,
+  pg_net, the gateway and the real Edge runtime: a wrong key (401), an unreachable worker (pg_net
+  error, no status) and a good call (200, `ok`, 1 claimed) each recorded, collected and reported
+  `worker_errors` by the health check; no Mux id kept.
+- `scripts/auth-integration.mjs` **37/37**. `deno check` and `deno lint` clean (20 files). The one
+  lint finding, a `require-await` in an unmodified `scheduler_integration_test.ts` line under
+  Deno 2.9.7, was fixed (the callback made synchronous).
+- App (unchanged): `tsc` clean, `expo lint` clean, Jest **96/96**, run with the main checkout's
+  `node_modules` (same `package.json` and lockfile).
+- Concurrency, retries, retention and recovery: the existing integration and scheduler tests above
+  cover concurrent workers, backoff retries, dead letters, worker restarts, retention after removal
+  and review, and account deletion and recovery, all passing on the new schema.
+
+*Migration rehearsal* (the stage 3 schema, `supabase db reset --version 20261012000200`, with hosted
+data as after 4B):
+- **Data:** the founder's live response and claimed ledger row; the deleted canary reply with its
+  `done` job and the unused second URL; a member with one video removed and restored (the G2 state
+  the old code leaves: deletion pending 30 days out) and one removed with a review pending; a report.
+- **Then `20261013000100` alone:** every `public` table's row hash and `auth.users` unchanged; only
+  `cron.job` changed (7 to 8, `mux-cleanup-monitor`); switch `off`.
+- **The five scheduled commands and the collector:** no change at all; 0 requests, 0 runs.
+- **Health:** `warn`, only "has not run yet" for the schedules (the database had just been reset).
+- **The rollback file:** the `public` schema dump line for line identical to stage 3's; every hash,
+  `cron.job` included, identical to before the migration.
+
+*Hosted deployment (R0), when approved (each step separately):*
+1. **Preflight**, read-only: fingerprint 741 / `8d15eb8e…` as at 4B; switch `off`; no
+   `MUX_CLEANUP_MODE`; 0 executable jobs; the founder's hashes; `db push --dry-run` from a clean
+   copy of the branch lists exactly `20261013000100_cleanup_reliability.sql`.
+2. **Migration**, `supabase db push` by the step 1 method. It writes no data row: 4 functions
+   replaced (grants unchanged), 3 added (no member or anon access), 1 table (RLS, no member grants),
+   1 schedule (`*/10`). Expected after: switch `off`, 0 jobs changed, founder unchanged, a new
+   fingerprint to compute with the preflight script before the push, `mux_cleanup_health()`
+   answering. Within 10 minutes `mux-cleanup-monitor` has run (it reads pg_net and writes nothing
+   while there are no requests).
+3. **Worker**, `supabase functions deploy mux-cleanup --no-verify-jwt` from the branch (G1); no
+   secret change, so the other functions keep their versions. The database accepts either worker
+   version, so 2 and 3 may be done in either order; 2 first is recommended.
+
+*Rollback and risks:*
+- `supabase/rollback/20261013000100_cleanup_reliability.down.sql`, as a forward migration, restores
+  the four previous functions and removes the run record, collector, health check and schedule. It
+  never refuses. Jobs a restore closed stay closed, and deletions an author's deletion made due stay
+  due: both are what the old claim would have done at the old due time, only earlier, so nothing
+  needs undoing. The worker goes back by redeploying `mux-cleanup` from `faf1a41` (plans revert to
+  `{"act": …}` only).
+- **G2 makes some Mux deletions earlier than before:** only for an author's own deletion of a video
+  that is live (a removed one cannot be deleted by its author). That is the approved retention
+  rule; the change cannot reach a removed video or one under review (tested).
+- **Unverified on hosted:** that `mux_cleanup_health()` (owner `postgres`) can read
+  `cron.job_run_details` there, as the earlier read-only checks did; pg_net's answer retention there
+  (default 6 hours, collected every 10 minutes).
+
+*Revised real-Mux sequence:* R0 (preflight, migration, worker; no Mux call) → CP0 → A → B → C1 → C2
+→ E1 → E2 → (30 days) → E3. Changes from the plan above:
+- Each step's preflight and postflight include `mux_cleanup_health()`, expected `ok` or only known
+  warnings.
+- A2 and B2 approve from the recorded plan itself.
+- B1 expects the retention deletion closed.
+- E3 no longer waits on G2.
+- The asset budget is unchanged: 1 new asset.
 
 ## Gates
 
