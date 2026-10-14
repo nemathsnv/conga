@@ -4338,6 +4338,144 @@ needs its script's Edge runtime.
     forward migrations. The app keeps posting through the five-argument versions;
     `abandon-submission` without its functions answers "kept, unverified" and deletes nothing.
 
+## 20. C1 to C3 fixed, failed-post boards revised, SPEC.md §19 revised (14 Oct; local, not deployed)
+
+Asked for by Nemat after the final review (section 19's review). Approved:
+- local client corrections, with regression tests;
+- design-board proposals;
+- SPEC.md edits.
+
+Not done:
+- no UI built, and no approved board changed;
+- no push, deployment, device build, hosted or account change, real Mux call, or cleanup-switch
+  change.
+
+| Commit | What |
+|---|---|
+| `654c03c` | App: C1 to C3 (code) |
+| `f1dd2c6` | Design: boards P1 to P9 revised, SPEC.md §19, DECISIONS.md |
+| this one | This section |
+
+### 20.1 Code (`654c03c`)
+
+The per-member posting logic moved into `app/src/video/memberPosting.ts` (pure, effects injected).
+`posting.tsx` holds one per signed-in member and stops it when the account changes.
+
+- **C1, Post/Discard race:** Discard stops a Post in flight, waits on the member's posting queue
+  for it to settle, then stops and waits for any upload.
+  - The Post's request is aborted (`postRpc` takes a signal), and a late answer or refusal writes
+    nothing.
+  - A Post completing late cannot bring a discarded recording back, or leave a pending post with
+    no file.
+  - Retry stays exclusive with Discard.
+- **C2, sign-out:** Sign out anyway never throws, so a storage error cannot stop the sign-out.
+  - An unresolved recording stays in its own account's slot and is asked about at that account's
+    next sign-in; another account never reads it.
+  - Offline: `supabase-js` 2.117.2 removes the local session even when the server cannot be
+    reached, so signing out completes on the phone. The server session stays valid until it
+    expires (unchanged behaviour).
+- **C3, reconciliation:** an unconfirmed discard is asked again:
+  - at launch, on returning to the foreground (AppState) and when the connection returns;
+  - by timer at 30 s, 2 min and 10 min, then on those events only;
+  - never sooner than 125 s after a "busy" answer (the server's 2-minute hold), and events at most
+    every 15 s;
+  - one request at a time (a second call joins it);
+  - everything stops when the account changes.
+
+### 20.2 Mux's documented cancellation guarantee (docs read 14 Oct; no Mux call made)
+
+- **Cancel a direct upload**
+  ([API reference](https://www.mux.com/docs/api-reference/video/direct-uploads/cancel-direct-upload)):
+  - It marks the upload cancelled.
+  - It succeeds only while the upload is still `waiting`.
+  - "If a pending upload finishes after this request, no asset will be created."
+- **Create a direct upload**
+  ([API reference](https://www.mux.com/docs/api-reference/video/direct-uploads/create-direct-upload)):
+  `timeout` is how long the signed URL is valid (default 3600 s). An upload with no successful
+  transfer before then is marked `timed_out`.
+
+What this means for abandon-submission:
+- **A confirmed cancel leaves no asset, even if the last bytes land afterwards.** This closes the
+  race raised in section 19's review: retiring the row after a confirmed cancel cannot strand a
+  video.
+- A cancel Mux refuses means the upload was no longer waiting; the function already keeps that.
+- `timed_out` means no successful transfer, so no asset.
+- **Not covered by the documentation:**
+  - `errored`, which the function treats like `timed_out` when no asset id is present;
+  - the exact error a cancel returns when the upload is not waiting.
+
+  Treating `errored` as unverified would be the stricter choice. That is a server change for a later
+  approval.
+
+### 20.3 Design (`f1dd2c6`)
+
+- **Boards:** `design/proposals/failed-post-ux.html` (rendered for final visual review) and
+  `FAILED-POST-UX.md`: P1 to P9, plus P1-R and P8-R for video replies, applying the five decisions.
+- **Drafted wording**, marked orange and dashed (not supplied; confirm or replace):
+  - P4: "It will be deleted from this phone. If it already reached Shortcut, it may finish
+    processing."
+  - P6: "It may finish processing. If it appears on your profile, you can delete it there."
+  - P9: "Signing out discards it from this phone. If it already reached Shortcut, it may finish
+    processing."
+- **SPEC.md §19** is revised to match, with the drafted strings marked (draft).
+  - The SPEC.md header notes the online master spec (a Claude Doc) does not have this change yet.
+  - A re-export from the master would drop it until the master is updated.
+
+### 20.4 Verification (14 Oct, isolated local stack; nothing on a device, simulator, hosted project or real Mux)
+
+| What | Result |
+|---|---|
+| Jest | **246/246**, exit 0 (17 new: memberPosting) |
+| `tsc --noEmit`, `eslint src` | clean |
+| pgTAP, 13 files | 1219/1219 |
+| Deno unit (`mux_test`, `cleanup_unit_test`) | 21/21, 11/11 |
+| `uploads_integration_test` | 32/32 |
+| `integration_test` | 20/20 |
+| `cleanup_integration_test` | 28/28 |
+| `idempotency_integration_test` | 12/12 (none ignored) |
+| `abandon_integration_test` | 12/12 |
+| `scripts/idempotency-rollback-check.sh` | passed (both rollbacks, old suite 1089, then all 1219) |
+| `scripts/scheduler-integration.sh` | 13/13 |
+| `scripts/auth-integration.mjs` | 37/37 |
+| `scripts/c1-rehearsal.sh` | passed (29 checks) |
+
+**Mutation checks:** each of these fails a test:
+- Discard not waiting on the Post queue;
+- the server hold ignored;
+- the sign-out cleanup throwing.
+
+### 20.5 Differences between the revised designs and the app
+
+None of P1 to P9 is built:
+- Discard has no button.
+- P2's and P3's lines are not mapped.
+- Video replies still say "response".
+- The camera is not blocked at entry (Post refuses with no message).
+- LV-SignOut shows only in Settings, with the old body.
+
+The behaviour these boards describe is built and tested.
+
+### 20.6 Remaining risks
+
+- **Beta blocker:** until P1 to P9 are approved and built, Discard is reachable only through Sign
+  out anyway, and a post that can never succeed blocks the member's next recording.
+- **An unconfirmed discard keeps blocking new recordings** until the server confirms. Bounded
+  retries and the foreground and connection events limit this, but a long Mux outage still holds
+  the member.
+- **`errored` with no asset id is retired:** not documented by Mux (20.2).
+- **The online master spec lacks the §19 revision** (20.3).
+- **The provider wiring** (`posting.tsx`) is thin but not unit-tested. AppState and connectivity
+  subscriptions are exercised only through `memberPosting`.
+- **Unverified on a device or against real Mux:** foreground suspension timing, a second full PUT
+  to the same URL, and the abandon path end to end.
+
+### 20.7 Next
+
+1. Final visual approval of P1 to P9, including the three drafted strings.
+2. Update the online master spec with §19.
+3. Then, each separately: build the boards; the rollout in section 19.5 (migrations, the
+   abandon-submission function, the founder build, device checks, C1 on hosted).
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
