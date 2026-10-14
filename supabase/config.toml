@@ -430,6 +430,9 @@ verify_jwt = false
 [functions.mux-upload-status]
 verify_jwt = false
 
+[functions.abandon-submission]
+verify_jwt = false
+
 [functions.send-push]
 verify_jwt = false
 

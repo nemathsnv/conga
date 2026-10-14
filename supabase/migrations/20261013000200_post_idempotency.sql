@@ -29,11 +29,10 @@
 -- the old behaviour. The four-argument functions are dropped (a second overload would make those
 -- calls ambiguous).
 --
--- abandon_submission is for a recording the person discards after a Post whose answer never
--- arrived. It only ever retires a row the app has provably sent nothing to: still processing, no
--- asset, still on the upload the submission claimed (a Retry would have replaced it, and the app
--- sends bytes only once it knows the row). It does not call Mux: the URL, which only that phone
--- had, times out unused.
+-- abandon_submission was meant for a recording the person discards after a Post whose answer
+-- never arrived. Review of 13 Oct (B3): it cannot see Mux (an asset is recorded only once it is
+-- ready), so it could retire a row whose bytes Mux already has. No API role may call it, and
+-- 20261013000300 replaces it with a path that asks Mux first.
 
 create table public.post_submissions (
   id uuid primary key,
@@ -72,9 +71,11 @@ begin
   if p_submission is null then return null; end if;
   select * into s from public.post_submissions where id = p_submission;
   if not found then return null; end if;
-  if s.account_id <> p_uid
-     or s.kind <> p_kind
-     or s.target_id <> p_target
+  -- IS DISTINCT FROM throughout: a NULL in the request (for example p_prompt) must count as a
+  -- difference, never as unknown (review of 13 Oct, I1).
+  if s.account_id is distinct from p_uid
+     or s.kind is distinct from p_kind
+     or s.target_id is distinct from p_target
      or s.upload_id is distinct from p_upload_id
      or s.caption is distinct from nullif(btrim(coalesce(p_caption, '')), '')
      or s.duration_ms is distinct from p_duration_ms then
@@ -306,10 +307,9 @@ revoke execute on function public.record_submission(uuid, uuid, text, uuid, text
 revoke execute on function public.post_response(uuid, text, text, integer, uuid) from public, anon;
 revoke execute on function public.post_reply(uuid, text, text, integer, uuid) from public, anon;
 revoke execute on function public.post_draft(uuid, text, text, integer, uuid) from public, anon;
-revoke execute on function public.abandon_submission(uuid) from public, anon;
+revoke execute on function public.abandon_submission(uuid) from public, anon, authenticated;
 grant execute on function public.post_response(uuid, text, text, integer, uuid) to authenticated;
 grant execute on function public.post_reply(uuid, text, text, integer, uuid) to authenticated;
 grant execute on function public.post_draft(uuid, text, text, integer, uuid) to authenticated;
-grant execute on function public.abandon_submission(uuid) to authenticated;
 
 notify pgrst, 'reload schema';

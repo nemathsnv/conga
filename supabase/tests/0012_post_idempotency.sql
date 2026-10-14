@@ -1,9 +1,9 @@
 -- pgTAP tests for posting idempotency (20261013000200): one submission per recording; a retried
 -- post returns the row the first call created; anything else about a submission id is refused;
--- abandon_submission retires only a row nothing can have been sent to. Real concurrency (separate
--- transactions) is covered by supabase/functions/_tests/idempotency_integration_test.ts.
+-- no API role can call abandon_submission, which 20261013000300 replaced (its tests: 0013). Real
+-- concurrency (separate transactions) is covered by supabase/functions/_tests/idempotency_integration_test.ts.
 begin;
-select plan(91);
+select plan(77);
 
 delete from public.responses;
 delete from public.prompts;
@@ -86,12 +86,11 @@ select is(to_regprocedure('public.post_reply(uuid, text, text, integer)'), null,
 select is(to_regprocedure('public.post_draft(uuid, text, text, integer)'), null, 'the four-argument post_draft is gone');
 select is(has_function_privilege('authenticated', 'public.post_response(uuid, text, text, integer, uuid)', 'execute')
       and has_function_privilege('authenticated', 'public.post_reply(uuid, text, text, integer, uuid)', 'execute')
-      and has_function_privilege('authenticated', 'public.post_draft(uuid, text, text, integer, uuid)', 'execute')
-      and has_function_privilege('authenticated', 'public.abandon_submission(uuid)', 'execute'), true, 'members can post and abandon');
+      and has_function_privilege('authenticated', 'public.post_draft(uuid, text, text, integer, uuid)', 'execute'), true, 'members can post');
+select is(to_regprocedure('public.abandon_submission(uuid)'), null, 'abandon_submission (it could not see Mux) is gone; nothing replaces it for members directly');
 select is(has_function_privilege('anon', 'public.post_response(uuid, text, text, integer, uuid)', 'execute')
        or has_function_privilege('anon', 'public.post_reply(uuid, text, text, integer, uuid)', 'execute')
-       or has_function_privilege('anon', 'public.post_draft(uuid, text, text, integer, uuid)', 'execute')
-       or has_function_privilege('anon', 'public.abandon_submission(uuid)', 'execute'), false, 'anon can do neither');
+       or has_function_privilege('anon', 'public.post_draft(uuid, text, text, integer, uuid)', 'execute'), false, 'anon cannot post');
 select is(has_function_privilege('authenticated', 'public.submission_replay(uuid, uuid, text, uuid, text, text, integer)', 'execute')
        or has_function_privilege('service_role', 'public.submission_replay(uuid, uuid, text, uuid, text, text, integer)', 'execute')
        or has_function_privilege('authenticated', 'public.record_submission(uuid, uuid, text, uuid, text, text, integer, uuid)', 'execute')
@@ -110,12 +109,10 @@ select is((select array_agg(proname::text order by proname) from pg_proc
 -- ===========================================================================
 set local role anon;
 select throws_ok($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000, gen_random_uuid()) $$, '42501', null, 'anon cannot post');
-select throws_ok($$ select public.abandon_submission(gen_random_uuid()) $$, '42501', null, 'anon cannot abandon');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims', '{"role": "authenticated"}', true);
 select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'not_signed_in', 'no member: not_signed_in, before any submission lookup');
-select is(pg_temp.err($$ select public.abandon_submission('c0000000-0000-0000-0000-000000000001') $$), 'not_signed_in', 'nor can a signed-out caller abandon');
 
 -- ===========================================================================
 -- 3. post_response: a lost answer, then the same request again
@@ -145,6 +142,13 @@ select is((pg_temp.upload('upL2')).status, 'active', 'and that upload is not cla
 select is(pg_temp.err($$ select public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upL1', 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'another prompt: conflict');
 select is(pg_temp.err($$ select public.post_reply('ad000000-0000-0000-0000-000000000001', 'upL1', 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'another kind (a video reply): conflict');
 select is(pg_temp.err($$ select public.post_draft('5a000000-0000-0000-0000-000000000001', 'upL1', 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'another kind (a draft): conflict');
+-- Review of 13 Oct, I1: a NULL in the request was compared with <>, which is unknown, so the replay
+-- returned the row. Every field is compared with IS DISTINCT FROM now.
+select is(pg_temp.err($$ select public.post_response(null, 'upL1', 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'I1: a NULL target is a conflict, not a replay of the row');
+select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', null, 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'I1: a NULL upload is a conflict');
+select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', 'hello', null, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'I1: a NULL duration is a conflict');
+select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'I1: a NULL caption against a stored one is a conflict');
+select is(pg_temp.err($$ select public.post_reply(null, 'upL1', 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'I1: the same for a video reply with a NULL target');
 
 -- An old client (no submission) gets exactly the old answers.
 select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', 'hello', 5000) $$), 'already_responded', 'four arguments: already_responded, as before');
@@ -162,7 +166,6 @@ select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-11
 select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upA1', null, 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'another member reusing the id with their own upload: the same answer (nothing revealed)');
 select is((pg_temp.upload('upA1')).status, 'active', 'their upload is not claimed');
 select is(pg_temp.rows_for('b2222222-2222-2222-2222-222222222222', $$prompt_id = '11111111-aaaa-aaaa-aaaa-111111111111'$$), 0, 'and they got no row');
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000001'), 'not_found', 'nor can they abandon Lena''s submission');
 select is(pg_temp.status_of((select id from ids where k = 'r1')), 'processing', 'which is untouched');
 
 -- ===========================================================================
@@ -235,46 +238,12 @@ select is(pg_temp.err(format('select public.retry_response_upload(%L, %L)', (sel
 select pg_temp.act('a1111111-1111-1111-1111-111111111111');
 
 -- ===========================================================================
--- 8. abandon_submission: only a row nothing can have been sent to
--- ===========================================================================
-select is(public.abandon_submission('c0000000-0000-0000-0000-0000000000ff'), 'not_found', 'an unknown id: not_found');
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000006'), 'kept', 'a replaced (deleted) draft: kept, nothing to do');
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000007'), 'kept', 'a draft is never abandoned');
-select is(pg_temp.status_of((select response_id from pg_temp.sub('c0000000-0000-0000-0000-000000000007'))), 'draft', 'it stays a draft');
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000008'), 'kept', 'a row whose upload a Retry replaced is never abandoned (the app knew it and may have sent bytes)');
-select is(pg_temp.status_of((select id from ids where k = 'r3')), 'processing', 'it stays processing');
-reset role;
-update public.responses set status = 'live', mux_asset_id = 'asL1', mux_playback_id = 'pbL1', live_at = now() where id = (select id from ids where k = 'v1');
-set local role authenticated;
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000004'), 'kept', 'a published (live) video is never abandoned');
-select is(pg_temp.status_of((select id from ids where k = 'v1')), 'live', 'it stays live');
-reset role;
-update public.responses set mux_asset_id = 'asL2' where id = (select response_id from pg_temp.sub('c0000000-0000-0000-0000-000000000005'));
-set local role authenticated;
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000005'), 'kept', 'a processing row with an asset (Mux has the video) is never abandoned');
-reset role;
-update public.video_uploads set status = 'active', response_id = null where upload_id = 'upL1';
-set local role authenticated;
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000001'), 'kept', 'a row whose upload the ledger does not show claimed by it (ambiguous) is kept');
-reset role;
-update public.video_uploads set status = 'claimed', response_id = (select id from ids where k = 'r1') where upload_id = 'upL1';
-set local role authenticated;
-insert into counts values ('jobs1', pg_temp.jobs());
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000001'), 'abandoned', 'processing, no asset, still on its first upload, claimed by it: abandoned');
-select is(pg_temp.status_of((select id from ids where k = 'r1')), 'deleted', 'the row is deleted');
-select is((pg_temp.upload('upL1')).status, 'claimed', 'the ledger is not changed (the URL stays claimed and times out)');
-select is(pg_temp.jobs(), (select n from counts where k = 'jobs1'), 'Mux is not asked to do anything');
-select is(public.abandon_submission('c0000000-0000-0000-0000-000000000001'), 'kept', 'abandoning again changes nothing');
-select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_closed', 'the abandoned submission cannot be replayed');
-select is((public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL11', null, 5000, 'c0000000-0000-0000-0000-000000000009'))->>'status', 'processing', 'and the prompt is free again for a new recording');
-
--- ===========================================================================
 -- 9. One submission per upload, one per row
 -- ===========================================================================
 reset role;
-select throws_ok($$ insert into public.post_submissions (id, account_id, kind, target_id, upload_id, duration_ms) values (gen_random_uuid(), 'a1111111-1111-1111-1111-111111111111', 'response', '44444444-aaaa-aaaa-aaaa-444444444444', 'upL11', 5000) $$, '23505', null, 'an upload belongs to one submission');
-select throws_ok($$ insert into public.post_submissions (id, account_id, kind, target_id, upload_id, duration_ms, response_id) values (gen_random_uuid(), 'a1111111-1111-1111-1111-111111111111', 'response', '44444444-aaaa-aaaa-aaaa-444444444444', 'upLX', 5000, (select response_id from public.post_submissions where id = 'c0000000-0000-0000-0000-000000000009')) $$, '23505', null, 'a row belongs to one submission');
-select is((select count(*)::int from public.post_submissions where account_id = 'a1111111-1111-1111-1111-111111111111'), 8, 'every successful post with a submission recorded it once');
+select throws_ok($$ insert into public.post_submissions (id, account_id, kind, target_id, upload_id, duration_ms) values (gen_random_uuid(), 'a1111111-1111-1111-1111-111111111111', 'response', '44444444-aaaa-aaaa-aaaa-444444444444', 'upL9', 5000) $$, '23505', null, 'an upload belongs to one submission');
+select throws_ok($$ insert into public.post_submissions (id, account_id, kind, target_id, upload_id, duration_ms, response_id) values (gen_random_uuid(), 'a1111111-1111-1111-1111-111111111111', 'response', '44444444-aaaa-aaaa-aaaa-444444444444', 'upLX', 5000, (select response_id from public.post_submissions where id = 'c0000000-0000-0000-0000-000000000008')) $$, '23505', null, 'a row belongs to one submission');
+select is((select count(*)::int from public.post_submissions where account_id = 'a1111111-1111-1111-1111-111111111111'), 7, 'every successful post with a submission recorded it once');
 
 select * from finish();
 rollback;

@@ -1,7 +1,8 @@
 -- ROLLBACK for 20261013000200_post_idempotency.sql. NOT a migration: nothing applies this file.
 --
 -- Use only if Nemat decides to undo posting idempotency on a project where 20261013000200 is
--- applied. Copy it to a new forward migration
+-- applied. If 20261013000300 is applied too, roll that back first
+-- (20261013000300_safe_submission_abandon.down.sql). Copy it to a new forward migration
 -- (supabase/migrations/<timestamp>_post_idempotency_rollback.sql) and push that.
 --
 -- It restores the four-argument post_response and post_reply (bodies verbatim from
@@ -9,11 +10,12 @@
 -- abandon_submission, the two internal helpers and public.post_submissions. Videos posted while
 -- idempotency was on are ordinary rows and stay; only the record of their submission ids goes.
 --
--- App builds that send p_submission get PGRST202 (no such function) from the four-argument
--- functions; the app then posts again without it (lib/content.ts), so they keep working, without
--- replay. Rows abandoned by abandon_submission stay deleted.
+-- App builds that send p_submission keep working: five-argument versions with no default stay,
+-- and only call the four-argument ones, ignoring the id (no replay). Without a default there is no
+-- ambiguity: four named arguments reach the four-argument functions, five reach these. The app has
+-- no fallback of its own (review of 13 Oct, I4), so these must stay as long as such builds exist.
 
-drop function public.abandon_submission(uuid);
+drop function if exists public.abandon_submission(uuid);
 drop function public.post_response(uuid, text, text, integer, uuid);
 drop function public.post_reply(uuid, text, text, integer, uuid);
 drop function public.post_draft(uuid, text, text, integer, uuid);
@@ -155,5 +157,25 @@ grant execute on function public.post_response(uuid, text, text, integer) to aut
 grant execute on function public.post_reply(uuid, text, text, integer) to authenticated;
 grant execute on function public.post_draft(uuid, text, text, integer) to authenticated;
 grant execute on function public.retry_response_upload(uuid, text) to authenticated;
+
+-- Five-argument versions for app builds that send a submission id: the id is ignored.
+create function public.post_response(p_prompt uuid, p_upload_id text, p_caption text, p_duration_ms integer, p_submission uuid)
+returns jsonb language sql set search_path = '' as $$
+  select public.post_response(p_prompt, p_upload_id, p_caption, p_duration_ms);
+$$;
+create function public.post_reply(p_reply_to uuid, p_upload_id text, p_caption text, p_duration_ms integer, p_submission uuid)
+returns jsonb language sql set search_path = '' as $$
+  select public.post_reply(p_reply_to, p_upload_id, p_caption, p_duration_ms);
+$$;
+create function public.post_draft(p_suggestion uuid, p_upload_id text, p_caption text, p_duration_ms integer, p_submission uuid)
+returns jsonb language sql set search_path = '' as $$
+  select public.post_draft(p_suggestion, p_upload_id, p_caption, p_duration_ms);
+$$;
+revoke execute on function public.post_response(uuid, text, text, integer, uuid) from public, anon;
+revoke execute on function public.post_reply(uuid, text, text, integer, uuid) from public, anon;
+revoke execute on function public.post_draft(uuid, text, text, integer, uuid) from public, anon;
+grant execute on function public.post_response(uuid, text, text, integer, uuid) to authenticated;
+grant execute on function public.post_reply(uuid, text, text, integer, uuid) to authenticated;
+grant execute on function public.post_draft(uuid, text, text, integer, uuid) to authenticated;
 
 notify pgrst, 'reload schema';
