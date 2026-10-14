@@ -4183,6 +4183,161 @@ Not run: any device, simulator, hosted or real-Mux step.
 8. **If rollback is needed:** copy the rollback file into a new forward migration and push it.
    New builds fall back on their own.
 
+## 19. Idempotency review blockers resolved locally (14 Oct; not deployed)
+
+Asked for by Nemat after the independent review of section 18. Approved: local corrections to B2,
+B3 and I1 to I7, and design proposals.
+
+Not done:
+- no hosted Supabase change, real Mux call, device build, push or cleanup activation;
+- no UI, and no approved board changed.
+
+The moderation repost loophole (a removed response does not block a new one to the same prompt)
+is a separate task and was not touched.
+
+| Commit | What |
+|---|---|
+| `ddd8e0f` | Server: Mux-checked abandonment (B3), NULL-safe fingerprint (I1), rollback keeps new builds posting (I4) |
+| `b7a02ad` | App: Retry and Discard exclusive, server-first discard with reconciliation (B2, I2, I4 to I7) |
+| `bc1e765` | Server tests: the idempotency integration test discards through abandon-submission (missed in `ddd8e0f`) |
+| this one | Design proposals (`design/proposals/`) and this section |
+
+### 19.1 Changes
+
+- **B3, abandonment only after Mux confirms.**
+  - The unreleased `20261013000200` revokes `abandon_submission` from every API role.
+  - The new forward migration `20261013000300` drops it and adds `begin_submission_abandon` and
+    `finish_submission_abandon` (service role), used by the **`abandon-submission` Edge Function**
+    (owner-authenticated, `verify_jwt = false` like the other functions, checking the caller
+    itself).
+  - Mux's upload decides:
+    - **waiting:** cancelled at Mux first, then the row retired once Mux confirms;
+    - **timed out, cancelled or errored, no asset:** retired;
+    - **asset created, or an asset id:** kept (`at_mux`);
+    - **unreadable, unknown, or a cancel refused or unconfirmed:** kept (`unverified`).
+  - While Mux is asked, the row is held for 2 minutes with a token: replays and Retries are
+    `submission_busy`.
+  - The finish re-checks under the row lock (a webhook may have made it live).
+  - An id that never made a row gets a tombstone, so a late copy of the request cannot make one.
+  - Live, removed and settled rows are never touched; the clean-up worker is not involved.
+- **I1:** `IS DISTINCT FROM` for every fingerprint field. The NULL-target bypass is reproduced by
+  the new pgTAP tests, which fail with `<>`.
+- **I4:** the app's PGRST202 fallback is removed; the submission id is always sent.
+  - The `20261013000200` rollback keeps five-argument versions (no default, ignoring the id), so
+    builds that send it keep posting after a rollback.
+  - Deployment is migration first.
+- **B2, the race:**
+  - Retry and Discard are mutually exclusive per member (`createExclusive`): Discard stops a
+    running upload and waits for it to end.
+  - The run shows PR-Posting at once.
+  - **The local recording is never deleted first when the outcome is uncertain** (`discardPost`).
+    The discard is stored with the post, the server asked, and the file deleted only on
+    `abandoned`, or when the server video is settled (live, removed).
+- **I7, reconciliation:** an unconfirmed discard stays on the phone in the member's own slot (still
+  blocking a new recording), and is asked again at launch and when the connection returns.
+  `at_mux`: it carries on as processing and posts. Never deletes a published or processing video.
+- **I2:** no row, URL or Mux question for a recording whose file is gone. A row already sent to
+  asks Mux only, so a video Mux has is waited on.
+- **I5:** after a repeated request whose answer was lost, Mux is asked before anything is sent,
+  even with attempts at 0. (Read as: before re-sending bytes for a replayed submission. The replay
+  request itself carries no bytes, and the server refuses it during a hold.)
+- **I6:** Retry while offline enters the waiting/offline flow (A-Offline).
+
+### 19.2 Design proposals (not approved boards)
+
+- `design/proposals/failed-post-ux.html`: P1 to P9, built from X-Upload-Failed, PR-Discard,
+  LV-SignOut and PR-Posting, with new copy highlighted.
+- `design/proposals/FAILED-POST-UX.md`: states, copy (existing or new), behaviour, five decisions,
+  and the proposed **SPEC.md §19 revision** (Discard; one waiting recording at a time; discard on
+  the same terms on every sign-out route; an unconfirmed discard stays hidden until the next
+  sign-in).
+
+### 19.3 Verification (14 Oct, isolated local stack `shortcut-idem`; nothing on a device, simulator, hosted project or real Mux)
+
+| What | Result |
+|---|---|
+| Jest | **229/229**, exit 0 (37 new) |
+| `tsc --noEmit`, `eslint src` | clean |
+| pgTAP, 13 files | **1219/1219** (0012: 77, 0013: 53) |
+| Deno unit (`mux_test`, `cleanup_unit_test`) | 21/21, 11/11 |
+| `uploads_integration_test` | 32/32 |
+| `integration_test` | 20/20 |
+| `cleanup_integration_test` | 28/28 |
+| `idempotency_integration_test` | 12/12 (none ignored) |
+| `abandon_integration_test` | **12/12** |
+| `scripts/idempotency-rollback-check.sh` | passed: both rollbacks, the old suite (1089), a new and an old build posting after the rollback, both migrations again, all 1219 |
+| `scripts/scheduler-integration.sh` | 13/13 |
+| `scripts/auth-integration.mjs` (run from the stack's folder, functions served) | 37/37 |
+| `scripts/c1-rehearsal.sh` | passed |
+
+**Race, replay, offline, switching and failure tests:**
+- Discard during Retry: no byte is sent after the discard is asked. Mutation: without the stop,
+  the test fails.
+- A replay during the Mux check is `submission_busy`.
+- Two discards at once: one Mux cancel.
+- A lost answer, then a restart, then the replay.
+- Offline discard: kept and asked again.
+- Account switching: per-member slots, and the parent signal aborting the upload.
+- Mux unreadable, unknown, or refusing the cancel: kept.
+- A webhook making the video live mid-check: kept.
+
+**Environment:** Docker Desktop was not running after the restart; it was started locally. Every
+earlier environment failure is resolved: auth needs running from the stack's folder, the scheduler
+needs its script's Edge runtime.
+
+### 19.4 Outstanding
+
+- **Not built, needs board approval:** Discard (P1 to P4), the explanations (P5 to P8) and the
+  sign-out warnings (P9). Until then, Discard is reachable only through Sign out anyway, and a post
+  that can never succeed blocks the member's next recording. **Blocker for beta testers.**
+- **An unconfirmed discard keeps blocking new recordings** until the server confirms. A long Mux
+  outage holds the member that long (decision 3 in the proposal).
+- **A recording without a submission id** (no shipped build made one) is never deleted
+  automatically.
+- **Not tested as wiring:** the provider (`posting.tsx`), because no React Native testing library
+  is a dependency. Its parts are tested pure.
+- **Unverified against real Mux:** cancelling a waiting upload that has partial bytes, and how soon
+  `asset_created` shows after the last byte.
+- **A function stopping mid-check** holds the row for up to 2 minutes (replays `submission_busy`
+  meanwhile).
+- **Sign out anyway with an unconfirmable discard** keeps the recording on the phone, hidden. The
+  current LV-SignOut copy says it is deleted; this needs the SPEC.md §19 revision.
+- **Hosted function deployment** is new: `abandon-submission` uses the existing Mux secrets and
+  can cancel an upload at Mux (only one Mux reports still waiting, only for its owner).
+
+### 19.5 Proposed rollout (each step its own approval; STOP here)
+
+1. **Review** `ddd8e0f`, `b7a02ad` and `bc1e765`, and the proposals: decisions 1 to 5 and the
+   SPEC.md §19 revision.
+2. **Hosted preflight (read-only):**
+   - schema fingerprint;
+   - `20261013000100` last applied;
+   - no `post_submissions`;
+   - functions and secrets unchanged.
+3. **Migrations:** `supabase db push --linked --dry-run`, expecting exactly `20261013000200` and
+   `20261013000300`, then the push.
+   - The installed `ede68ed` keeps posting (four named arguments resolve to the new functions).
+   - Old clients' calls may fail for the moment the DDL runs.
+4. **Deploy `abandon-submission`** (no other function changes).
+5. **Read-only checks:**
+   - signatures, grants and RLS;
+   - `abandon_submission` absent;
+   - PostgREST reloaded;
+   - the function answers 401 without a session.
+6. **Build the approved boards** (P1 to P9 as decided), with tests.
+7. **Founder iPhone build** after steps 3 to 6. This build needs the migration, since posts fail
+   visibly without it.
+8. **Device checks:**
+   - lost answer, restart, then Retry;
+   - Discard while uploading, online and offline;
+   - a second take while one waits;
+   - a sign-out on each route.
+   - After each: read-only ledger and submission checks.
+9. **Test C1 on hosted** (separate approval).
+10. **Rollback, if needed:** the `20261013000300` rollback, then the `20261013000200` rollback, as
+    forward migrations. The app keeps posting through the five-argument versions;
+    `abandon-submission` without its functions answers "kept, unverified" and deletes nothing.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
