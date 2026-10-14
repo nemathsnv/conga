@@ -170,8 +170,9 @@ function unwrap<T>(res: { data: T; error: { message: string; code?: string } | n
  * than posting without idempotency (review of 13 Oct, I4). The migration goes first; its rollback
  * keeps five-argument versions for this build.
  */
-async function postRpc<T>(fn: string, args: Record<string, unknown>, submissionId: string | null | undefined): Promise<T> {
-  return unwrap(await supabase.rpc(fn, submissionId ? { ...args, p_submission: submissionId } : args)) as T;
+async function postRpc<T>(fn: string, args: Record<string, unknown>, submissionId: string | null | undefined, signal?: AbortSignal): Promise<T> {
+  const call = supabase.rpc(fn, submissionId ? { ...args, p_submission: submissionId } : args);
+  return unwrap(await (signal ? call.abortSignal(signal) : call)) as T;
 }
 
 let suspendedHandler: () => void = () => undefined;
@@ -212,8 +213,8 @@ export async function acknowledgeDisclosure(kind: 'response' | 'reply' | 'draft'
   track('disclosure_accepted', { kind });
 }
 
-export async function postResponse(promptId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null): Promise<ResponseCard> {
-  return postRpc<ResponseCard>('post_response', { p_prompt: promptId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId);
+export async function postResponse(promptId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null, signal?: AbortSignal): Promise<ResponseCard> {
+  return postRpc<ResponseCard>('post_response', { p_prompt: promptId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId, signal);
 }
 
 export async function retryResponseUpload(responseId: string, uploadId: string): Promise<void> {
@@ -283,8 +284,8 @@ export async function getVideo(id: string): Promise<Video | { status: 'unavailab
   return unwrap(await supabase.rpc('get_video', { p_id: id })) as never;
 }
 
-export async function postReply(replyToId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null): Promise<ResponseCard> {
-  return postRpc<ResponseCard>('post_reply', { p_reply_to: replyToId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId);
+export async function postReply(replyToId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null, signal?: AbortSignal): Promise<ResponseCard> {
+  return postRpc<ResponseCard>('post_reply', { p_reply_to: replyToId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId, signal);
 }
 
 export async function commentsList(responseId: string): Promise<CommentsSheet> {
@@ -512,8 +513,8 @@ export async function mySuggestions(): Promise<MySuggestions> {
 export async function getSuggestion(id: string): Promise<Suggestion> {
   return unwrap(await supabase.rpc('get_suggestion', { p_id: id })) as Suggestion;
 }
-export async function postDraft(suggestionId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null): Promise<{ id: string; status: string }> {
-  return postRpc<{ id: string; status: string }>('post_draft', { p_suggestion: suggestionId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId);
+export async function postDraft(suggestionId: string, uploadId: string, caption: string | null, durationMs: number, submissionId?: string | null, signal?: AbortSignal): Promise<{ id: string; status: string }> {
+  return postRpc<{ id: string; status: string }>('post_draft', { p_suggestion: suggestionId, p_upload_id: uploadId, p_caption: caption, p_duration_ms: durationMs }, submissionId, signal);
 }
 export async function publishDraft(suggestionId: string): Promise<ResponseCard> {
   return unwrap(await supabase.rpc('publish_draft', { p_suggestion: suggestionId })) as ResponseCard;

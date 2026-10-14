@@ -211,8 +211,9 @@ export async function submitPost(args: SubmitArgs, deps: SubmitDeps): Promise<Su
       },
     });
   } catch (e) {
-    // Refused: the request rolled back, nothing was made. Post Review keeps the recording.
-    if (recorded) await deps.clear().catch(() => undefined);
+    // Refused: the request rolled back, nothing was made. Post Review keeps the recording. A Post
+    // stopped meanwhile (Discard, Sign out anyway) leaves storage to the discard that stopped it.
+    if (recorded && !deps.aborted()) await deps.clear().catch(() => undefined);
     throw e;
   }
   if (deps.aborted()) return null;
