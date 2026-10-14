@@ -58,6 +58,7 @@ function harness(over: Partial<RunDeps> = {}, clock = { t: 0 }) {
     status: jest.fn(() => Promise.resolve(muxSays('waiting'))),
     waitUntilLive: jest.fn(() => Promise.resolve('PB1')),
     deleteFiles: jest.fn(),
+    fileExists: jest.fn(() => true),
     track: jest.fn(),
     now: () => clock.t,
     ...over,
@@ -349,6 +350,7 @@ describe('Post: one waiting recording per member, stored before the request, a l
         writes.push(null);
       }),
       createRow: jest.fn((_p: PendingPost, t: UploadTicket) => Promise.resolve({ id: `row-${t.uploadId}` })),
+      fileExists: jest.fn(() => true),
       online: () => box.online,
       track: jest.fn(),
       aborted: () => box.aborted,

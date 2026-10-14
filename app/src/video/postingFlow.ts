@@ -190,6 +190,57 @@ export function createGate(): (fn: () => Promise<void>) => Promise<void> {
   };
 }
 
+/**
+ * One posting operation at a time for a member: an upload (Post's upload, Retry, the connection
+ * returning) or a discard (Discard, Sign out anyway, a discard waiting to be confirmed).
+ * - upload: joins an upload already running; does nothing while a discard runs.
+ * - discard: stops a running upload (its signal is aborted) and waits for it to end before it
+ *   starts, so nothing is still being sent or asked for when the recording is discarded; joins a
+ *   discard already running.
+ * The upload's signal is also aborted with `parent` (the member signing out or changing).
+ */
+export type Exclusive = {
+  upload(fn: (signal: AbortSignal) => Promise<void>, parent: AbortSignal): Promise<void>;
+  discard<T>(fn: () => Promise<T>): Promise<T>;
+  busy(): 'upload' | 'discard' | null;
+};
+
+export function createExclusive(): Exclusive {
+  type Op = { kind: 'upload' | 'discard'; promise: Promise<unknown>; stop?: () => void };
+  let op: Op | null = null;
+  const start = <T,>(kind: Op['kind'], promise: Promise<T>, stop?: () => void): Promise<T> => {
+    const entry: Op = { kind, promise, stop };
+    op = entry;
+    const clear = () => {
+      if (op === entry) op = null;
+    };
+    promise.then(clear, clear);
+    return promise;
+  };
+  return {
+    upload(fn, parent) {
+      if (op?.kind === 'upload') return op.promise as Promise<void>;
+      if (op?.kind === 'discard') return Promise.resolve();
+      const ctl = new AbortController();
+      const onParent = () => ctl.abort();
+      if (parent.aborted) ctl.abort();
+      else parent.addEventListener('abort', onParent);
+      const promise = fn(ctl.signal).finally(() => parent.removeEventListener('abort', onParent));
+      return start('upload', promise, () => ctl.abort());
+    },
+    async discard<T>(fn: () => Promise<T>): Promise<T> {
+      while (op?.kind === 'upload') {
+        const running: Op = op;
+        running.stop?.();
+        await running.promise.catch(() => undefined);
+      }
+      if (op?.kind === 'discard') return op.promise as Promise<T>;
+      return start('discard', fn());
+    },
+    busy: () => op?.kind ?? null,
+  };
+}
+
 /** One after another: each call starts when the previous one has settled (succeeded or failed). */
 export function createQueue(): <T>(fn: () => Promise<T>) => Promise<T> {
   let tail: Promise<unknown> = Promise.resolve();

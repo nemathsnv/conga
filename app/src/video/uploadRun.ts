@@ -6,7 +6,7 @@ import { ensureUploadRow, errorReason, prepareUpload, type SentUrl } from './pos
 import { newPendingPost, UPLOAD_URL_TTL_MS, uploadUrlUsable, type PendingPost } from './pendingPostState';
 import type { TicketSource } from './ticketStore';
 import type { Recording } from './types';
-import type { UploadStatus, UploadTicket } from './upload';
+import type { AbandonAnswer, UploadStatus, UploadTicket } from './upload';
 
 export type PostingState =
   | { kind: 'idle' }
@@ -29,6 +29,8 @@ export type RunDeps = {
   status: (uploadId: string) => Promise<UploadStatus>;
   waitUntilLive: (uploadId: string, opts: { until: 'live' | 'ready'; signal: AbortSignal }) => Promise<string>;
   deleteFiles: (recording: Recording) => void;
+  /** Whether the recording's file is still on the phone. */
+  fileExists: (recording: Recording) => boolean;
   track: (name: EventName, props: EventProps) => void;
   now?: () => number;
 };
@@ -46,11 +48,12 @@ const DEAD_UPLOAD = ['timed_out', 'cancelled', 'errored'];
  */
 export type ResendPlan = 'send' | 'wait' | 'replace';
 
-export async function planResend(post: PendingPost, status: RunDeps['status']): Promise<ResendPlan> {
+export async function planResend(post: PendingPost, status: RunDeps['status'], opts: { force?: boolean } = {}): Promise<ResendPlan> {
   // The transfer finished (2xx) before the app closed: only the processing is left.
   if (post.state === 'processing') return 'wait';
-  // No transfer was ever started with this URL.
-  if (post.attempts === 0) return 'send';
+  // No transfer was ever started with this URL, and the row was not found again by repeating a
+  // request whose answer was lost (force): Mux cannot have anything.
+  if (post.attempts === 0 && !opts.force) return 'send';
   let s: UploadStatus;
   try {
     s = await status(post.uploadId);
@@ -85,7 +88,17 @@ export async function runPendingPost(post: PendingPost, deps: RunDeps, signal: A
   };
   // The latest state of this post, so a failure keeps a row or URL obtained along the way.
   let current = post;
+  // The posting state at once (PR-Posting), so Retry and Discard are never offered while this runs.
+  show(current.state === 'processing' ? { kind: 'processing', post: current } : { kind: 'uploading', post: current, progress: 0 });
+  // A request for the row was sent before and its answer never came: the row it returns now may
+  // already have bytes at Mux (review of 13 Oct, I5), so Mux is asked before anything is sent.
+  const resent = !current.responseId && !!current.uploadId;
   try {
+    if (current.state !== 'processing' && !deps.fileExists(current.recording)) {
+      // Nothing is asked of the server for a recording that is gone (I2). A row-less post has
+      // sent nothing. A post with a row may already be at Mux: only then is Mux asked.
+      if (!current.responseId || (await planResend(current, deps.status)) !== 'wait') throw new Error('recording_missing');
+    }
     if (!current.responseId) {
       // No URL could be had when Post was tapped (an upload limit, or no connection): get one now
       // and create the row, as Post would have. The URL is saved first, so a failed attempt
@@ -103,7 +116,7 @@ export async function runPendingPost(post: PendingPost, deps: RunDeps, signal: A
         now,
       });
     }
-    const plan = await planResend(current, deps.status);
+    const plan = await planResend(current, deps.status, { force: resent });
     if (signal.aborted) return;
     if (plan !== 'wait') {
       if (plan === 'replace' || !uploadUrlUsable(current, now())) {
@@ -151,6 +164,8 @@ export type SubmitArgs = {
 };
 
 export type SubmitDeps = {
+  /** Whether the recording's file is still on the phone. */
+  fileExists: (recording: Recording) => boolean;
   /** The member's stored post. Throws if storage cannot be read (nothing may be replaced blind). */
   stored: () => Promise<PendingPost | null>;
   /** Must succeed (throws otherwise). */
@@ -178,6 +193,8 @@ export type Submitted = { show: PostingState; upload?: PendingPost } | null;
  *   (A-Restricted, LV-Suspended, or Post Review staying open).
  */
 export async function submitPost(args: SubmitArgs, deps: SubmitDeps): Promise<Submitted> {
+  // Nothing is asked of the server for a recording that is not on the phone (I2).
+  if (!deps.fileExists(args.recording)) throw new Error('recording_missing');
   const stored = await deps.stored();
   if (stored && stored.recording.id !== args.recording.id) throw new Error('post_pending');
   const base = newPendingPost(args, null, 'uploading');
@@ -223,4 +240,60 @@ export async function submitPost(args: SubmitArgs, deps: SubmitDeps): Promise<Su
   }
   await deps.store(pending);
   return { show: { kind: 'uploading', post: pending, progress: 0 }, upload: pending };
+}
+
+export type DiscardDeps = {
+  /** Must succeed (throws otherwise): the discard is recorded before the server is asked. */
+  persist: (post: PendingPost | null) => Promise<void>;
+  deleteFiles: (recording: Recording) => void;
+  /** abandon-submission; throws when there is no answer. */
+  abandon: (submissionId: string) => Promise<AbandonAnswer>;
+};
+
+/** What a discard left. gone: the recording is off the phone. posting: Mux already has it, so it
+ *  will post. kept: not confirmed yet; still on the phone, asked again later. */
+export type Discarded = { kind: 'gone' } | { kind: 'posting'; post: PendingPost } | { kind: 'kept'; post: PendingPost; reason: string };
+
+/**
+ * Discard (and Sign out anyway, and a discard asked again later). The local recording is deleted
+ * only once nothing of it can post (review of 13 Oct, B2):
+ * - Nothing was ever sent (no URL): it goes at once, offline too.
+ * - Otherwise the discard is stored with the post first (account-scoped reconciliation work), then
+ *   the server is asked (abandon-submission, which asks Mux before it retires anything).
+ *   - abandoned: the recording goes.
+ *   - settled on the server (live, removed, a saved draft): nothing more will happen to it; the
+ *     phone's copy goes, and the video on the server is not touched.
+ *   - Mux already has it (at_mux): it will post; the post carries on as processing, discard
+ *     cleared.
+ *   - anything else (offline, busy, not verifiable, no submission id): kept, discard still
+ *     requested.
+ * Never deletes a published or processing video.
+ */
+export async function discardPost(post: PendingPost, deps: DiscardDeps): Promise<Discarded> {
+  if (!post.responseId && !post.uploadId) {
+    deps.deleteFiles(post.recording);
+    await deps.persist(null);
+    return { kind: 'gone' };
+  }
+  const requested: PendingPost = { ...post, discardRequested: true };
+  await deps.persist(requested);
+  const submissionId = post.recording.submissionId;
+  if (!submissionId) return { kind: 'kept', post: requested, reason: 'no_submission' };
+  let answer: AbandonAnswer;
+  try {
+    answer = await deps.abandon(submissionId);
+  } catch (e) {
+    return { kind: 'kept', post: requested, reason: errorReason(e) };
+  }
+  if (answer.outcome === 'abandoned' || (answer.outcome === 'kept' && ['live', 'removed', 'draft'].includes(answer.reason ?? ''))) {
+    deps.deleteFiles(post.recording);
+    await deps.persist(null).catch(() => undefined);
+    return { kind: 'gone' };
+  }
+  if (answer.outcome === 'kept' && answer.reason === 'at_mux' && answer.responseId) {
+    const posting: PendingPost = { ...post, responseId: answer.responseId, state: 'processing', discardRequested: false, failedReason: null };
+    await deps.persist(posting);
+    return { kind: 'posting', post: posting };
+  }
+  return { kind: 'kept', post: requested, reason: answer.reason ?? answer.outcome };
 }

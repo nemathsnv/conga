@@ -27,6 +27,10 @@ export type PendingPost = {
   state: 'waiting' | 'uploading' | 'processing' | 'failed';
   attempts: number;
   failedReason: string | null;
+  /** The member discarded it, but the server could not yet confirm that nothing of it will post
+   *  (offline, or Mux not verifiable). It stays on the phone, still the member's one waiting
+   *  recording, and the discard is asked again at launch and when the connection returns. */
+  discardRequested?: boolean;
 };
 
 /** How long a stored upload URL is used, from when it was asked for (ticketStore's mintedAt). The

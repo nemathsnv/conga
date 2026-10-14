@@ -165,15 +165,13 @@ function unwrap<T>(res: { data: T; error: { message: string; code?: string } | n
 
 /**
  * Calls a posting function with the recording's submission id (20261013000200), so a call whose
- * answer was lost returns the row it made instead of making another. A database without that
- * migration (before it is applied, or after a rollback) answers PGRST202, no such function, having
- * run nothing: the call is then made again without the id, as older builds do.
+ * answer was lost returns the row it made instead of making another. Never sent without it: a
+ * database without that migration refuses the call (PGRST202) and the post fails visibly, rather
+ * than posting without idempotency (review of 13 Oct, I4). The migration goes first; its rollback
+ * keeps five-argument versions for this build.
  */
 async function postRpc<T>(fn: string, args: Record<string, unknown>, submissionId: string | null | undefined): Promise<T> {
-  if (!submissionId) return unwrap(await supabase.rpc(fn, args)) as T;
-  const res = await supabase.rpc(fn, { ...args, p_submission: submissionId });
-  if (res.error?.code === 'PGRST202') return unwrap(await supabase.rpc(fn, args)) as T;
-  return unwrap(res) as T;
+  return unwrap(await supabase.rpc(fn, submissionId ? { ...args, p_submission: submissionId } : args)) as T;
 }
 
 let suspendedHandler: () => void = () => undefined;
@@ -226,11 +224,6 @@ export async function abandonResponse(responseId: string): Promise<void> {
   unwrap(await supabase.rpc('abandon_response', { p_response: responseId }));
 }
 
-/** Discarding a recording whose Post never got an answer: the server retires the row it may have
- *  made, only if nothing can have been sent to it. 'abandoned', 'kept' or 'not_found'. */
-export async function abandonSubmission(submissionId: string): Promise<string> {
-  return unwrap(await supabase.rpc('abandon_submission', { p_submission: submissionId })) as string;
-}
 
 export async function getProfile(args: { id?: string; username?: string } = {}): Promise<Profile | null> {
   return (unwrap(await supabase.rpc('get_profile', { p_id: args.id ?? null, p_username: args.username ?? null })) ?? null) as Profile | null;

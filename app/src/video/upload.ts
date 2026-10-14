@@ -35,6 +35,30 @@ export async function mintRefusal(error: unknown): Promise<string> {
   return 'mint_failed';
 }
 
+/** abandon-submission's answer (20261013000300). */
+export type AbandonAnswer = { outcome: 'abandoned' | 'kept' | 'not_found'; reason?: string; responseId?: string };
+
+/**
+ * Asks the server to discard a recording's post, which it does only once Mux confirms it has
+ * nothing of it. Throws when there is no answer: nothing is known, nothing may be deleted.
+ */
+export async function requestAbandon(submissionId: string): Promise<AbandonAnswer> {
+  const { data, error } = await supabase.functions.invoke('abandon-submission', { method: 'POST', body: { submissionId } });
+  if (error) throw new Error('abandon_failed');
+  const outcome = (data as { outcome?: unknown } | null)?.outcome;
+  if (outcome !== 'abandoned' && outcome !== 'kept' && outcome !== 'not_found') throw new Error('abandon_failed');
+  return data as AbandonAnswer;
+}
+
+/** Whether the recording's file is still on the phone (one segment until stitching, B-1). */
+export function recordingOnPhone(recording: Recording): boolean {
+  try {
+    return recording.segments.length === 1 && new File(recording.segments[0].uri).exists;
+  } catch {
+    return false;
+  }
+}
+
 /** The file that is uploaded. One segment only until stitching lands (docs/BLOCKERS.md B-1). */
 export function uploadableFile(recording: Recording): File {
   if (recording.segments.length !== 1) throw new Error('stitching_required');

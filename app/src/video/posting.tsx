@@ -3,20 +3,22 @@
 // (PR-Posting, X-Upload-Failed, and A-Offline while a post waits for the connection). Survives app
 // restarts through pendingPost storage; a post waiting offline when the app closes becomes Retry.
 // A post belongs to the member who posted it: when the signed-in member changes, their upload is
-// stopped and their post is neither shown nor retried for anyone else.
+// stopped and their post is neither shown nor retried for anyone else. Retry and Discard never
+// run together (createExclusive), and a recording is deleted only once the server confirms
+// nothing of it will post (discardPost).
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { track } from '@/lib/analytics';
 import { isOnline, subscribeOnline } from '@/lib/connectivity';
-import { abandonResponse, abandonSubmission, postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
+import { postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
 import { useSession } from '@/lib/session';
-import { loadPendingPost, loadPendingPostOrThrow, savePendingPost, savePendingPostOrThrow } from './pendingPost';
+import { loadPendingPost, loadPendingPostOrThrow, savePendingPostOrThrow } from './pendingPost';
 import { resumeState, type PendingPost } from './pendingPostState';
-import { createGate, createOncePerKey, createQueue } from './postingFlow';
+import { createExclusive, createOncePerKey, createQueue } from './postingFlow';
 import type { TicketSource } from './ticketStore';
 import type { Recording } from './types';
-import { checkUploadStatus, deleteRecordingFiles, mintUpload, putRecording, waitUntilLive, type UploadTicket } from './upload';
-import { runPendingPost, submitPost, type PostingState } from './uploadRun';
+import { checkUploadStatus, deleteRecordingFiles, mintUpload, putRecording, recordingOnPhone, requestAbandon, waitUntilLive, type UploadTicket } from './upload';
+import { discardPost, runPendingPost, submitPost, type PostingState } from './uploadRun';
 import { uploadTickets } from './uploadTickets';
 
 export type { PostingState } from './uploadRun';
@@ -28,10 +30,13 @@ type PostingContextValue = {
    *  it is never replaced. The upload URL comes from the member's ticket store (the one Post Review asked for). A recording is
    *  posted once: posting it again gets the first call's promise, unless that call threw. */
   post: (args: { recording: Recording; promptId: string; promptText: string; caption: string | null; tickets: TicketSource; replyTo?: { id: string; name: string }; draftFor?: string }) => Promise<void>;
+  /** Retry (X-Upload-Failed). Offline, the post waits for the connection instead (A-Offline). Does nothing while a discard runs. */
   retry: () => Promise<void>;
-  /** Give up on a failed post: the recording is deleted from the phone. */
+  /** Give up on a failed post. Stops any upload first; the recording leaves the phone only once the server confirms nothing of
+   *  it will post (discardPost). No board calls this yet (BETA-READINESS.md section 19). */
   discardFailed: () => Promise<void>;
-  /** Sign out anyway (LV-SignOut): stops the member's upload and deletes their unposted recording from the phone. */
+  /** Sign out anyway (LV-SignOut): the same discard. If the server cannot confirm it yet, the recording stays on the phone under the
+   *  member's own slot, and the discard is asked again when they next sign in. */
   deleteUnposted: () => Promise<void>;
   /** Clears a finished post from the banner. */
   dismiss: () => void;
@@ -49,26 +54,9 @@ function createRow(post: Pick<PendingPost, 'draftFor' | 'replyToId' | 'promptId'
   return postResponse(post.promptId, t.uploadId, post.caption, durationMs, submissionId);
 }
 
-/**
- * Discard (X-Upload-Failed) or Sign out anyway: the recording leaves the phone, and the row the
- * server may hold for it is retired. A row the phone knows is abandoned as before. A Post that
- * never got an answer may have made one: abandon_submission retires it only if nothing can have
- * been sent to it. Best effort: offline, the row stays (invisible) and the recording still goes.
- */
-async function forgetPost(ownerId: string, post: PendingPost): Promise<void> {
-  deleteRecordingFiles(post.recording);
-  await savePendingPost(ownerId, null);
-  try {
-    if (post.responseId) await abandonResponse(post.responseId);
-    else if (post.uploadId && post.recording.submissionId) await abandonSubmission(post.recording.submissionId);
-  } catch {
-    // The row stays "processing" server-side; invisible to others.
-  }
-}
-
-/** The signed-in member as the provider sees it: one upload and one Post at a time, stopped when they change. */
-type Member = { id: string | null; abort: AbortController; gate: ReturnType<typeof createGate>; queue: ReturnType<typeof createQueue> };
-const newMember = (id: string | null): Member => ({ id, abort: new AbortController(), gate: createGate(), queue: createQueue() });
+/** The signed-in member as the provider sees it: one upload or discard at a time, one Post at a time, stopped when they change. */
+type Member = { id: string | null; abort: AbortController; exclusive: ReturnType<typeof createExclusive>; queue: ReturnType<typeof createQueue> };
+const newMember = (id: string | null): Member => ({ id, abort: new AbortController(), exclusive: createExclusive(), queue: createQueue() });
 
 export function PostingProvider({ children }: { children: ReactNode }) {
   const { session } = useSession();
@@ -79,30 +67,63 @@ export function PostingProvider({ children }: { children: ReactNode }) {
   const member = useRef<Member>(newMember(null));
   const [oncePerRecording] = useState(createOncePerKey);
 
-  /** One run at a time per member: a second call (Retry twice, the connection returning) joins the first. */
+  /** The upload of a post. One at a time per member: a second call joins the first; during a discard it does nothing. */
   const run = useCallback((post: PendingPost) => {
     const m = member.current;
     const owner = m.id;
-    if (owner === null || post.ownerId !== owner) return Promise.resolve();
-    return m.gate(() =>
-      runPendingPost(
-        post,
-        {
-          persist: (p) => savePendingPostOrThrow(owner, p),
-          show: (s) => setOwned({ owner: m.id, state: s }),
-          mint: mintUpload,
-          createRow,
-          retryResponseUpload,
-          put: putRecording,
-          status: checkUploadStatus,
-          waitUntilLive,
-          deleteFiles: deleteRecordingFiles,
-          track,
-        },
-        m.abort.signal,
-      ),
+    if (owner === null || post.ownerId !== owner || post.discardRequested) return Promise.resolve();
+    return m.exclusive.upload(
+      (signal) =>
+        runPendingPost(
+          post,
+          {
+            persist: (p) => savePendingPostOrThrow(owner, p),
+            show: (s) => setOwned({ owner, state: s }),
+            mint: mintUpload,
+            createRow,
+            retryResponseUpload,
+            put: putRecording,
+            status: checkUploadStatus,
+            waitUntilLive,
+            deleteFiles: deleteRecordingFiles,
+            fileExists: recordingOnPhone,
+            track,
+          },
+          signal,
+        ),
+      m.abort.signal,
     );
   }, []);
+
+  /**
+   * Discards the member's waiting recording (discardPost), after stopping and waiting for any upload.
+   * It works on the stored post, which the stopped upload may have moved on (a row it got back).
+   * `resume`: carry on with a post Mux already has (not when the member is signing out).
+   */
+  const discard = useCallback((m: Member, resume: boolean) => {
+    const owner = m.id;
+    if (!owner) return Promise.resolve();
+    return m.exclusive.discard(async () => {
+      const stored = await loadPendingPostOrThrow(owner);
+      if (!stored) {
+        setOwned({ owner, state: IDLE });
+        return;
+      }
+      const result = await discardPost(stored, {
+        persist: (p) => savePendingPostOrThrow(owner, p),
+        deleteFiles: deleteRecordingFiles,
+        abandon: requestAbandon,
+      });
+      if (m.abort.signal.aborted) return;
+      if (result.kind === 'gone') setOwned({ owner, state: IDLE });
+      else if (result.kind === 'kept') setOwned({ owner, state: { kind: 'failed', post: result.post } });
+      else {
+        setOwned({ owner, state: { kind: 'processing', post: result.post } });
+        // Mux already has it: it posts. Started once this discard has ended.
+        if (resume) setTimeout(() => void run(result.post), 0);
+      }
+    });
+  }, [run]);
 
   // The signed-in member changes (sign-in, sign-out, another account): stop the previous member's
   // upload and URL, then offer this member's own stored post. On launch: a post that was uploading
@@ -117,7 +138,9 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     void loadPendingPost(ownerId).then((mine) => {
       if (!mine || m.abort.signal.aborted) return;
       const resumed = resumeState(mine);
-      if (resumed.state === 'processing') void run(resumed);
+      // A discard the server could not confirm before: shown as it was, and asked again (see below).
+      if (resumed.discardRequested) setOwned({ owner: ownerId, state: { kind: 'failed', post: resumed } });
+      else if (resumed.state === 'processing') void run(resumed);
       else setOwned({ owner: ownerId, state: { kind: 'failed', post: resumed } });
     });
   }, [ownerId, run]);
@@ -135,6 +158,7 @@ export function PostingProvider({ children }: { children: ReactNode }) {
           store: (p) => savePendingPostOrThrow(owner, p),
           clear: () => savePendingPostOrThrow(owner, null),
           createRow,
+          fileExists: recordingOnPhone,
           online: isOnline,
           track,
           aborted: () => m.abort.signal.aborted,
@@ -160,27 +184,49 @@ export function PostingProvider({ children }: { children: ReactNode }) {
     });
   }, [state, run]);
 
+  // A discard the server could not confirm is asked again: once when it is first shown (if online),
+  // then each time the connection returns. Not on every state change, so an unverifiable answer
+  // does not repeat in a loop.
+  const discardPending = state.kind === 'failed' && !!state.post.discardRequested;
+  useEffect(() => {
+    if (!discardPending) return;
+    const m = member.current;
+    if (isOnline()) {
+      const t = setTimeout(() => void discard(m, true), 0);
+      return () => clearTimeout(t);
+    }
+    return subscribeOnline((online) => {
+      if (online) void discard(m, true);
+    });
+  }, [discardPending, discard]);
+
   const retry = useCallback(async () => {
-    if (state.kind !== 'failed') return;
+    if (state.kind !== 'failed' || state.post.discardRequested || !ownerId) return;
+    const m = member.current;
+    if (m.exclusive.busy() === 'discard') return;
     track('upload_retried', { reason: (state.post.failedReason ?? '').slice(0, 80) });
+    if (!isOnline()) {
+      // Offline: wait for the connection like a post tapped offline (A-Offline; Nemat, 9 Oct).
+      const waiting: PendingPost = { ...state.post, state: 'waiting', failedReason: null };
+      try {
+        await savePendingPostOrThrow(ownerId, waiting);
+      } catch {
+        return;
+      }
+      setOwned({ owner: ownerId, state: { kind: 'waiting', post: waiting } });
+      return;
+    }
     await run(state.post);
-  }, [state, run]);
+  }, [state, run, ownerId]);
 
   const discardFailed = useCallback(async () => {
-    if (state.kind !== 'failed' || !ownerId) return;
-    await forgetPost(ownerId, state.post);
-    setOwned({ owner: ownerId, state: IDLE });
-  }, [state, ownerId]);
+    if (state.kind !== 'failed') return;
+    await discard(member.current, true);
+  }, [state, discard]);
 
   const deleteUnposted = useCallback(async () => {
-    // Stop the upload first, so no more bytes are sent, then delete the recording.
-    const m = member.current;
-    m.abort.abort();
-    member.current = newMember(m.id);
-    const mine = await loadPendingPost(m.id);
-    if (m.id && mine) await forgetPost(m.id, mine);
-    setOwned({ owner: m.id, state: IDLE });
-  }, []);
+    await discard(member.current, false);
+  }, [discard]);
 
   const dismiss = useCallback(() => {
     setOwned((o) => (o.state.kind === 'live' ? { ...o, state: IDLE } : o));
