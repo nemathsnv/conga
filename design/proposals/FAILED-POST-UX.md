@@ -1,16 +1,14 @@
 # Failed-post boards: for final visual review (revised 14 Oct)
 
-**Status: proposal boards, revised with Nemat's five decisions (14 Oct). Not approved boards.**
+**Status: proposal boards, revised with Nemat's five decisions and the final copy for P4, P6 and P9 (14 Oct). Awaiting final visual approval; not approved boards yet.**
 - `design/boards/`, `design/html/` and `design/BOARDS.md` are unchanged.
 - No UI is built.
 - The rendered boards are in `failed-post-ux.html`.
 - SPEC.md §19 is revised to match (14 Oct).
 
 Copy marks below:
-- **bold**: new copy that follows from a decision already made.
-- ***bold italic (drafted)***: wording drafted here, because the approved revised Discard
-  confirmation, "may finish processing" and sign-out text was not supplied. Confirm or replace
-  before the boards are approved.
+- **bold**: new or revised copy, approved 14 Oct (the five decisions, and the final P4, P6 and P9
+  wording). No drafted wording remains.
 - Everything else is existing approved copy, word for word.
 
 ## Decisions applied
@@ -22,7 +20,7 @@ Copy marks below:
    on returning to the app, and when the connection returns, then after 30 s, 2 min and 10 min.
    Never within the server's 2-minute hold.
 4. **"May finish processing", not "will post"** (P4, P6, P9).
-5. **"Video reply" for replies** (P1-R, P8-R; the same for every state).
+5. **"Video reply" for replies** (P1-R, P2-R, P3-R, P5-R, P8-R; the same for every state).
 
 ## Boards
 
@@ -32,20 +30,37 @@ Copy marks below:
 | P1-R | The same, video reply | "Your **video reply** didn't post" / as P1 | **Discard** · Retry |
 | P2 | Can never post: already responded, prompt or video gone, removed, closed submission, conflicting request | "Your response didn't post" / **"This recording can't be posted."** | **Discard** |
 | P3 | The file is gone | "Your response didn't post" / **"This recording is no longer on this phone."** | **Discard** |
-| P4 | Discard tapped | "Discard this recording?" / ***"It will be deleted from this phone. If it already reached Shortcut, it may finish processing."*** (drafted) | Discard (destructive) / Cancel |
+| P4 | Discard tapped | "Discard this recording?" / **"Shortcut will try to stop it from posting. If it has already uploaded, it may still appear."** | Discard (destructive) / Cancel |
 | P5 | Discard not confirmed yet (offline, not verifiable) | **"Discarding your response"** / **"It stays on this phone until Shortcut confirms."** | none |
-| P6 | Discard found it already at Shortcut | **"This recording already reached Shortcut"** / ***"It may finish processing. If it appears on your profile, you can delete it there."*** (drafted) | OK |
+| P6 | Discard found it already at Shortcut | **"This recording already reached Shortcut"** / **"It may finish processing. If it appears on your profile, you can delete it there."** | OK |
 | P7 | Respond, Reply or Record while one waits (failed or offline) | **"Your last recording hasn't posted yet"** / **"Retry or discard it first."** | OK |
 | P8 | The same while it is posting | **"Your last recording is still posting"** / "Keep Shortcut open until it's done." | OK |
 | P8-R | PR-Posting, video reply | "Posting your **video reply**" / "Keep Shortcut open until it's done." | none |
-| P9 | Every sign-out with a recording waiting: Settings, LV-Suspended, the end of Delete account, confirm email | "Sign out?" / "You have 1 recording that hasn't posted. ***Signing out discards it from this phone. If it already reached Shortcut, it may finish processing.***" (second sentence drafted) | Sign out anyway / Cancel |
+| P9 | Every sign-out with a recording waiting: Settings, LV-Suspended, the end of Delete account, confirm email | "Sign out?" / "You have 1 recording that hasn't posted. **Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account.**" | Sign out anyway / Cancel |
 
-Video reply versions of the other states:
-- P2, P3: same lines, title "Your video reply didn't post".
-- P5: **"Discarding your video reply"**.
+Video reply versions of the other states (P2-R, P3-R and P5-R are drawn; P4, P6, P7 and P9 read the same for both; A-Offline is an existing board, not redrawn here):
+- P2-R, P3-R: same lines, title "Your video reply didn't post".
+- P5-R: **"Discarding your video reply"**.
 - A-Offline: **"Your video reply stays saved on this phone."**
 
 Drafts keep "Your draft didn't save" and "Saving your draft".
+
+## Copy checks (14 Oct)
+
+- **P6, delete from your profile:** checked in the code, not on a device.
+  - A recording Discard finds already at Mux always has its own row, still processing
+    (`begin_submission_abandon`, `20261013000300`). Once live, it is on the author's profile:
+    Responses or Replies.
+  - Your own response: profile → player → More → "Delete your response?" (SF-Delete,
+    `player/[promptId].tsx`). Your own video reply: profile → Replies → More → the same
+    confirmation (`reply/[id].tsx`). Both call `delete_video`, which deletes the asset at Mux.
+  - Not covered: a first-response draft for a suggested prompt. It never appears on a profile; it
+    is deleted from its suggestion ("Delete draft", section 12). No draft variant of P6 is drawn.
+    Open question for Nemat.
+- **P9, "stops the upload on this phone":** matches the app. Sign out anyway runs the same
+  discard as Discard, which stops any upload first (`discardForSignOut`, `memberPosting.ts`).
+  A recording it cannot confirm stays in that member's own slot and is asked about again at
+  their next sign-in.
 
 ## Behaviour (built and tested; waits for these boards)
 

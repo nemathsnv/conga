@@ -553,13 +553,13 @@ People can delete anything they posted at any time, and deleting an account has 
 
 A recording is never lost because of a bad connection. It stays saved on the phone until it posts or the person discards it. There is no background upload that survives closing the app.
 
-*Revised 14 Oct 2026 (Nemat): Discard, one waiting recording at a time, and sign-out on every route. The new states are proposal boards P1 to P9 (`design/proposals/`), awaiting visual approval; nothing here is built until they are approved. Wording marked (draft) is not final.*
+*Revised 14 Oct 2026 (Nemat): Discard, one waiting recording at a time, and sign-out on every route. The new states are proposal boards P1 to P9 (`design/proposals/`), awaiting visual approval; nothing here is built until they are approved. Final copy for P4, P6 and P9 approved 14 Oct.*
 
 - **Upload:** starts when Post is tapped and runs while the app is open.
 - **Upload fails** (`X-Upload-Failed`): "Your response didn't post. It's saved on this phone. Check your connection." with Discard and Retry side by side. For a video reply: "Your video reply didn't post." A recording that can never post ("This recording can't be posted.") or is no longer on the phone ("This recording is no longer on this phone.") offers Discard only.
-- **Discard:** a confirmation comes first: "Discard this recording?" / "It will be deleted from this phone. If it already reached Shortcut, it may finish processing." (draft) Discard, or Cancel. The recording is deleted from the phone once Shortcut confirms none of it will be processed.
+- **Discard:** a confirmation comes first: "Discard this recording?" / "Shortcut will try to stop it from posting. If it has already uploaded, it may still appear." Discard, or Cancel. The recording is deleted from the phone once Shortcut confirms none of it will be processed.
   - **Not confirmed yet** (offline, or Shortcut cannot verify): the recording stays on the phone, shown as "Discarding your response" / "It stays on this phone until Shortcut confirms." Shortcut asks again by itself: when the app opens or comes back, when the connection returns, and on a short, limited schedule.
-  - **Already reached Shortcut:** "This recording already reached Shortcut" / "It may finish processing. If it appears on your profile, you can delete it there." (draft) A video that reached Shortcut is never deleted automatically.
+  - **Already reached Shortcut:** "This recording already reached Shortcut" / "It may finish processing. If it appears on your profile, you can delete it there." A video that reached Shortcut is never deleted automatically.
 - **One waiting recording at a time:** a recording that is posting, waiting offline or failed is never replaced. While one waits, Respond, Reply and Record do not open the camera: "Your last recording hasn't posted yet" / "Retry or discard it first."; while it posts: "Your last recording is still posting" / "Keep Shortcut open until it's done."
 - **Posting** (`PR-Posting`): for a video reply, "Posting your video reply".
 - **App closed mid-upload:** the recording stays saved. Next time the app opens, the same banner offers Retry.
@@ -570,7 +570,7 @@ A recording is never lost because of a bad connection. It stays saved on the pho
   - A **first-response draft** for a suggested prompt is uploaded privately to the server, so it survives reinstalls (section 12).
 - Unposted recordings are discarded on sign-out by any route, after a warning (below), on the same terms as Discard. One Shortcut cannot confirm yet stays on the phone, out of reach of any other account, and is discarded the next time that person signs in on this phone. They show up only through the Upload failed banner (`X-Upload-Failed`); there is no separate list.
 
-**Signing out with unposted recordings:** a warning comes first, on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email): "You have 1 recording that hasn't posted. Signing out discards it from this phone. If it already reached Shortcut, it may finish processing." (draft) Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3); its revised text and the other routes are proposal board P9.
+**Signing out with unposted recordings:** a warning comes first, on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email): "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3); its revised text and the other routes are proposal board P9.
 
 ## 20. Empty, error and loading states
 
