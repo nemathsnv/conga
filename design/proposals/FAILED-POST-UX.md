@@ -1,80 +1,72 @@
-# Failed-post states: proposal for approval (14 Oct)
+# Failed-post boards: for final visual review (revised 14 Oct)
 
-**Status: proposal. Not approved boards.** `design/boards/`, `design/html/` and `design/BOARDS.md`
-are unchanged. The visual mock-ups are in `failed-post-ux.html` (P1 to P9). Built only from approved
-boards: the X-Upload-Failed banner, the PR-Discard and LV-SignOut sheets, and PR-Posting's copy.
-Copy in **bold** below is new and needs Nemat's approval; everything else is existing board copy,
-word for word.
+**Status: proposal boards, revised with Nemat's five decisions (14 Oct). Not approved boards.**
+- `design/boards/`, `design/html/` and `design/BOARDS.md` are unchanged.
+- No UI is built.
+- The rendered boards are in `failed-post-ux.html`.
+- SPEC.md §19 is revised to match (14 Oct).
 
-Behaviour behind these states is already built and tested locally (`docs/BETA-READINESS.md`
-section 19), with no UI: nothing calls Discard yet except Sign out anyway.
+Copy marks below:
+- **bold**: new copy that follows from a decision already made.
+- ***bold italic (drafted)***: wording drafted here, because the approved revised Discard
+  confirmation, "may finish processing" and sign-out text was not supplied. Confirm or replace
+  before the boards are approved.
+- Everything else is existing approved copy, word for word.
 
-## States
+## Decisions applied
 
-| # | State | When | Copy | Actions |
-|---|---|---|---|---|
-| P1 | Upload failed, can be retried | A connection failure, an upload limit, Mux not answering | "Your response didn't post" / existing second line (connection, or the approved limit lines) | Retry (existing); **Discard** (new text button) |
-| P2 | Upload failed, can never post | `already_responded`, `prompt_not_found`, `video_not_found`, `suggestion_not_found`, `response_removed`, `response_deleted`, `submission_closed`, `submission_conflict` | "Your response didn't post" / **"This recording can't be posted."** | **Discard** only |
-| P3 | Upload failed, file gone | `recording_missing` | "Your response didn't post" / **"This recording is no longer on this phone."** | **Discard** only |
-| P4 | Discard confirmation | Discard tapped in P1 to P3 | PR-Discard, word for word: "Discard this recording?" / "It won't be saved anywhere." | Discard (destructive) / Cancel |
-| P5 | Discarding, not confirmed yet | After Discard (or Sign out anyway), offline or Mux not verifiable | **"Discarding your response"** / **"It stays on this phone until Shortcut confirms."** | none (the app asks again by itself when the connection returns) |
-| P6 | Discard: Mux already has it | The server answers `at_mux` | **"This recording already reached Shortcut"** / **"It will post. You can delete it from your profile afterwards."** | OK; the banner then shows PR-Posting |
-| P7 | Another recording, first one failed or offline | Respond, Reply or Record tapped while a recording waits | **"Your last recording hasn't posted yet"** / **"Retry or discard it first."** | OK (no camera opens) |
-| P8 | Another recording, first one still posting | The same, while it uploads or processes | **"Your last recording is still posting"** / "Keep Shortcut open until it's done." (PR-Posting) | OK |
-| P9 | Sign-out warning on the other routes | LV-Suspended's Sign out, the end of Delete account, confirm email, with a recording waiting | LV-SignOut, word for word: "Sign out?" / "You have 1 recording that hasn't posted. Signing out deletes it from this phone." | Sign out anyway / Cancel |
+1. **Discard is visible beside Retry** (P1).
+2. **A second recording is blocked at camera entry** (P7, P8), whenever a recording is posting,
+   waiting offline or failed.
+3. **An unconfirmed Discard keeps the recording and retries safely** (P5). It asks again at launch,
+   on returning to the app, and when the connection returns, then after 30 s, 2 min and 10 min.
+   Never within the server's 2-minute hold.
+4. **"May finish processing", not "will post"** (P4, P6, P9).
+5. **"Video reply" for replies** (P1-R, P8-R; the same for every state).
 
-Drafts use the banner's existing "Your draft didn't save" title; the new lines apply unchanged.
+## Boards
 
-## Behaviour (built, waiting for these states)
+| Board | When | Copy | Actions |
+|---|---|---|---|
+| P1 | Upload failed, can be retried: a connection failure, an upload limit, Mux not answering, the server busy | "Your response didn't post" / existing second line (connection, or the approved limit lines) | **Discard** · Retry |
+| P1-R | The same, video reply | "Your **video reply** didn't post" / as P1 | **Discard** · Retry |
+| P2 | Can never post: already responded, prompt or video gone, removed, closed submission, conflicting request | "Your response didn't post" / **"This recording can't be posted."** | **Discard** |
+| P3 | The file is gone | "Your response didn't post" / **"This recording is no longer on this phone."** | **Discard** |
+| P4 | Discard tapped | "Discard this recording?" / ***"It will be deleted from this phone. If it already reached Shortcut, it may finish processing."*** (drafted) | Discard (destructive) / Cancel |
+| P5 | Discard not confirmed yet (offline, not verifiable) | **"Discarding your response"** / **"It stays on this phone until Shortcut confirms."** | none |
+| P6 | Discard found it already at Shortcut | **"This recording already reached Shortcut"** / ***"It may finish processing. If it appears on your profile, you can delete it there."*** (drafted) | OK |
+| P7 | Respond, Reply or Record while one waits (failed or offline) | **"Your last recording hasn't posted yet"** / **"Retry or discard it first."** | OK |
+| P8 | The same while it is posting | **"Your last recording is still posting"** / "Keep Shortcut open until it's done." | OK |
+| P8-R | PR-Posting, video reply | "Posting your **video reply**" / "Keep Shortcut open until it's done." | none |
+| P9 | Every sign-out with a recording waiting: Settings, LV-Suspended, the end of Delete account, confirm email | "Sign out?" / "You have 1 recording that hasn't posted. ***Signing out discards it from this phone. If it already reached Shortcut, it may finish processing.***" (second sentence drafted) | Sign out anyway / Cancel |
 
-- **Retry and Discard never run together.** Retry switches the banner to PR-Posting at once, so
-  Discard is not on screen while anything is being sent or asked. Discard during an upload stops it
-  and waits for it to end.
-- **Safe discard:**
-  - A recording that never sent anything goes at once, offline too.
-  - Otherwise the server is asked first (abandon-submission, which asks Mux).
-    - Confirmed: it goes.
-    - Mux already has it: P6, and it posts.
-    - Not confirmed (offline, Mux not verifiable): P5. It stays and still blocks a new recording,
-      and is asked again at launch and when the connection returns.
-  - Nothing published or processing is deleted automatically.
-- **Retry offline** enters A-Offline (existing board) and posts by itself when the connection
-  returns, as a post tapped offline does (Nemat, 9 Oct).
-- **A waiting recording is never replaced:** a second Post is refused (`post_pending`). With P7/P8
-  the camera does not open in the first place. Fallback, if a second take exists anyway: the same
-  sheet on Post Review's Post, and the take stays on screen.
+Video reply versions of the other states:
+- P2, P3: same lines, title "Your video reply didn't post".
+- P5: **"Discarding your video reply"**.
+- A-Offline: **"Your video reply stays saved on this phone."**
 
-## Decisions needed
+Drafts keep "Your draft didn't save" and "Saving your draft".
 
-1. **Discard's placement:** a text button beside Retry (P1, recommended: visible, one tap from the
-   confirmation), or tapping the banner opens a sheet with Retry / Discard / Cancel.
-2. **When to block a second recording:** at camera entry (P7/P8, recommended), or only at Post.
-   During an upload, or only once it has failed. Blocking during an upload stops a reply from being
-   recorded while a response finishes (up to about a minute on mobile data).
-3. **P5:** accept "asked again later" (built), or refuse Discard while offline with **"You're
-   offline" / "Connect to discard this recording. It stays saved on this phone." / OK** (not
-   built).
-4. **P6's wording,** and whether "delete it from your profile" is the right pointer. Deleting your
-   own video is SPEC.md §18 (SF-Delete), and A-Disclosure promises "Delete any of your videos at any
-   time."
-5. **Optional:** the banner says "response" for video replies too; the Words rule says "video
-   reply" ("Your video reply didn't post").
+## Behaviour (built and tested; waits for these boards)
 
-## SPEC.md §19 revision (proposed text; SPEC.md is locked, so Nemat's decision)
+- **Discard (P1 to P4)** runs only when no attempt is in flight. Retry switches the banner to
+  PR-Posting at once, and Discard first stops and waits for any Post or upload.
+- **The recording is deleted only once the server confirms nothing of it will be processed.**
+  - Otherwise P5 (still blocking a new recording), asked again as in decision 3.
+  - If Mux already has it: P6, and it carries on processing. Never deleted automatically.
+- **Retry offline** enters A-Offline and posts by itself when the connection returns.
+- **A waiting recording is never replaced.** P7/P8 stop the camera opening. If a second take
+  exists anyway, Post is refused (`post_pending`), and the same P7/P8 sheet shows on Post Review.
+- **Sign out anyway (P9)** never blocks signing out. A recording it cannot confirm stays on the
+  phone under that account only, and is discarded at that person's next sign-in.
 
-Current text:
+## Known differences between these boards and the app today
 
-> - **Upload fails** (`X-Upload-Failed`): "Your response didn't post. It's saved on this phone. Check your connection." and Retry.
->
-> - Unposted recordings are deleted from the phone on sign-out, after a warning (below).
->
-> **Signing out with unposted recordings:** a warning comes first: "You have 1 recording that hasn't posted. Signing out deletes it from this phone." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3).
-
-Proposed:
-
-> - **Upload fails** (`X-Upload-Failed`): "Your response didn't post." with the reason, and Retry, or Discard after the PR-Discard confirmation. A recording that can never post offers Discard only.
-> - **One waiting recording at a time:** while a recording is posting, waiting offline or failed, Respond, Reply and Record say so and do not open the camera. A waiting recording is never replaced.
-> - **Discard:** the recording is deleted from the phone once Shortcut confirms it won't post. If Shortcut already has it, it posts (and can be deleted like any video). If Shortcut can't confirm yet, it stays on the phone and is discarded when the connection returns.
-> - Unposted recordings are deleted from the phone on sign-out by any route, after a warning (below), on the same terms as Discard. One Shortcut cannot confirm yet stays on the phone, hidden, and is discarded the next time that person signs in on this phone.
->
-> **Signing out with unposted recordings:** unchanged copy, shown on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email).
+- None of P1 to P9 is built.
+  - The app shows X-Upload-Failed with Retry only, and nothing in it calls Discard except Sign out
+    anyway (Settings).
+  - P2's and P3's lines are not mapped: the banner shows the connection line for every reason.
+- Video replies still show "response" in the banner (`HomeStates.tsx`).
+- The camera is not blocked at entry: a second take is refused only at Post (`post_pending`), with
+  no message.
+- LV-SignOut appears only in Settings, with the old body.
