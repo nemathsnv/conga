@@ -13,6 +13,7 @@
 import { assert, assertEquals } from "./assert.ts";
 import { handleUploadStatus } from "../mux-upload-status/handler.ts";
 import { handleMuxWebhook } from "../mux-webhook/handler.ts";
+import { handleAbandonSubmission } from "../abandon-submission/handler.ts";
 
 const API = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -35,6 +36,9 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   const url = new URL(input instanceof Request ? input.url : String(input));
   if (url.hostname === "stream.mux.com") return new Response("#EXTM3U\n");
   if (url.hostname === "api.mux.com") {
+    // abandon-submission cancels an upload Mux reports waiting.
+    const cancelled = url.pathname.match(/^\/video\/v1\/uploads\/([A-Za-z0-9]+)\/cancel$/)?.[1];
+    if (cancelled && init?.method === "PUT") return Response.json({ data: { id: cancelled, status: "cancelled" } });
     const upload = url.pathname.match(/^\/video\/v1\/uploads\/([A-Za-z0-9]+)$/)?.[1];
     if (upload) {
       const a = muxAssets.get(upload);
@@ -101,7 +105,13 @@ const postReply = (m: Member, to: string, u: string, submission?: string) =>
   rpc(m, "post_reply", { p_reply_to: to, p_upload_id: u, p_caption: null, p_duration_ms: 9000, ...(submission ? { p_submission: submission } : {}) });
 const postDraft = (m: Member, suggestion: string, u: string, submission?: string) =>
   rpc(m, "post_draft", { p_suggestion: suggestion, p_upload_id: u, p_caption: null, p_duration_ms: 9000, ...(submission ? { p_submission: submission } : {}) });
-const abandon = (m: Member, submission: string) => rpc(m, "abandon_submission", { p_submission: submission });
+/** Discard through abandon-submission (in-process; Mux stubbed above), as the app does. */
+async function abandon(m: Member | null, submission: string) {
+  const res = await handleAbandonSubmission(new Request("http://localhost/functions/v1/abandon-submission", {
+    method: "POST", headers: { ...(m ? { Authorization: `Bearer ${m.token}` } : {}), "Content-Type": "application/json" }, body: JSON.stringify({ submissionId: submission }),
+  }));
+  return { status: res.status, json: await res.json() as Record<string, unknown> };
+}
 
 async function rows(query: string) {
   return (await http(`/rest/v1/responses?${query}&select=id,status,kind,mux_upload_id`)).json as { id: string; status: string; kind: string; mux_upload_id: string }[];
@@ -236,11 +246,13 @@ Deno.test("ownership: another member reusing a submission id gets submission_con
     assert(!JSON.stringify(attempt.json).includes(String(mine.json.id)), "nothing of Lena's row is returned");
   }
   assertEquals((await ledgerRow(theirs)).status, "active");
-  assertEquals((await abandon(adam, s)).json, "not_found" as unknown as Record<string, unknown>);
+  assertEquals((await abandon(adam, s)).json, { outcome: "not_found" });
   assertEquals((await rows(`id=eq.${mine.json.id}`))[0].status, "processing");
   // Signed out (the anon key) cannot post or abandon at all.
   assertEquals((await rpc(null, "post_response", { p_prompt: P[4], p_upload_id: u, p_caption: null, p_duration_ms: 9000, p_submission: s })).status, 401);
-  assertEquals((await rpc(null, "abandon_submission", { p_submission: s })).status, 401);
+  assertEquals((await abandon(null, s)).status, 401);
+  // The database-only abandon_submission is gone: no API role can reach it.
+  assertEquals((await rpc(lena, "abandon_submission", { p_submission: s })).status, 404);
 });
 
 Deno.test("a changed request with the same id is refused: caption, duration, upload, target", async () => {
@@ -275,11 +287,11 @@ Deno.test("end to end: post, a replay, Mux ready, live; a replay after that stil
   assertEquals((await st.json()).responseStatus, "live");
   const late = await postResponse(fresh, P[1], u, s);
   assertEquals([late.status, late.json.id, late.json.status], [200, first.json.id, "live"]);
-  assertEquals((await abandon(fresh, s)).json, "kept" as unknown as Record<string, unknown>, "a live video is never abandoned");
+  assertEquals((await abandon(fresh, s)).json, { outcome: "kept", reason: "live", responseId: first.json.id }, "a live video is never abandoned");
   assertEquals((await rows(`id=eq.${first.json.id}`))[0].status, "live");
 });
 
-Deno.test("concurrency: a replay racing abandon_submission ends in one of the two consistent orders", async () => {
+Deno.test("concurrency: a replay racing a discard ends in a consistent order", async () => {
   const fresh = await member("nico");
   const u = await upload(fresh);
   const s = crypto.randomUUID();
@@ -287,10 +299,10 @@ Deno.test("concurrency: a replay racing abandon_submission ends in one of the tw
   assertEquals(first.status, 200);
   const [replay, gone] = await Promise.all([postResponse(fresh, P[2], u, s), abandon(fresh, s)]);
   const row = (await rows(`id=eq.${first.json.id}`))[0];
-  assertEquals(gone.json, "abandoned" as unknown as Record<string, unknown>, "nothing had been sent, so it is abandoned either way");
+  assertEquals(gone.json, { outcome: "abandoned", reason: "cancelled" }, "Mux had nothing (waiting): cancelled, then abandoned");
   assertEquals(row.status, "deleted");
-  // Either the replay ran first (it got the row, which was then abandoned) or second (closed).
-  assert((replay.status === 200 && replay.json.id === first.json.id) || replay.error === "submission_closed", JSON.stringify(replay));
+  // The replay ran before (it got the row, then abandoned), during the Mux check (busy), or after (closed).
+  assert((replay.status === 200 && replay.json.id === first.json.id) || replay.error === "submission_busy" || replay.error === "submission_closed", JSON.stringify(replay));
   // The prompt is free for the next recording.
   assertEquals((await postResponse(fresh, P[2], await upload(fresh), crypto.randomUUID())).status, 200);
 });
