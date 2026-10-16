@@ -4566,6 +4566,50 @@ stop before H4"). Deployed by the lead from the integration worktree at `f95eb24
 *Next:* H4 (batch B, migrations `20261016000200` to `204`) on Nemat's go-ahead; its preflight
 (`auth.sessions` privileges) passed in H1.
 
+## 24. H4 deployed: batch B, privacy, sessions, avatars and rate limits (16 Oct 12:07 UTC; Nemat approved; functions not yet redeployed)
+
+Approved by Nemat on 16 Oct ("run H4 … dry run, and if it lists exactly the five batch B
+migrations, push, then the read-only verification against the 24-migration fingerprint; record it
+and stop before H5"). Run by the lead from a `git archive` of `3622288` with the two batch C files
+removed, linked to `picvoavfxnajfjkqawju`. Package: `docs/release/H4-DEPLOY.md`; what the
+migrations do: `docs/release/SECURITY.md`.
+
+- **Files:** `20261016000200_direct_read_privacy.sql` `7feca30c…`, `…201_viewer_visibility.sql`
+  `559d06cf…`, `…202_session_lifecycle.sql` `4818681b…`, `…203_avatar_cleanup.sql` `facb8467…`,
+  `…204_rate_limits.sql` `e4c3e7bb…` (full md5s in the package).
+- **Dry run (12:07:10 UTC):** exactly the five files, in order; seeds `[]`, roles `[]`.
+- **Push (12:07:21 to 12:07:24 UTC):** five "Applying migration …" lines, "Finished supabase db
+  push", exit 0.
+- **Verification (12:09:19 UTC, read-only; evidence `docs/release/h4-results-20261016T120919Z.txt`):**
+  24 migrations, latest `20261016000204`; `session_is_current`, `session_started_at`,
+  `invite_lookup_unlimited`, `signin_providers_limited(p_email, p_client)`, `web_event_allowed`,
+  `request_client_ip`, the tables `avatar_removals`, `rate_limit_rules` and `rate_limit_counters`
+  present; the broad read policies on `profiles`, `follows` and `comments` replaced by own-row
+  policies; `prompts.suggested_by` and the moderator and note columns hidden from `authenticated`,
+  prompt text still readable; TRUNCATE and TRIGGER revoked from the API roles; the 4 avatar
+  policies (two recreated); 10 cron jobs (`avatar-cleanup` every 10 min, inert until its Vault
+  secrets exist, and `prune-rate-limit-counters` daily, added); the 5 rate-limit rules at the
+  documented defaults (invite client 10/15 min, invite stem 100/h, sign-in address 5/15 min,
+  sign-in client 30/15 min, web event 60/h); counters and removals empty;
+  `session_is_current()` true for the service connection; **schema fingerprint 847 objects,
+  listing md5 `8bddf2614e7c2d55acfcd10d951dddc5`, equal to a local stack built from the same 24
+  migrations** (`docs/release/h4-expected-24-migrations.fp`); founder response and ledger hashes
+  unchanged, V `live` on P2, responses `deleted=1`, `live=2`, 2 accounts, 0 deleted; clean-up
+  `off`, health `ok`, 0 open jobs; 2 migrations local-only (batch C). One `auth.sessions` row
+  exists (count only), so the session gate now applies to that phone's token.
+- **First verification run** (12:08 UTC) showed three FAIL lines that were the script's own
+  expectations (a pattern that matched the new policy names, a cron count that forgot 203's job,
+  guessed column names); each was checked against the migration text and the hosted rows, the
+  expectations corrected, and the run repeated. The hosted project was not changed between the
+  runs; the fingerprint matched on both.
+- **Not done:** H5 (`web` first deployment, `auth-signin-method` redeploy with the limited
+  lookup, `send-push`), H5b, H6 (`avatar-cleanup` function and secrets), the hosted auth smoke
+  (`SESSION_GATE=1 node scripts/hosted-auth-smoke.mjs`, Nemat's own address), the client-address
+  header check. The deployed `auth-signin-method` v10 keeps working (it calls
+  `signin_providers_for_email`, which 204 keeps), without the new limit until H5.
+
+*Next:* H5 on Nemat's go-ahead.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

@@ -1,4 +1,8 @@
-# H4: batch B on the hosted project (prepared 16 Oct; NOT authorised yet)
+# H4: batch B on the hosted project
+
+**Status: done 16 Oct 12:07 UTC with Nemat's approval; every verification check passed, fingerprint
+equal to the 24-migration stack (BETA-READINESS section 24, evidence `h4-results-20261016T120919Z.txt`).
+H5 onwards wait for their own go-ahead.**
 
 Step H4 of `RELEASE-CHECKLIST.md` Part 1B: Agent C's five migrations, `20261016000200` to
 `20261016000204` (`docs/release/SECURITY.md` sections 1 to 6). Same shape as H2: a dry run that must

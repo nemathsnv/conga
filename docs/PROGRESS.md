@@ -43,7 +43,7 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 | H1 read-only preflight | done 16 Oct 11:44 UTC, all PASS (docs/release/H1-REPORT.md) |
 | H2 batch A migrations 20261013000200, 20261013000300 | done 16 Oct 11:59 UTC, verified (BETA-READINESS section 22) |
 | H3 abandon-submission deployment | done 16 Oct 12:04 UTC, verified (BETA-READINESS section 23) |
-| H4 batch B migrations 20261016000200 to 204 | package prepared (docs/release/H4-DEPLOY.md, 24-migration fingerprint 847 objects); awaiting go-ahead |
+| H4 batch B migrations 20261016000200 to 204 | done 16 Oct 12:07 UTC, verified (BETA-READINESS section 24) |
 | H5 onwards | awaiting go-ahead |
 
 ## Not authorised in this effort (prepared only)
