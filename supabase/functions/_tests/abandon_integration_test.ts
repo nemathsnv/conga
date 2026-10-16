@@ -6,7 +6,7 @@
 //   SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... \
 //     deno test --allow-env --allow-net supabase/functions/_tests/abandon_integration_test.ts
 import { assert, assertEquals } from "./assert.ts";
-import { handleAbandonSubmission } from "../abandon-submission/handler.ts";
+import { handleAbandonSubmission, SETTLE_AFTER_EXPIRY_MS } from "../abandon-submission/handler.ts";
 
 const API = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -110,7 +110,7 @@ const sub = async (id: string) => ((await http(`/rest/v1/post_submissions?id=eq.
 
 const prompts = await http("/rest/v1/prompts?select=id", {
   method: "POST", prefer: "return=representation",
-  body: Array.from({ length: 24 }, (_, n) => ({ text: `Abandon test prompt ${n} ${run}`, status: "live", published_at: new Date().toISOString() })),
+  body: Array.from({ length: 40 }, (_, n) => ({ text: `Abandon test prompt ${n} ${run}`, status: "live", published_at: new Date().toISOString() })),
 });
 assertEquals(prompts.status, 201);
 const P = (prompts.json as { id: string }[]).map((p) => p.id);
@@ -200,14 +200,82 @@ Deno.test("cancel refused (it stopped waiting meanwhile) or not confirmed: kept;
   }
 });
 
-Deno.test("Mux says timed out, cancelled or errored with no asset: nothing more can arrive; retired without a cancel", async () => {
-  for (const status of ["timed_out", "cancelled", "errored"]) {
+Deno.test("Mux says timed out or cancelled with no asset: nothing more can arrive; retired without a cancel", async () => {
+  for (const status of ["timed_out", "cancelled"]) {
     resetMux();
     read = () => ({ status });
     const p = await posted();
     assertEquals((await abandon(lena.token, { submissionId: p.s })).json.outcome, "abandoned", status);
     assertEquals(muxChanges(), []);
     assertEquals((await row(p.id)).status, "deleted");
+  }
+});
+
+/** Moves the upload's recorded expiry (video_uploads.expires_at) to `msFromNow`. */
+async function expireUpload(u: string, msFromNow: number) {
+  const at = new Date(Date.now() + msFromNow).toISOString();
+  assertEquals((await http(`/rest/v1/video_uploads?upload_id=eq.${u}`, { method: "PATCH", body: { expires_at: at } })).status, 204);
+}
+
+Deno.test("Mux says errored (undocumented) with no asset: kept unverified while the URL is valid or just expired; the app's recording is not released", async () => {
+  for (const status of ["errored", "something_new"]) {
+    for (const expiry of [30 * 60_000, -60_000, -SETTLE_AFTER_EXPIRY_MS + 60_000]) {
+      resetMux();
+      read = () => ({ status });
+      const p = await posted();
+      await expireUpload(p.u, expiry);
+      const r = await abandon(lena.token, { submissionId: p.s });
+      assertEquals(r.json, { outcome: "kept", reason: "unverified", responseId: p.id }, `${status}, expiry ${expiry}`);
+      assertEquals(muxChanges(), [], "no cancel");
+      assertEquals((await row(p.id)).status, "processing");
+      const s = await sub(p.s);
+      assertEquals([s.abandoned_at, s.abandoning_until], [null, null], "not closed, hold released");
+    }
+  }
+});
+
+Deno.test("errored, asked again once the URL has long expired and Mux still has no asset: retired (bounded); a replay is then closed", async () => {
+  resetMux();
+  read = () => ({ status: "errored" });
+  const p = await posted();
+  assertEquals((await abandon(lena.token, { submissionId: p.s })).json.reason, "unverified", "first: URL still valid");
+  await expireUpload(p.u, -SETTLE_AFTER_EXPIRY_MS - 60_000);
+  assertEquals((await abandon(lena.token, { submissionId: p.s })).json.outcome, "abandoned", "later reconciliation");
+  assertEquals(muxChanges(), []);
+  assertEquals((await row(p.id)).status, "deleted");
+  assert((await sub(p.s)).abandoned_at, "closed");
+  const replay = await post(lena, P[promptIndex - 1], p.u, p.s);
+  assertEquals([replay.status, replay.error], [400, "submission_closed"]);
+  // An asset Mux makes from it after all is never published: its ready event finds a deleted row.
+  const late = await http("/rest/v1/rpc/mark_response_live", { method: "POST", body: { p_upload_id: p.u, p_asset_id: `aslate${run}`, p_playback_id: `pblate${run}`, p_duration_ms: 9000, p_passthrough: lena.id } });
+  assertEquals((late.json as { status: string }).status, "deleted");
+  const queued = await http(`/rest/v1/mux_cleanup_jobs?asset_id=eq.aslate${run}&select=action,reason`);
+  assertEquals(queued.json, [{ action: "delete_asset", reason: "abandoned" }]);
+});
+
+Deno.test("errored with an asset id, even long expired: kept at_mux", async () => {
+  resetMux();
+  read = () => ({ status: "errored", asset_id: "asErr" });
+  const p = await posted();
+  await expireUpload(p.u, -SETTLE_AFTER_EXPIRY_MS - 60_000);
+  assertEquals((await abandon(lena.token, { submissionId: p.s })).json, { outcome: "kept", reason: "at_mux", responseId: p.id });
+  assertEquals((await row(p.id)).status, "processing");
+});
+
+Deno.test("errored long expired, but the ledger has no expiry for the member's upload, or Mux answers malformed: kept", async () => {
+  resetMux();
+  read = () => ({ status: "errored" });
+  const p = await posted();
+  // The ledger row now belongs to nobody we can match (another member): no expiry for Lena.
+  assertEquals((await http(`/rest/v1/video_uploads?upload_id=eq.${p.u}`, { method: "PATCH", body: { account_id: adam.id, expires_at: new Date(Date.now() - 86_400_000).toISOString() } })).status, 204);
+  assertEquals((await abandon(lena.token, { submissionId: p.s })).json.reason, "unverified");
+  assertEquals((await row(p.id)).status, "processing");
+  await http(`/rest/v1/video_uploads?upload_id=eq.${p.u}`, { method: "PATCH", body: { account_id: lena.id } });
+  for (const said of [{ status: undefined as unknown as string }, { status: "errored", id: "upSomeoneElse" }]) {
+    resetMux();
+    read = () => said;
+    assertEquals((await abandon(lena.token, { submissionId: p.s })).json.reason, "unverified", JSON.stringify(said));
+    assertEquals((await row(p.id)).status, "processing");
   }
 });
 

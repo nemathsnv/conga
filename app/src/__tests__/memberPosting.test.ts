@@ -285,6 +285,29 @@ describe('C3: an unconfirmed discard is asked again, bounded, spaced, never twic
     expect(a.m.awaitingConfirmation()).toBe(true);
   });
 
+  test('Mux reports the upload errored (kept unverified until its URL has long expired): the recording stays through every timer, and the first foreground after the bound settles it', async () => {
+    // abandon-submission keeps an errored upload with no asset "unverified" until 10 min after the
+    // URL's 60-min life (decideAbandon), then retires it. The phone must hold the recording all
+    // that time, and an ordinary event after it must be enough.
+    const w = world();
+    const unverified: AbandonAnswer = { outcome: 'kept', reason: 'unverified', responseId: 'row-U1' };
+    const a = await unconfirmed(w, [unverified, unverified, unverified, unverified, unverified, { outcome: 'abandoned', reason: 'cancelled' }]);
+    await w.advance(RECONCILE_DELAYS_MS.reduce((s, d) => s + d, 0) + 20_000);
+    expect(calls(a)).toBe(4);
+    expect(w.files.has('rec-1')).toBe(true);
+    expect(w.slots.get('A')).toMatchObject({ discardRequested: true });
+    expect(a.deps.deleteFiles).not.toHaveBeenCalled();
+    await a.m.reconcile('foreground'); // 13 min in: still before the bound
+    expect(calls(a)).toBe(5);
+    expect(w.files.has('rec-1')).toBe(true);
+    await w.advance(60 * 60_000);
+    await a.m.reconcile('foreground'); // past the bound: the server retires it
+    expect(calls(a)).toBe(6);
+    expect(w.files.has('rec-1')).toBe(false);
+    expect(w.slots.has('A')).toBe(false);
+    expect(a.m.awaitingConfirmation()).toBe(false);
+  });
+
   test('server busy (its 2-minute hold): never asked again before the hold ends', async () => {
     const w = world();
     const a = await unconfirmed(w, [{ outcome: 'kept', reason: 'busy' }]);
