@@ -2,7 +2,7 @@
 
 This branch implements `design/proposals/failed-post-ux.html` exactly as drawn, so that approval turns into a merge, not a build. **Do not merge it before Nemat approves P1 to P9** (`design/proposals/FAILED-POST-REVIEW.md`). The design gate (CLAUDE.md) forbids building a state that is not an approved board.
 
-It was cut from the Agent E main branch tip and changes nothing under `app/src/video/`: it reads the posting state (`usePosting`) and calls the Discard and Sign out anyway functions that already exist.
+It was cut from the Agent E main branch tip and rebased on the integration tip 90eced7 (16 Oct, after Agent B's stitching and Agent C's sign-out changes) and changes nothing under `app/src/video/`: it reads the posting state (`usePosting`) and calls the Discard and Sign out anyway functions that already exist.
 
 ## What is where
 
@@ -29,9 +29,9 @@ Tests: `src/__tests__/failedPost.test.ts` (20). It reads `design/proposals/faile
 
 ## Not done here (outside Agent E's files)
 
-- **Post Review** (`app/src/app/record/review.tsx`, Agent B): when Post is refused with `post_pending` it should show the same P7 or P8 sheet. The hook is ready: `useOpenRecord().showBlock()` returns whether it showed one. One line in that file once both branches are integrated.
+- Post Review (`app/src/app/record/review.tsx`, Agent B's file): done as a call site only. When Post is refused with `post_pending` it calls `useOpenRecord().showBlock()`, which shows the same P7 or P8 sheet (3 lines plus the hook); the rest of that file is untouched.
 - The camera screens themselves are unchanged, and Post Review's own Re-record (a take that has not been posted yet) is not blocked.
 
 ## Verification (16 Oct, this branch)
 
-`npm run typecheck` clean, `npm run lint` clean, `npm test` 272 of 272. Not run: a simulator, a device, VoiceOver. The sheets, the banner layout against the board and the P6 trigger have only been read, not seen.
+`npm run typecheck` clean, `npm run lint` clean, `npm test` 24 suites, 331 of 331 (rebased on the integration tip 90eced7). Not run: a simulator, a device, VoiceOver. The sheets, the banner layout against the board and the P6 trigger have only been read, not seen.
