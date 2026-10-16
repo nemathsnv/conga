@@ -120,6 +120,9 @@ done
 stop_serve
 
 # --- 4-6. scripts ------------------------------------------------------------------------------
+# The integration suites above leave members and content behind; the rollback check runs the old
+# pgTAP suite, whose counts assume a clean database, so reset first.
+step "db reset before the rollback check" bash -c "cd '$STACK' && supabase db reset"
 step "idempotency-rollback-check" "$REPO/scripts/idempotency-rollback-check.sh" "$STACK"
 step "scheduler-integration" "$REPO/scripts/scheduler-integration.sh" "$STACK"
 step "c1-rehearsal" "$REPO/scripts/c1-rehearsal.sh" "$STACK"
