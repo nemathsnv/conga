@@ -17,6 +17,11 @@
 #   5. drops those five-argument versions (as the re-forward migration would), applies both
 #      migrations again and runs every pgTAP file, 0012 and 0013 included.
 # The stack ends as it started (forward migration applied). Exits non-zero on any failure.
+#
+# Everything it prints is also written to a log (ROLLBACK_CHECK_LOG, default a new file under
+# $TMPDIR), whose path is printed first and last. On a failure it prints the failing pgTAP lines and
+# the pg_cron runs during the check, puts the stack back to the forward state from wherever it
+# stopped (only what it had rolled back is re-applied), and removes the throwaway member and prompts.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,6 +35,40 @@ esac
 PROJECT="$(sed -n 's/^project_id = "\(.*\)"$/\1/p' "$STACK/supabase/config.toml" | head -1)"
 DB="supabase_db_$PROJECT"
 psql_() { docker exec -i "$DB" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
+
+LOG="${ROLLBACK_CHECK_LOG:-$(mktemp "${TMPDIR:-/tmp}/idempotency-rollback-check.XXXXXX")}"
+exec > >(tee -a "$LOG") 2>&1
+echo "log: $LOG"
+STARTED="$(psql_ -c "select now()")"
+# forward: both migrations applied; r300: 20261013000300 rolled back; r200: both rolled back.
+PHASE=forward
+MEMBER=""; PROMPT=""; PROMPT2=""; PROMPT3=""
+on_exit() {
+  local code=$?
+  trap - EXIT
+  if [ "$code" -ne 0 ]; then
+    echo "== rollback check FAILED (exit $code, phase $PHASE)"
+    grep -E "Failed test|^#  +(have|want)|not ok|Dubious|Bad plan|ERROR|^FAIL" "$LOG" || true
+    echo "-- pg_cron runs since the start ($STARTED):"
+    psql_ -c "select j.jobname || ' ' || d.status || ' ' || to_char(d.start_time, 'HH24:MI:SS.MS') || ' ' || left(coalesce(d.return_message, ''), 120) from cron.job_run_details d join cron.job j using (jobid) where d.start_time >= '$STARTED' order by d.start_time" || true
+    case "$PHASE" in
+      r300)
+        echo "-- re-applying 20261013000300"
+        psql_ -q < "$REPO/supabase/migrations/20261013000300_safe_submission_abandon.sql" || echo "could not re-apply 20261013000300: fix the stack by hand" ;;
+      r200)
+        echo "-- re-applying 20261013000200 and 20261013000300"
+        { psql_ -q -c "drop function if exists public.post_response(uuid, text, text, integer, uuid); drop function if exists public.post_reply(uuid, text, text, integer, uuid); drop function if exists public.post_draft(uuid, text, text, integer, uuid);" \
+          && psql_ -q < "$REPO/supabase/migrations/20261013000200_post_idempotency.sql" \
+          && psql_ -q < "$REPO/supabase/migrations/20261013000300_safe_submission_abandon.sql"; } || echo "could not re-apply the migrations: fix the stack by hand" ;;
+    esac
+  fi
+  if [ -n "$MEMBER" ]; then
+    psql_ -q -c "delete from auth.users where id = '$MEMBER'; delete from public.prompts where id::text in ('$PROMPT', '$PROMPT2', '$PROMPT3');" >/dev/null 2>&1 || true
+  fi
+  echo "log: $LOG"
+  exit "$code"
+}
+trap on_exit EXIT
 check() { # name, sql returning t
   if [ "$(psql_ -c "$2")" = "t" ]; then echo "PASS  $1"; else echo "FAIL  $1" >&2; exit 1; fi
 }
@@ -57,8 +96,10 @@ psql_ -q -c "select public.begin_submission_abandon('$MEMBER', '$TOMB')" >/dev/n
 check "a tombstone exists" "select exists (select 1 from public.post_submissions where id = '$TOMB' and kind is null)"
 
 # 2. Rollback, newest first.
+PHASE=r300
 psql_ -q < "$REPO/supabase/rollback/20261013000300_safe_submission_abandon.down.sql"
 check "after the first rollback: the abandonment functions and columns are gone, the tombstone deleted, submissions whole again" "select to_regprocedure('public.begin_submission_abandon(uuid, uuid)') is null and to_regprocedure('public.finish_submission_abandon(uuid, uuid, text)') is null and not exists (select 1 from public.post_submissions where id = '$TOMB') and (select attnotnull from pg_attribute where attrelid = 'public.post_submissions'::regclass and attname = 'kind')"
+PHASE=r200
 psql_ -q < "$REPO/supabase/rollback/20261013000200_post_idempotency.down.sql"
 
 # 3. Shape after rollback.
@@ -90,8 +131,10 @@ TESTS="$(cd "$STACK" && ls supabase/tests/00{01,02,03,04,05,06,07,08,09,10,11}_*
 psql_ -q -c "drop function public.post_response(uuid, text, text, integer, uuid); drop function public.post_reply(uuid, text, text, integer, uuid); drop function public.post_draft(uuid, text, text, integer, uuid);"
 psql_ -q < "$REPO/supabase/migrations/20261013000200_post_idempotency.sql"
 psql_ -q < "$REPO/supabase/migrations/20261013000300_safe_submission_abandon.sql"
+PHASE=forward
 check "both migrations apply again on top of the rollback" "select to_regprocedure('public.post_response(uuid, text, text, integer, uuid)') is not null and to_regclass('public.post_submissions') is not null and to_regprocedure('public.begin_submission_abandon(uuid, uuid)') is not null and to_regprocedure('public.post_response(uuid, text, text, integer)') is null"
 (cd "$STACK" && supabase test db)
 
 psql_ -q -c "delete from auth.users where id = '$MEMBER'; delete from public.prompts where id in ('$PROMPT', '$PROMPT2', '$PROMPT3');"
+MEMBER=""
 echo "rollback check passed"

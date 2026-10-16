@@ -84,8 +84,10 @@ select public.mark_response_live('up-maya-r1', 'as-maya-r1', 'pb-maya-r1', 8000)
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->>'count', '2', 'two replies in the room');
-select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->'replies'->1->>'reply_to_name', 'Lena Hart', 'a reply to a reply carries "Replying to Lena"');
-select is((public.reply_room('d4444444-4444-4444-4444-444444444444'))->'replies'->0->>'reply_to_name', null, 'a reply to the root carries no "Replying to"');
+-- Found by author, not position: both replies are made in this one transaction, so they have the
+-- same created_at and their order in the room was a tie that changed between runs.
+select is((select r->>'reply_to_name' from jsonb_array_elements((public.reply_room('d4444444-4444-4444-4444-444444444444'))->'replies') r where r->'author'->>'username' = 'testmaya'), 'Lena Hart', 'a reply to a reply carries "Replying to Lena"');
+select is((select r->>'reply_to_name' from jsonb_array_elements((public.reply_room('d4444444-4444-4444-4444-444444444444'))->'replies') r where r->'author'->>'username' = 'testlena'), null, 'a reply to the root carries no "Replying to"');
 select is((public.get_video(pg_temp.response_id('up-maya-r1')))->'context'->'root'->'author'->>'username', 'testadam', 'a reply to a reply knows its root ("In replies to Adam Novak")');
 select is((select count(*)::int from public.activity where recipient_id = 'a1111111-1111-1111-1111-111111111111' and kind = 'video_reply'), 1, 'Lena gets the video_reply row for Maya''s reply');
 reset role;
