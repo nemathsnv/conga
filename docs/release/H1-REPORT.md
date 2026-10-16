@@ -20,16 +20,16 @@ what `docs/BETA-READINESS.md` records.
 | 3 | Posting functions | four-argument `post_response` present; five-argument, `post_submissions`, abandon helpers absent | batch A not applied | PASS |
 | 4 | `auth.sessions` privileges | `postgres` can SELECT and DELETE; `auth.users` SELECT | required by `20261016000202` | PASS |
 | 4 | `pg_graphql` | absent | 0 | PASS |
-| 4 | Avatar storage policies | the 4 of 9 Oct | 4 | PASS |
+| 4 | Avatar storage policies | the 4 named in `20261006000300_storage_avatars.sql` | 4 | PASS |
 | 5 | Two primary responses on one prompt | none | none (required by `20261016000300`) | PASS |
 | 6 | Clean-up mode, health | `off`, `ok`; failed 0, stuck 0, due 0; open jobs 0; purge failures 0 | `off`, `ok`, no open job | PASS |
 | 6 | Cron jobs | the 8 jobs, schedules and `active` as recorded | 8 | PASS |
 | 6 | Finished jobs | `done=3`, `skipped=1` | canary deletion (12 Oct), A1 revoke, A1 retention deletion skipped by the restore, B1 restore | PASS (read) |
 | 7 | Founder response and ledger | `c9918f82…` `live`; `9726bb8f…` `claimed` | same since stage 2 | PASS |
 | 7 | V | `live`, playback P2 `tu8ooWH2…`, asset `01IyQdSi…`, author T1 | end of Test B2 | PASS |
-| 7 | T1 | active, `moderation_status` `active` | CP0 record | PASS |
+| 7 | T1 | active, `moderation_status` `active` | the column's default (`20261008000100_safety.sql`); CP0 recorded T1 as an ordinary member | PASS |
 | 7 | Deleted accounts, deleted or removed videos | 0, 1 | 0, 1: the step 4B canary video reply `6f600f9e…`, deleted by its author 12 Oct 16:53:19 UTC | PASS (corrected, below) |
-| 8 | Functions | `auth-signin-method` v10, `mux-webhook` v12, `mux-create-upload` v10, `mux-upload-status` v11, `mux-cleanup` v8; all `ACTIVE`, `verify_jwt` false; no `abandon-submission`, `web`, `avatar-cleanup`, `admin`, `send-push` | the same five; versions moved up by the secret set and unset around Test B2 (bundles were recorded unchanged then) | PASS (read) |
+| 8 | Functions | `auth-signin-method` v10, `mux-webhook` v12, `mux-create-upload` v10, `mux-upload-status` v11, `mux-cleanup` v8; all `ACTIVE`, `verify_jwt` false; no `abandon-submission`, `web`, `avatar-cleanup`, `admin`, `send-push` | exactly the versions recorded after Test B2 (BETA-READINESS section 15: `auth-signin-method` v10, `mux-cleanup` v8, `mux-create-upload` v10, `mux-upload-status` v11, `mux-webhook` v12) | PASS (read) |
 | 8 | Secrets | 11 names: `MUX_CLEANUP_KEY`, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET` and the 7 platform names; no `MUX_CLEANUP_MODE`, `PUSH_SENDER_KEY`, `AVATAR_CLEANUP_KEY` | 11, no `MUX_CLEANUP_MODE` | PASS (read) |
 | 8 | Migration list | 17 remote; 9 local-only: `20261013000200`, `…0300`, `20261016000200` to `…204`, `…300`, `…301`; none remote-only | | PASS (read) |
 | 9 | HTML content type from a function | not applicable: `web` is not deployed (block 8) | | deferred to H5b |
@@ -45,10 +45,17 @@ from the stage 3 preflight of 12 Oct, taken before that canary; the Test B2 reco
 zero. The expectation was corrected to the canary and the run repeated at 11:44 UTC: all PASS. No
 change on the hosted project between the two runs.
 
-Function versions are higher than the numbers in the B2 narrative because `supabase secrets set`
-and `unset` around Test B2 moved every function up one version each (recorded there, bundles
-unchanged). The preflight does not compare bundle hashes; `supabase functions list` does not print
-them in this CLI version.
+The function versions equal the post-B2 record exactly (the two secret changes around Test B2 had
+already moved each function up two versions by then), so no function has been touched since 13
+Oct. The preflight does not compare bundle hashes; `supabase functions list` does not print them
+in this CLI version.
+
+The first run's results file (11:42 UTC) was not kept: the script was corrected and re-run, and
+only the 11:44 file is committed (force-added, since `.gitignore` excludes result files by
+default). The first run's failing line read `0|1`; every other line of that run matched the 11:44
+run. The jobs' creation and finish times quoted above come from a separate read-only query of
+`mux_cleanup_jobs` made between the runs, not from the evidence file; BETA-READINESS section 15
+records the same times to the second.
 
 ## What H1 establishes for the sequence
 

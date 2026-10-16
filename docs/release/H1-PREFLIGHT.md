@@ -150,7 +150,7 @@ Expected: founder response `c9918f8241a2c45eefb106b5d0ec0a8f`, `live`; founder l
 `9726bb8fdf8d9eb0cb759d13ce59c8b6`, `claimed`; V
 `live` with playback `tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo` (P2) on asset
 `01IyQdSiLvAbHXb01Xg1ZQISiMz9UvMxLMgfZDpscKMBw`, author T1
-`b0c14e38-4e89-4dbd-a9a3-8a8c01872a78`; T1 active with `moderation_status` `active` (the column's default; BETA-READINESS records it so); 0 deleted
+`b0c14e38-4e89-4dbd-a9a3-8a8c01872a78`; T1 active with `moderation_status` `active` (the column's default in `20261008000100_safety.sql`); 0 deleted
 accounts and exactly 1 deleted video: the stage 3 step 4B canary, video reply
 `6f600f9e-3559-4911-9ebf-13d9d3df509d`, deleted by its author 12 Oct 16:53:19 UTC (its asset was the
 first real Mux deletion). The clean-up queue shows `done=3`, `skipped=1`: the canary's deletion, A1's

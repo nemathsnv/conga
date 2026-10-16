@@ -4485,8 +4485,9 @@ read-only CLI commands (`supabase db query --linked`, `functions list`, `secrets
 `migration list`); the package had been reviewed independently the same day. Result:
 `docs/release/H1-REPORT.md`; evidence `docs/release/h1-results-20261016T114442Z.txt`.
 
-- 17 migrations, latest `20261013000100`; fingerprint 759 objects, line for line equal to a local
-  stack built from the same 17 migrations.
+- 17 migrations, latest `20261013000100`; fingerprint 759 objects with the same listing md5 as a
+  local stack built from the same 17 migrations (equal hashes, so equal listings; the 13 Oct
+  `10acc19f…` is the same listing hashed with a trailing newline).
 - `postgres` can SELECT and DELETE `auth.sessions` (needed by `20261016000202`); no `pg_graphql`;
   the 4 avatar policies.
 - No member with two primary responses on one prompt (needed by `20261016000300`).
@@ -4494,11 +4495,13 @@ read-only CLI commands (`supabase db query --linked`, `functions list`, `secrets
   `done=3`, `skipped=1` as Tests 4B, A1 and B1 left them.
 - Founder response and ledger hashes unchanged since stage 2; V `live` on P2 with asset a, author
   T1; T1 active; 0 deleted accounts; 1 deleted video, the 12 Oct canary video reply.
-- Functions: the same five, all `ACTIVE`, none of the new ones; 11 secrets by name, no
+- Functions: the same five at the versions recorded after Test B2 (`auth-signin-method` v10,
+  `mux-cleanup` v8, `mux-create-upload` v10, `mux-upload-status` v11, `mux-webhook` v12), all
+  `ACTIVE`, none of the new ones; 11 secrets by name, no
   `MUX_CLEANUP_MODE`, `PUSH_SENDER_KEY` or `AVATAR_CLEANUP_KEY`; 9 migrations local-only.
 - One package expectation was wrong on the first run (it expected 0 deleted videos, from the 12 Oct
-  preflight taken before the canary); corrected, re-run, all PASS. The hosted project was not
-  changed between the runs.
+  preflight taken before the canary); corrected, re-run, all PASS. The first run's file was not
+  kept (its failing line read `0|1`); the hosted project was not changed between the runs.
 
 *Next:* H2 (batch A: `20261013000200`, `20261013000300`, then `abandon-submission`), each step on
 Nemat's go-ahead; package `docs/release/H2-DEPLOY.md`.
