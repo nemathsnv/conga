@@ -30,10 +30,11 @@ export function inviteLink(code: string): string {
  *  be read (deleted, removed, not found) goes to the video reply player, whose unavailable state
  *  says one neutral message and never the reason. */
 export type VideoLinkTarget =
-  | { pathname: '/player/[promptId]'; params: { promptId: string; entry: string } }
+  | { pathname: '/player/[promptId]'; params: { promptId: string; entry: string; openComments?: string } }
   | { pathname: '/reply/[id]'; params: { id: string } };
 
-export function videoLinkTarget(id: string, video: { kind: 'response' | 'reply'; prompt_id: string } | null): VideoLinkTarget {
-  if (video && video.kind === 'response') return { pathname: '/player/[promptId]', params: { promptId: video.prompt_id, entry: id } };
+/** `openComments`: a tapped comment notification opens the comments sheet over the response. */
+export function videoLinkTarget(id: string, video: { kind: 'response' | 'reply'; prompt_id: string } | null, opts: { openComments?: boolean } = {}): VideoLinkTarget {
+  if (video && video.kind === 'response') return { pathname: '/player/[promptId]', params: { promptId: video.prompt_id, entry: id, ...(opts.openComments ? { openComments: '1' } : {}) } };
   return { pathname: '/reply/[id]', params: { id } };
 }

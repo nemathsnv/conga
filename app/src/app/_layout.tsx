@@ -7,12 +7,16 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { startAnalytics, track } from '@/lib/analytics';
 import { startConnectivity } from '@/lib/connectivity';
-import { onNotificationTap, registerTokenIfAllowed, syncTimezone } from '@/lib/notifications';
+import { launchTap, onNotificationTap, registerTokenIfAllowed, syncTimezone, type PushTap } from '@/lib/notifications';
+import { claimPush } from '@/lib/pushRoutes';
 import { SessionProvider, useSession } from '@/lib/session';
 import { resetAccountScopedUi } from '@/ui/accountScope';
 import { PostingProvider } from '@/video/posting';
 
 void SplashScreen.preventAutoHideAsync();
+
+// Pushes already followed in this run of the app (the phone keeps the last response all session).
+const handledPushes = new Set<string>();
 
 export default function RootLayout() {
   return (
@@ -57,21 +61,29 @@ function RootNavigator() {
   // Signed in: keep the phone's timezone and push token current (the permission itself is
   // only ever asked by N-Prime), and follow tapped notifications.
   useEffect(() => {
-    if (step !== 'home') return;
+    // The navigator exists only once `ready` (below); a push cannot be followed before it.
+    if (!ready || step !== 'home') return;
     void syncTimezone();
     void registerTokenIfAllowed();
     const foreground = AppState.addEventListener('change', (st) => {
       if (st === 'active') void syncTimezone();
     });
-    const tap = onNotificationTap((href) => {
-      track('push_opened', { type: href.replace(/^\//, '').split('/')[0] ?? '' });
-      router.push(href as never);
-    });
+    // A tap is followed once, whichever way it arrives: while the app runs (foreground or
+    // background) through the listener, or as the tap that opened a closed app (launchTap), which
+    // the listener below never sees. The push goes on top of the tabs, so Back lands on Home.
+    const follow = (tap: PushTap) => {
+      if (!claimPush(tap.id, handledPushes)) return;
+      track('push_opened', { type: tap.kind });
+      setTimeout(() => router.push(tap.href as never), 0);
+    };
+    const launch = launchTap();
+    if (launch) follow(launch);
+    const tap = onNotificationTap(follow);
     return () => {
       foreground.remove();
       tap();
     };
-  }, [step, router]);
+  }, [ready, step, router]);
 
   if (!ready) return null;
 
@@ -93,6 +105,7 @@ function RootNavigator() {
           <Stack.Screen name="comments/[responseId]" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="replies/[rootId]" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="reply/[id]" options={{ animation: 'fade' }} />
+          <Stack.Screen name="a/[activityId]" options={{ animation: 'none' }} />
           <Stack.Screen name="r/[id]" options={{ animation: 'none' }} />
           <Stack.Screen name="p/[id]" options={{ animation: 'none' }} />
           <Stack.Screen name="u/[username]" options={{ animation: 'none' }} />

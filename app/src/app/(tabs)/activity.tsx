@@ -7,7 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
-import { activityText, shortAgo } from '@/lib/activityLabels';
+import { activityTarget, activityText, shortAgo } from '@/lib/activityLabels';
 import { activityList, followUser, markActivityRead, type ActivityList, type ActivityRow } from '@/lib/content';
 import { setUnread } from '@/ui/activityStore';
 import { Avatar } from '@/ui/components';
@@ -56,38 +56,8 @@ export default function ActivityTab() {
   };
 
   const open = (row: ActivityRow) => {
-    switch (row.kind) {
-      case 'video_reply':
-        if (row.video) router.push({ pathname: '/reply/[id]', params: { id: row.video.id } });
-        break;
-      case 'comment':
-      case 'comment_reply':
-        if (row.video) router.push({ pathname: '/player/[promptId]', params: { promptId: row.video.prompt_id, entry: row.video.id, openComments: '1' } });
-        break;
-      case 'follow':
-        if (row.actor) router.push({ pathname: '/profile/[id]', params: { id: row.actor.id } });
-        break;
-      case 'followed_responded':
-        if (row.prompt) router.push({ pathname: '/player/[promptId]', params: { promptId: row.prompt.id, ...(row.video ? { entry: row.video.id } : {}) } });
-        break;
-      case 'removed':
-      case 'restricted':
-      case 'suspended':
-      case 'review_outcome':
-        if (row.moderation_action_id) router.push({ pathname: '/notice/[actionId]', params: { actionId: row.moderation_action_id } });
-        break;
-      case 'suggestion_live':
-        if (row.suggestion) router.push({ pathname: '/suggestion/[id]', params: { id: row.suggestion.id } });
-        break;
-      case 'suggestion_declined':
-        router.push('/suggestions');
-        break;
-      case 'place_prompt':
-        if (row.prompt) router.push({ pathname: '/player/[promptId]', params: { promptId: row.prompt.id } });
-        break;
-      default:
-        break;
-    }
+    const target = activityTarget(row);
+    if (target) router.push(target as never);
   };
 
   const rows = data?.rows ?? [];

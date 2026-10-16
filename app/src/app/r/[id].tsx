@@ -9,7 +9,7 @@ import { videoLinkTarget, type VideoLinkTarget } from '@/lib/links';
 import { Spinner } from '@/ui/HomeStates';
 
 export default function VideoLinkScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, openComments } = useLocalSearchParams<{ id: string; openComments?: string }>();
   const [target, setTarget] = useState<VideoLinkTarget | null>(null);
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export default function VideoLinkScreen() {
     let cancelled = false;
     getVideo(id)
       .then((v) => {
-        if (!cancelled) setTarget(videoLinkTarget(id, 'status' in v ? null : v));
+        if (!cancelled) setTarget(videoLinkTarget(id, 'status' in v ? null : v, { openComments: openComments === '1' }));
       })
       .catch(() => {
         if (!cancelled) setTarget(videoLinkTarget(id, null));
@@ -25,7 +25,7 @@ export default function VideoLinkScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, openComments]);
 
   if (!id) return <Redirect href="/" />;
   if (target) return <Redirect href={target} />;

@@ -71,3 +71,34 @@ export function shortAgo(iso: string, now: number = Date.now()): string {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 }
+
+/** Where tapping an Activity row goes (boards Activity, X-Activity-Empty; SPEC.md Section 15). A tapped
+ *  push for the same event goes to the same place. Null: the row opens nothing (likes are one quiet line). */
+export type ActivityTarget = { pathname: string; params?: Record<string, string> };
+
+export function activityTarget(row: ActivityRow): ActivityTarget | null {
+  switch (row.kind) {
+    case 'video_reply':
+      return row.video ? { pathname: '/reply/[id]', params: { id: row.video.id } } : null;
+    case 'comment':
+    case 'comment_reply':
+      return row.video ? { pathname: '/player/[promptId]', params: { promptId: row.video.prompt_id, entry: row.video.id, openComments: '1' } } : null;
+    case 'follow':
+      return row.actor ? { pathname: '/profile/[id]', params: { id: row.actor.id } } : null;
+    case 'followed_responded':
+      return row.prompt ? { pathname: '/player/[promptId]', params: { promptId: row.prompt.id, ...(row.video ? { entry: row.video.id } : {}) } } : null;
+    case 'removed':
+    case 'restricted':
+    case 'suspended':
+    case 'review_outcome':
+      return row.moderation_action_id ? { pathname: '/notice/[actionId]', params: { actionId: row.moderation_action_id } } : null;
+    case 'suggestion_live':
+      return row.suggestion ? { pathname: '/suggestion/[id]', params: { id: row.suggestion.id } } : null;
+    case 'suggestion_declined':
+      return { pathname: '/suggestions' };
+    case 'place_prompt':
+      return row.prompt ? { pathname: '/player/[promptId]', params: { promptId: row.prompt.id } } : null;
+    default:
+      return null;
+  }
+}
