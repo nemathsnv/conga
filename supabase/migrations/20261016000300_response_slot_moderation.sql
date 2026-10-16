@@ -17,10 +17,14 @@
 -- Only the status 'removed' is added to the rule. The row, its removed_action_id and the whole
 -- moderation record stay exactly as they were: nothing is deleted or rewritten.
 --
--- The hard guarantee is the unique index, so it holds for every function that inserts or
--- publishes a primary response, including any later definition of post_response that forgets the
--- explicit check below: the insert fails with a unique violation, which post_response answers as
--- already_responded.
+-- The guarantee is the unique index, so it holds for every function that inserts or publishes a
+-- primary response, whatever its body. post_response is deliberately NOT redefined here (another
+-- change owns that function's upload logic, and a copy of its body would overwrite it): its
+-- existing check still looks only at processing and live responses, so a removed one is found by
+-- the insert instead, whose unique violation post_response already answers as already_responded
+-- (the claim of the upload is undone with it, so the upload stays usable). Whoever next edits
+-- post_response should add 'removed' to its explicit check (the status list in the exists test
+-- before the claim) so the refusal comes before the claim; nothing depends on it.
 --
 -- Purge and tombstones: a purged account's rows are deleted by cascade (the account is gone, its
 -- slot with it); a video other people's replies point at becomes a tombstone with status
@@ -54,60 +58,6 @@ drop index public.responses_one_per_prompt;
 create unique index responses_one_per_prompt on public.responses (prompt_id, author_id)
   where kind = 'response' and status in ('processing', 'live', 'removed');
 comment on index public.responses_one_per_prompt is 'One primary response per person per prompt (SPEC.md Section 6). A response removed by moderation still occupies the slot; only the author''s own deletion frees it.';
-
--- ---------------------------------------------------------------------------
--- post_response: the 20261013000200 body, with 'removed' in the slot check. Nothing else changed.
--- ---------------------------------------------------------------------------
-create or replace function public.post_response(p_prompt uuid, p_upload_id text, p_caption text, p_duration_ms integer, p_submission uuid default null)
-returns jsonb language plpgsql security definer set search_path = '' as $$
-declare
-  v_uid uuid := auth.uid();
-  v_caption text := nullif(btrim(coalesce(p_caption, '')), '');
-  v_upload uuid;
-  v_existing uuid;
-  r public.responses%rowtype;
-begin
-  if v_uid is null then raise exception 'not_signed_in' using errcode = '42501'; end if;
-  perform 1 from public.accounts where id = v_uid for no key update;
-  if not public.has_profile(v_uid) then raise exception 'profile_required' using errcode = 'P0001'; end if;
-  perform public.assert_can_post(v_uid);
-  if (select public_disclosure_ack_at from public.accounts where id = v_uid) is null then
-    raise exception 'disclosure_required' using errcode = 'P0001';
-  end if;
-  v_existing := public.submission_replay(v_uid, p_submission, 'response', p_prompt, p_upload_id, p_caption, p_duration_ms);
-  if v_existing is not null then
-    select * into r from public.responses where id = v_existing;
-    return public.response_card(r, v_uid) || jsonb_build_object('replayed', true);
-  end if;
-  if not exists (select 1 from public.prompts where id = p_prompt and status = 'live') then
-    raise exception 'prompt_not_found' using errcode = 'P0001';
-  end if;
-  if p_duration_ms is null or p_duration_ms < 2000 or p_duration_ms > 31000 then
-    raise exception 'invalid_duration' using errcode = 'P0001';
-  end if;
-  if v_caption is not null and char_length(v_caption) > 150 then
-    raise exception 'invalid_caption' using errcode = 'P0001';
-  end if;
-  if p_upload_id is null or p_upload_id = '' then
-    raise exception 'upload_required' using errcode = 'P0001';
-  end if;
-  -- 'removed' occupies the slot too: a moderator's removal does not give the prompt back.
-  if exists (select 1 from public.responses where prompt_id = p_prompt and author_id = v_uid and kind = 'response' and status in ('processing', 'live', 'removed')) then
-    raise exception 'already_responded' using errcode = 'P0001';
-  end if;
-  v_upload := public.claim_video_upload(v_uid, p_upload_id);
-  begin
-    insert into public.responses (prompt_id, author_id, caption, duration_ms, mux_upload_id)
-    values (p_prompt, v_uid, v_caption, p_duration_ms, p_upload_id)
-    returning * into r;
-  exception when unique_violation then
-    raise exception 'already_responded' using errcode = 'P0001';
-  end;
-  update public.video_uploads set response_id = r.id where id = v_upload;
-  perform public.record_submission(v_uid, p_submission, 'response', p_prompt, p_upload_id, p_caption, p_duration_ms, r.id);
-  return public.response_card(r, v_uid);
-end;
-$$;
 
 -- ---------------------------------------------------------------------------
 -- publish_draft (20261009000100 body): 'removed' in the slot check, and the update answers
@@ -144,8 +94,6 @@ end;
 $$;
 
 -- Grants are unchanged (create or replace keeps them); repeated so the file stands on its own.
-revoke execute on function public.post_response(uuid, text, text, integer, uuid) from public, anon;
-grant execute on function public.post_response(uuid, text, text, integer, uuid) to authenticated;
 revoke execute on function public.publish_draft(uuid) from public, anon;
 grant execute on function public.publish_draft(uuid) to authenticated;
 

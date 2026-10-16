@@ -146,13 +146,17 @@ not reopen the slot.**
 | Deleted by its author, or abandoned | free (as before) |
 | A first-response draft | not on a prompt yet; checked when it is published |
 
-How: `responses_one_per_prompt` is a unique index; it now also covers `removed` (so every path,
-including any future one, is stopped by the database, and `post_response` answers the unique
-violation as `already_responded`). `post_response` and `publish_draft` check explicitly too and
-refuse with `already_responded` before claiming an upload. Nothing is rewritten: the removed row,
-its removal action, the reason, note and the log stay as they were. Video replies are not limited.
-Purge and tombstones do not interact (a purged account's slot goes with the account; a tombstone
-is `deleted`).
+How: `responses_one_per_prompt` is a unique index; it now also covers `removed`. The database
+itself therefore refuses a second primary response on every path, whatever function inserts or
+publishes it. `post_response` is **not** changed (its upload logic belongs to another change, and a
+copy of its body would overwrite it): its own check still looks only at processing and live
+responses, so a removed one is found by the insert, whose unique violation `post_response` already
+answers as `already_responded`; the claim of the upload is undone with it, so the member's upload
+stays usable (tested). `publish_draft` is changed: it checks `removed` explicitly and answers
+`already_responded` (a first-response draft stays a private draft). Nothing is rewritten: the
+removed row, its removal action, the reason, note and the log stay as they were. Video replies are
+not limited. Purge and tombstones do not interact (a purged account's slot goes with the account; a
+tombstone is `deleted`).
 
 Consequences to know:
 
@@ -182,9 +186,10 @@ select author_id, prompt_id, array_agg(id) from public.responses
 
 A row means a member responded again after a removal; decide by hand which response stands.
 
-`post_response` is redefined in `20261016000300` (the 20261013000200 body with `'removed'` added to
-its slot check). Any later migration that redefines it must keep that check, or lean on the index,
-which still refuses (with the clean `already_responded` answer from the unique-violation handler).
+When `post_response` is next edited, add `'removed'` to the status list in its early
+`already_responded` check (before the claim of the upload), so the refusal comes before the claim
+and is not left to the index. Keep its `exception when unique_violation` handler: without it the
+index's refusal would reach the app as a raw database error instead of `already_responded`.
 
 ## 6. Deploying (later, on Nemat's go-ahead)
 
