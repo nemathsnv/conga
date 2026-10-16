@@ -1,4 +1,8 @@
-# H2 and H3: batch A on the hosted project (prepared 16 Oct; NOT authorised yet)
+# H2 and H3: batch A on the hosted project
+
+**Status: H2 (steps 1 to 3) done 16 Oct 11:59 to 12:01 UTC with Nemat's approval; every verification
+check passed (BETA-READINESS section 22, evidence `h2-results-20261016T120044Z.txt`). H3 (step 4)
+is NOT done and waits for its own go-ahead.**
 
 Steps H2 and H3 of `RELEASE-CHECKLIST.md` Part 1B, written out so that each needs one decision and
 one command. Preconditions: H1 passed (`docs/release/h1-results-*.txt` whose first line says `mode linked`,

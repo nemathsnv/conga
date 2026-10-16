@@ -4506,6 +4506,39 @@ read-only CLI commands (`supabase db query --linked`, `functions list`, `secrets
 *Next:* H2 (batch A: `20261013000200`, `20261013000300`, then `abandon-submission`), each step on
 Nemat's go-ahead; package `docs/release/H2-DEPLOY.md`.
 
+## 22. H2 deployed: batch A, posting idempotency and safe abandonment (16 Oct 11:59 UTC; Nemat approved; function not yet deployed)
+
+Approved by Nemat on 16 Oct ("run H2 step 1 (dry run), and if it lists exactly the two batch A
+migrations, step 2 (push), then the read-only verification; stop before H3"). Run by the lead from
+a `git archive` of `b79dd77` (config.toml, migrations, templates) with the seven `20261016…` files
+removed, linked to `picvoavfxnajfjkqawju`. Package: `docs/release/H2-DEPLOY.md`.
+
+- **Files:** `20261013000200_post_idempotency.sql` md5 `331fdb6da1bd5b0d49f660cc6b42200b`,
+  `20261013000300_safe_submission_abandon.sql` md5 `bb4bf0284c7a7d79ea06a64abead89a3` (unchanged
+  since `ddd8e0f`).
+- **Dry run (11:59:45 UTC):** "Would push these migrations: 20261013000200_post_idempotency.sql,
+  20261013000300_safe_submission_abandon.sql"; seeds `[]`, roles `[]`.
+- **Push (11:59:54 to 11:59:56 UTC):** `supabase db push --linked --yes`: "Applying migration
+  20261013000200…", "Applying migration 20261013000300…", "Finished supabase db push", exit 0.
+- **Verification (12:00:43 UTC, read-only; evidence `docs/release/h2-results-20261016T120044Z.txt`):**
+  19 migrations, latest `20261013000300`; the four-argument `post_response` gone; five-argument
+  `post_response`, `post_reply`, `post_draft` and `retry_response_upload` present, `SECURITY
+  DEFINER`, `search_path` pinned, executable by `authenticated` and `service_role`, not `anon`;
+  `begin_submission_abandon` and `finish_submission_abandon` by `service_role` only; the
+  `abandon_submission` SQL function absent; `post_submissions` RLS on, no policy, no API read, 0
+  rows; **schema fingerprint 788 objects, listing md5 `13d25b7796fee9876ce41826f5decce5`, equal to a
+  local stack built from the same 19 migrations** (`docs/release/h2-expected-19-migrations.fp`);
+  founder response and ledger hashes unchanged, V `live` on P2, responses `deleted=1`, `live=2`;
+  clean-up `off`, health `ok`, 0 open jobs, 8 cron jobs; 7 migrations local-only (batches B and C).
+- **Not done:** H3 (`abandon-submission` deployment) waits for its own go-ahead; until it is
+  deployed, a member's Discard gets no server answer and the recording stays on the phone (the
+  behaviour before this batch). No function, secret, Vault entry or switch changed. The PostgREST
+  schema listing was not fetched (the founder build exercises it at H12).
+- **Compatibility:** the installed founder build (`ede68ed`, four-argument calls) keeps posting
+  through the defaults; builds since `b7a02ad` now post idempotently.
+
+*Next:* H3 on Nemat's go-ahead (`docs/release/H2-DEPLOY.md` step 4), then H4.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

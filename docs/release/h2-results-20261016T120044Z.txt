@@ -1,0 +1,23 @@
+# H2 post-push verification, 20261016T120044Z, project picvoavfxnajfjkqawju
+PASS  1 migrations (count|latest): 19|20261013000300
+PASS  2 four_arg_gone|five_arg response|reply|draft|post_submissions|abandon_submission_sql_absent: true|true|true|true|true|true
+3 grants (name:definer:search_path_pinned:authenticated:anon:service_role): begin_submission_abandon:true:true:false:false:true;finish_submission_abandon:true:true:false:false:true;post_draft:true:true:true:false:true;post_reply:true:true:true:false:true;post_response:true:true:true:false:true;retry_response_upload:true:true:true:false:true
+PASS  3 post_response definer, pinned, authenticated+service_role, no anon
+PASS  3 post_reply definer, pinned, authenticated+service_role, no anon
+PASS  3 post_draft definer, pinned, authenticated+service_role, no anon
+PASS  3 retry_response_upload definer, pinned, authenticated+service_role, no anon
+PASS  3 begin_submission_abandon service_role only
+PASS  3 finish_submission_abandon service_role only
+PASS  4 post_submissions rls|policies|authenticated select|anon select: true|0|false|false
+PASS  4 post_submissions rows: 0
+PASS  5 fingerprint vs local 19-migration stack (objects|md5): 788|13d25b7796fee9876ce41826f5decce5
+PASS  6 founder response unchanged: c9918f8241a2c45eefb106b5d0ec0a8f|live
+PASS  6 founder ledger unchanged: 9726bb8fdf8d9eb0cb759d13ce59c8b6|claimed
+PASS  6 V unchanged: live|tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo
+PASS  6 responses by status: deleted=1;live=2
+PASS  7 clean-up mode|health|open jobs: off|ok|0
+PASS  7 cron jobs: 8
+8 migration list:
+remote applied: 19 | local only: ['20261016000200', '20261016000201', '20261016000202', '20261016000203', '20261016000204', '20261016000300', '20261016000301']
+# result: every compared check PASS
+# written to /Users/nemathsnv/Projects/shortcut/.claude/worktrees/shortcut-multi-agent-execution-93fee4/docs/release/h2-results-20261016T120044Z.txt

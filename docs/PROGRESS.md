@@ -36,6 +36,15 @@ pgTAP 1662/1662; every Deno unit and integration suite; rollback check; schedule
 provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and lint clean; Jest
 322/322. Full table: docs/release/FINAL-REPORT.md section D.
 
+## Hosted sequence (each step on Nemat's approval)
+
+| Step | State |
+|---|---|
+| H1 read-only preflight | done 16 Oct 11:44 UTC, all PASS (docs/release/H1-REPORT.md) |
+| H2 batch A migrations 20261013000200, 20261013000300 | done 16 Oct 11:59 UTC, verified (BETA-READINESS section 22) |
+| H3 abandon-submission deployment | awaiting go-ahead |
+| H4 onwards | awaiting go-ahead |
+
 ## Not authorised in this effort (prepared only)
 
 Push, deploy, hosted changes, real Mux calls, continuous clean-up, EAS/Apple/Google accounts,
