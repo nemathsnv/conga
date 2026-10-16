@@ -113,8 +113,9 @@ export function totalDuration(segments: RecordingSegment[]): number {
 /** A flip in the first half second of a segment is ignored: a segment that short may hold no frame. */
 export const FLIP_MIN_SEGMENT_MS = 500;
 /**
- * With less than this left of the 30 seconds, a flip ends the take as reaching the limit would.
- * Android's expo-camera takes whole seconds for the limit and treats 0 as no limit.
+ * With less than this left of the 30 seconds, a flip is ignored and the take runs on to its limit.
+ * (Android's expo-camera takes whole seconds for the limit and treats 0 as no limit, so a segment
+ * under a second cannot be given one.)
  */
 export const FLIP_MIN_REMAINING_MS = 1000;
 /** The other camera not ready in this long: the take ends with the segments it has. */
@@ -280,6 +281,7 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     deps.switchCamera(to).then(
       () => {
         if (phase !== 'flipping' || token !== segmentToken) return;
+        // Unreachable while flips under a second from the limit are ignored; kept as a safety net.
         if (MAX_DURATION_MS - keptMs() < FLIP_MIN_REMAINING_MS) finish();
         else beginSegment();
       },
@@ -301,7 +303,11 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     deps.onChange();
   };
 
-  const canFlip = () => phase === 'recording' && ending === null && deps.now() - segmentStartedAt >= FLIP_MIN_SEGMENT_MS;
+  const canFlip = () =>
+    phase === 'recording' &&
+    ending === null &&
+    deps.now() - segmentStartedAt >= FLIP_MIN_SEGMENT_MS &&
+    MAX_DURATION_MS - elapsedMs() >= FLIP_MIN_REMAINING_MS;
 
   return {
     get phase() {
@@ -320,12 +326,7 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     elapsedMs,
     canFlip,
     flip() {
-      if (!canFlip()) return;
-      if (MAX_DURATION_MS - elapsedMs() < FLIP_MIN_REMAINING_MS) {
-        requestEnd('limit');
-        return;
-      }
-      requestEnd('flip');
+      if (canFlip()) requestEnd('flip');
     },
     stop(reason = 'stop') {
       if (phase === 'recording') requestEnd(reason);

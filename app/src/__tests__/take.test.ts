@@ -165,14 +165,35 @@ test("the camera's own limit per segment: fractional on iOS, whole seconds round
   expect(segmentMaxDurationSeconds(FLIP_MIN_REMAINING_MS, 'android')).toBe(1);
 });
 
-test('a flip with less than a second left ends the take as the limit would', async () => {
+test('a flip with less than a second left is ignored; the take runs on to its limit', async () => {
   const h = harness();
   h.take.start();
   h.advance(29_200);
+  expect(h.take.canFlip()).toBe(false);
   h.take.flip();
   await flush();
+  expect(h.stopRecording).not.toHaveBeenCalled();
   expect(h.switches).toHaveLength(0);
-  expect(h.outcomes[0]).toMatchObject({ kind: 'recorded', durationMs: 29_200 });
+  expect(h.outcomes).toHaveLength(0);
+  expect(h.take.phase).toBe('recording');
+  expect(h.take.facing).toBe('front');
+  h.advance(800);
+  expect(h.take.elapsedMs()).toBe(30_000);
+  h.take.stop('limit');
+  await flush();
+  expect(h.outcomes[0]).toMatchObject({ kind: 'recorded', durationMs: 30_000, segments: [{ facing: 'front' }] });
+});
+
+test('a flip with exactly a second left is taken', async () => {
+  const h = harness();
+  h.take.start();
+  h.advance(29_000);
+  expect(h.take.canFlip()).toBe(true);
+  h.take.flip();
+  await flush();
+  expect(h.switches).toHaveLength(1);
+  await h.switchDone();
+  expect(h.recordings[1].maxDurationSeconds).toBe(1);
 });
 
 test('a flip in the first half second of a segment is ignored', async () => {
