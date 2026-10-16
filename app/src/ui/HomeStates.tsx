@@ -26,6 +26,8 @@ export function Spinner({ size = 28, light = true }: { size?: number; light?: bo
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   return (
     <Animated.View
+      accessible
+      accessibilityRole="progressbar"
       accessibilityLabel="Loading"
       style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2.5, borderColor: light ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', borderTopColor: light ? 'rgba(255,255,255,0.85)' : colors.text, transform: [{ rotate }] }}
     />
@@ -140,7 +142,7 @@ export function OfflineBanner({ topInset }: { topInset: number }) {
   }, []);
   return (
     <Glass style={[s.banner, { top: topInset + 53 }]}>
-      <View style={s.bannerRow}>
+      <View style={s.bannerRow} accessibilityLiveRegion="polite">
         <View style={s.offlineIcon}>
           <OfflineIcon />
         </View>
@@ -163,7 +165,7 @@ export function PostingBanner({ state, onRetry, topInset }: { state: PostingStat
   const progress = state.kind === 'uploading' ? state.progress : state.kind === 'processing' ? 1 : 0;
   return (
     <Glass style={[s.banner, { top: topInset + 53 }]}>
-      <View style={s.bannerRow}>
+      <View style={s.bannerRow} accessibilityLiveRegion="polite">
         {thumb ? <Image source={{ uri: thumb }} style={s.bannerThumb} contentFit="cover" /> : <View style={[s.bannerThumb, { backgroundColor: 'rgba(255,255,255,0.14)' }]} />}
         <View style={{ flex: 1, minWidth: 0 }}>
           {failed ? (
@@ -177,7 +179,7 @@ export function PostingBanner({ state, onRetry, topInset }: { state: PostingStat
                 <Text style={s.bannerTitle}>{post.kind === 'draft' ? 'Saving your draft' : 'Posting your response'}</Text>
                 <Text style={s.bannerPct}>{Math.round(progress * 100)}%</Text>
               </View>
-              <View style={s.bannerTrack}>
+              <View style={s.bannerTrack} accessible accessibilityRole="progressbar" accessibilityLabel="Upload progress" accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}>
                 <View style={[s.bannerFill, { width: `${progress * 100}%` }]} />
               </View>
               <Text style={s.bannerSub}>Keep Shortcut open until it&apos;s done.</Text>
@@ -185,7 +187,7 @@ export function PostingBanner({ state, onRetry, topInset }: { state: PostingStat
           )}
         </View>
         {failed ? (
-          <Pressable accessibilityRole="button" onPress={onRetry} style={({ pressed }) => [s.retry, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Retry" onPress={onRetry} style={({ pressed }) => [s.retry, pressed && { opacity: 0.7 }]}>
             <Text style={s.retryText}>Retry</Text>
           </Pressable>
         ) : null}

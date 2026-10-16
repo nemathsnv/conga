@@ -33,7 +33,7 @@ export default function PlusSheet() {
 
   return (
     <View style={s.root}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={() => router.back()} accessibilityLabel="Close" />
+      <Pressable accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={() => router.back()} accessibilityLabel="Close" />
       <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
         <View style={s.handle} />
         <Text style={s.title}>Respond to</Text>
