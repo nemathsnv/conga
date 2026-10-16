@@ -23,6 +23,23 @@ if (founderBuild) {
   }
 }
 
+// Store and tester builds on EAS (profiles `preview` and `production`, eas.json): fail the build,
+// not the first launch, when the public values are wrong. EAS_BUILD is "true" only on the EAS build
+// servers, so local prebuilds and `eas build` reading this file on a laptop are not affected.
+// .env files are git-ignored and never reach EAS: the values come from eas.json `env` and the EAS
+// environment variables of that profile (docs/release/BUILD.md).
+const easProfile = process.env.EAS_BUILD === 'true' ? process.env.EAS_BUILD_PROFILE : undefined;
+if (easProfile === 'preview' || easProfile === 'production') {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  const problems: string[] = [];
+  if (!/^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url)) problems.push('EXPO_PUBLIC_SUPABASE_URL must be the hosted https://<ref>.supabase.co URL');
+  if (!key.startsWith('sb_publishable_')) problems.push('EXPO_PUBLIC_SUPABASE_ANON_KEY must be the hosted sb_publishable_ key');
+  if (process.env.EXPO_PUBLIC_DEV_TOOLS === '1') problems.push('EXPO_PUBLIC_DEV_TOOLS must not be 1');
+  if (process.env.EXPO_PUBLIC_FOUNDER_BUILD === '1') problems.push('EXPO_PUBLIC_FOUNDER_BUILD must not be 1');
+  if (problems.length > 0) throw new Error(`EAS ${easProfile} build refused: ${problems.join('; ')}.`);
+}
+
 const CAMERA_USAGE = 'Shortcut uses the camera to record your video responses and video replies, and to take your profile photo.';
 const MICROPHONE_USAGE = 'Shortcut uses the microphone to record the sound of your video responses and video replies.';
 
@@ -58,6 +75,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    // FCM (push on Android): the Firebase client file, a git-ignored file supplied as an EAS file
+    // variable (docs/release/ANDROID.md). Left out when unset, so builds without push still work.
+    ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),
   },
   plugins: [
     'expo-router',
