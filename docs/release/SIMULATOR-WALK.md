@@ -1,0 +1,79 @@
+# Integrated simulator walk (16 Oct 2026)
+
+**What this is:** one pass through the integrated app on the iOS simulator, against an isolated local
+Supabase stack. **What it isn't:** a device test. The simulator has no camera feed for expo-camera,
+so no response was recorded or posted, and no push, Android or VoiceOver check was made.
+
+## Setup
+
+| | |
+| --- | --- |
+| Code | integration tip `90eced7` (Agents A, B, C, E, F) plus `06a6879` (flip guard), branch `worktree-agent-a9916f0138f4d4f98` |
+| Build | `expo prebuild -p ios --clean`, `pod install`, `xcodebuild … Debug -sdk iphonesimulator` for the simulator below: **BUILD SUCCEEDED** (one build) |
+| Simulator | iPhone 18 Pro, iOS 27.0, Xcode 27.1; development build with Metro (`expo start --dev-client`) |
+| Backend | `supabase start` on a scratch copy of `supabase/` as project `shortcut-b` (API 55401, DB 55402, Mailpit 55404; studio, analytics, realtime off). All migrations and `seed.sql` applied. The app's local `.env` pointed at `http://127.0.0.1:55401` with that stack's anon key (not committed; restored afterwards). Stack stopped at the end (`supabase stop --no-backup`). |
+| Account | new account `walkerb@example.com`, sign-in code read from the stack's Mailpit, invite `TEST-OK1` (seed) through `shortcut://i/TEST-OK1` |
+| Fixtures | added on the local stack only, for two rows the seed can't reach: a video reply by the walk account (to Adam's response), and a live response with a playback id Mux doesn't know (to make playback fail) |
+| Input | taps and typing through the iOS Simulator MCP tool. Typing drops every character after one that isn't on the keyboard's first layer (`-` on the email keyboard), so the email was typed without a hyphen and the invite came in by link. Taps were sometimes lost while the simulator was busy; those were repeated. |
+
+Screens are compared with the boards' html (copy) and jpg (layout) in `design/`. "Matches" means
+same copy, same controls, same order. It doesn't mean pixel-checked.
+
+## Walk
+
+| # | Step | Board | Seen | Result | Shot |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Launch, signed out | O-Welcome | Collage, prompt card "What's something everybody loves that you hate? · 19 responses", Apple / Google / email, terms line | matches | [01](screenshots/01-welcome.png) |
+| 2 | Continue with email, code | O-Email | "We'll send a code. No password to remember.", Change, 6 boxes, "Sent to …", "Resend code in 0:40" counting down; the code arrived in Mailpit and signed in | matches | [02](screenshots/02-email-code.png) |
+| 3 | Age | A-Age | Copy word for word; Yes / No; under-18 note | matches | [03](screenshots/03-age.png) |
+| 4 | Invite gate | O-Invite | "Closed beta", invite field, "Opened an invite link? You're already in.", Join waitlist, "Signed in as walkerb@example.com · Not you?" | matches | — |
+| 5 | Invite link `shortcut://i/TEST-OK1` | (link) | Went straight to O-Profile | works | — |
+| 6 | Name and username | O-Profile | Step bar 1 of 2, "Available" check, "You can change both later." | matches | [04](screenshots/04-profile-step.png) |
+| 7 | Photo | O-Photo | Step 2 of 2, Take a photo / Choose from library / Start watching. Take a photo asked for camera access, opened the system camera (grey on the simulator), Cancel came back | matches, no crash | [05](screenshots/05-photo-step.png) |
+| 8 | Home | Main | For you feed playing Maya's response, prompt card, Follow, rail, "3 more responses", Respond, tab bar | matches; rail counts not shown because the seed's counts on that response are 0 | [06](screenshots/06-home.png) |
+| 9 | Respond → R-Record, mic **denied** | A-Mic | Prompt card, "Responding · up to 30 seconds", mic card copy word for word, Open Settings, record dimmed | copy matches; **icon mismatch** (M3, M4) | [07](screenshots/07-record-mic-off.png) |
+| 10 | Mic **allowed** (permission reset; iOS ends the app on a permission change, so it was reopened) | R-Record | Cancel, flip, prompt card, Light, record, 1×, "Up to 0:30". Black preview: expo-camera has no camera feed on the simulator | matches (apart from M4) | [08](screenshots/08-record-idle.png) |
+| 11 | Tap Record | R-Record | expo-camera rejects with `SimulatorNotSupported`; the take ends as `failed`, the screen goes back to idle, nothing is kept, no crash. The red box is the development-only LogBox for the `console.error` | as designed | — |
+| 12 | Flip and Light while idle | R-Record | Flip switches camera (no feed to show it); Light on the front camera fills the screen white and fills the bolt; off again restores | works | [09](screenshots/09-record-front-light.png) |
+| 13 | Cancel | R-Record | Back to Home | works | — |
+| 14 | Me | X-Me-Empty | Name, @username, 0 / 0 / 0, Edit profile, Share profile, Responses / Replies, "Your responses show up here.", "Respond to tonight's prompt". The two "dev:" labels are `EXPO_PUBLIC_DEV_TOOLS=1` in the local `.env` | matches | [10](screenshots/10-me-empty.png) |
+| 15 | **walk:** playback fails, then Try again | X-Unavailable | Response player (opened at the broken response): prompt header, "1 of 2", "This response isn't available", "It was deleted or removed.", Next response, "If it just didn't load: Try again". Try again requests the video again (Metro shows a new 404 for each tap) and lands on the same state | matches; works | [11](screenshots/11-playback-failed.png) |
+| 16 | **walk:** link `r/<response id>` | (link) | **Opens the video reply player** for a response: "Video reply", an empty "Replying to" card, a "'s response" button with no name | **bug B1** | [12](screenshots/12-r-link-opens-reply-player.png) |
+| 17 | **walk:** link `p/<prompt id>` | (link) | Response player for "Be honest about the place you live.", but at **2 of 4** (Adam), not the first | **mismatch M1** | [13](screenshots/13-p-link.png) |
+| 18 | **walk:** link `u/<username>` | (link) | Sofia's profile: Follow, share, Responses 1 / Replies 1 | works; "1 responses" (M2) | [14](screenshots/14-u-link.png) |
+| 19 | **walk:** back from a link that opened the app | — | With the app ended, `shortcut://u/adamnovak` opened the development launcher. After the project loaded, the app opened Adam's profile with nothing under it. **Back did nothing** (three taps; other taps on the screen worked) | **bug B2** (see the note on the development build) | [15](screenshots/15-back-stuck-after-link.png) |
+| 20 | Back from a link opened while the app was running (`u/sofiamarin` from Home) | — | Back returned to Home | works | — |
+| 21 | Unknown link `shortcut://nothing-here` | (+not-found → Home) | **A blank grey screen**, not Home; the app had to be ended and reopened | **bug B3** | [16](screenshots/16-unknown-link-blank.png) |
+| 22 | **walk:** background and return | — | Home video playing; Home button; reopened after 5 s: the video plays (frames change, progress line moves) | works | — |
+| 23 | **walk:** delete your own video reply | SF-Delete (no board for a reply) | Me → Replies 1 → the reply → More → "Delete your reply? It's removed from the conversation along with its comments. Video replies people sent stay on their own profiles." → Delete reply → the app goes to the Home tab; Me → Replies is empty; the row is `deleted` on the server | works; copy M5 | [17](screenshots/17-own-reply.png), [18](screenshots/18-delete-reply-sheet.png) |
+| 24 | Settings | S-Settings | Name, Username, Email; Your feed: Places, Notifications; Closed beta: Invite people; Safety and help: Blocked accounts, Community guidelines, Help and feedback; Sign out; Delete account. The board's "1 place" and "4 left" values don't show for this new account | matches | — |
+| 25 | Sign out (no unposted recording, so no LV-SignOut) | O-Welcome | Back to Welcome; the account's server session is gone (`auth.sessions`: 1 before, 0 after) | works | — |
+
+## Crashes
+
+| | What | Cause | Product code? |
+| --- | --- | --- | --- |
+| C1 | Twice (13:55 and 14:13), the app ended (`EXC_BREAKPOINT`) right after it was launched and then sent the development-client URL | `fatalError(AppContextLost)` in ExpoModulesCore `ExpoFabricView.injectInitializer`: the development launcher reloaded the bundle while native views were mounting | No. A development-client reload race (launch plus a second "open project" URL). It didn't recur when the app was launched once and left to reconnect. It can't happen in a release build, which has no launcher. Reports: `~/Library/Logs/DiagnosticReports/Shortcut-2026-10-16-135533.ips`, `…-141334.ips` |
+
+Nothing in the product flows above crashed.
+
+## Bugs and mismatches (none fixed here: the files are not mine)
+
+| | Where | What | Suggested fix |
+| --- | --- | --- | --- |
+| **B1** | `app/src/app/r/[id].tsx` | Every `r/` link goes to the video reply route. `'status' in v ? null : v` treats every video as unavailable, because every video card has a `status` field (`live`). So `videoLinkTarget` gets `null` and falls back to `/reply/[id]`. Shared response links open the wrong player. | `v && !('status' in v && v.status === 'unavailable') ? v : null`, i.e. test `v.status === 'unavailable'`, as the record screen does. Add a test for `videoLinkTarget` with a live response card. |
+| **B2** | link-opened screens, seen on `profile/[id]` via `u/` | Opened by a link with nothing under it, Back did nothing. `useGoBack` looks right (`canGoBack() ? back() : replace('/')`). The likely cause is that the redirect-only `u/[username]` route stays in the stack and `<Redirect>` sends you to the profile again when it regains focus, so Back loops. | Use `router.replace` for these link routes and test Back after a cold start in a **release** build. The development launcher gets in the way of a true cold start (see note). The same pattern applies to `r/`, `p/` and `i/`. |
+| **B3** | `app/src/app/+not-found.tsx` | An unknown link shows a blank grey screen instead of going Home. | Check the redirect to `/` from an unmatched route while signed in (probably the same redirect/focus issue as B2). |
+| M1 | `p/[id].tsx` → player | `p/` opened at "2 of 4" (Adam), not the prompt's first response as UI-REVIEW and the file's comment say. With no `entry`, the player starts at whatever its own order puts first. | Decide what "first" means for `p/` (SPEC 4), then pass it as `entry` or start at index 0. |
+| M2 | `app/src/ui/ProfileView.tsx` | "1 responses", "1 following". The boards only show plural counts. | Needs a copy decision (singular forms aren't on a board). |
+| M3 | `app/src/app/record/[promptId].tsx` (mine), `app/src/ui/Icons.tsx` | The A-Mic card shows the Light (bolt) icon; A-Mic draws a crossed-out microphone. | Add a mic-off icon to `Icons.tsx` (not mine) and use it in the mic card. Left alone to avoid touching `Icons.tsx`. |
+| M4 | `app/src/ui/Icons.tsx` `FlipIcon` | The flip control is a camera with arrows; R-Record and A-Mic draw two circular arrows (the board's SVG path is in `design/html/R-Record.html`). | Use the board's path. |
+| M5 | video reply delete sheet | "It's removed from the conversation along with its comments." Video replies have no comments (SPEC 7). UI-REVIEW already lists this sheet under "Needs a design". | Needs board copy. |
+| — | profile Replies tab, empty | No empty-state text (none on a board). | Design decision, if wanted. |
+
+## Not walked
+
+- **Recording, flipping and posting.** There is no camera feed on the simulator, and no Mux on the local stack. See `docs/release/CAMERA-FLIP.md` for the device procedure.
+- **A true cold start from a link.** With the development build, a link that launches an ended app opens the Expo launcher first. Rows 19 and 21 need a Release build to be conclusive.
+- **Notification taps, VoiceOver and Android.** These are the other "walk" rows of UI-REVIEW, all marked "on devices" or "with VoiceOver".
+- **The sign-out cleanup's push-token and analytics steps.** No push token is registered on the simulator without an EAS project id, and the analytics flush wasn't measured. Only the session removal was checked.
