@@ -4,8 +4,9 @@ One ordered list. It covers Gates 1, 2, 5 and 7, blockers B-1 to B-4 (`docs/BLOC
 `docs/BETA-READINESS.md` sections 1 to 9, and the open items of sections 14 to 20 that sit on the path to a tester.
 Nothing is marked done unless the check that closes it has been run; "built locally" is not "verified on a device".
 **Only Nemat closes a gate** (`CLAUDE.md`); this list says what each gate waits for, it never marks one passed.
-Written 16 Oct 2026 by the release-engineering role (Agent F) from the repository at `de3acbc` plus this effort's
-commits.
+Written 16 Oct 2026 by the release-engineering role (Agent F); **updated the same day for the integration branch at
+`90eced7`**, which adds Agent A's video reliability notes, Agent C's `SECURITY.md`, Agent B's `CAMERA-FLIP.md`, and the
+app-side notification fixes. Part 1B is the single ordered hosted deployment sequence; stage 3 below points into it.
 
 ## Legend
 
@@ -46,14 +47,14 @@ reliability, **B** camera flip and native builds, **C** auth, privacy and accoun
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Reproducible install | LOCAL-DONE | F | `app/.npmrc` (`legacy-peer-deps=true`); `rm -rf node_modules && npm ci && npm run typecheck && npm run lint && npm test` run 16 Oct: ci succeeds, tsc and eslint exit 0, Jest 17 suites 246/246. `docs/release/BUILD.md`. | lockfile failure |
 | 1.2 | Release configuration for EAS | LOCAL-DONE (not run on EAS) | F | `eas.json` pins hosted URL, dev tools off, founder switch off; `app.config.ts` refuses a wrong EAS preview or production build; `.env.example` complete. Tested by simulating `EAS_BUILD=true`. | config audit |
-| 1.3 | Fail clearly on missing Supabase config | NEEDS-FOUNDER (approve a small app change) | C | See Part 4: `supabase.ts` must throw on an empty URL or key instead of building a client for `http://localhost`. | silent localhost fallback |
-| 1.4 | B-1 camera flip during a take | NEEDS-DEVICE | B | Segment recorder plus local stitching module (iOS AVFoundation, Android Media3); upload stitches. Device check: record, flip twice, stop, review and live response play one clip with sound across the joins, on an iPhone and an Android phone. | B-1 (after device) |
+| 1.3 | Fail clearly on missing Supabase config | LOCAL-DONE (Agent C, `04197bc`; Jest `supabaseConfig` 6 tests, `SECURITY.md` A1) | C | `configError()` throws at startup; outside `__DEV__` only `https://<20-char ref>.supabase.co` is accepted; no `http://localhost` fallback. Not run on a phone. Part 4 is kept as the record. | silent localhost fallback |
+| 1.4 | B-1 camera flip during a take | LOCAL-DONE (Agent B, integrated; Jest `take.test.ts` 22 and `stitch.test.ts` 8; iOS module builds and its core passes 27 checks on a Mac harness; Android module compiles) then NEEDS-DEVICE | B, Nemat | `docs/release/CAMERA-FLIP.md` is built, **not verified on a phone**. Device procedure: its 19 cases and file/Mux checks on an iPhone (iOS 17+) and a mid-range Android (13+); B-1 can be closed by Nemat when cases 1, 2, 5, 6, 10, 11, 17 and 19 pass on both phones and the file checks match. Needs a board or decision: a state while Post Review stitches, and a message when stitching fails. | B-1 (after device) |
 | 1.5 | Moderation web admin | NEEDS-HOSTED (deploy), NEEDS-DEVICE (use) | D | Build the internal admin over `mod_*`; a moderator handles a report, a review request and a suggestion without the CLI (BETA-READINESS section 7). Required before the first outside tester (Nemat 8 Oct). | Gate 5 item |
 | 1.6 | Failed-post UI P1 to P9 | NEEDS-FOUNDER (approval), then build | E | After 0.5(a): build the approved boards and the design-gate items; SPEC.md §19 already describes them. | BETA-READINESS 20.6 |
-| 1.7 | Video reliability list | NEEDS-HOSTED, NEEDS-DEVICE | A | `mux-cleanup` `errored` handling, reliability list, E1/E2/C1 procedures (sections 14 to 19). | section 12 open list |
-| 1.8 | Account-lifecycle gaps found by F | NEEDS-FOUNDER (decide), then fix | C | (a) Profile photo files are never deleted (replacement or purge). (b) The app never calls `remove_push_token` on sign-out. (c) Decide retention for the "No rule" rows in `RETENTION-AND-RECOVERY.md`. (d) Web request path for account deletion. | policy truth |
-| 1.9 | App-link and push-open gaps found by F | NEEDS-DEVICE | B or C | (a) Routes for `/r/{id}`, `/p/{id}`, `/u/{name}`, and a decision for universal links (only `app/i/[code]` exists). (b) Cold-start notification tap (`getLastNotificationResponseAsync`). (c) Android notification channel before the permission request on Android 13+. (d) Fix once, with a device test. | B-2, B-3 checks |
-| 1.10 | Pin the web player script | LOCAL-DONE (16 Oct, `web/links.ts`: hls.js 1.7.3 with sha384 SRI; Deno test 6/6); NEEDS-HOSTED (redeploy `web`, step 3.4) | F | Done in code. Open-in-app now uses the page's own route. Privacy disclosure for jsDelivr stays. | privacy and supply chain |
+| 1.7 | Video reliability list | LOCAL-DONE for the `errored` rule (Agent A, `be99363`: an `errored` or undocumented Mux upload with no asset stays `kept`/`unverified` until 10 minutes after its URL's recorded expiry, then is retired; `VIDEO-RELIABILITY.md` section 2) and the provider test procedures (`PROVIDER-TESTS.md`, rehearsed against a fake Mux only); NEEDS-HOSTED for everything else | A | Hosted rollout is the H-sequence below; provider tests C1, C2w, C2a, E1 to E3 need Nemat's approval per step; test account T1 already exists. | section 12 open list |
+| 1.8 | Account-lifecycle gaps found by F | LOCAL-DONE for (a) and (b) (Agent C: `avatar-cleanup`, `20261016000203`; sign-out drops the token, `bdc1cd2`); NEEDS-FOUNDER for (c) and (d) | C | (a) Profile photo files: replaced and purged photos removed (local, not deployed). (b) Sign-out removes the push token and clears queued events and recent searches (app code, not run on a phone). (c) Retention periods for the "No rule" rows in `RETENTION-AND-RECOVERY.md` are still undecided. (d) The web request path for account deletion still does not exist. | policy truth |
+| 1.9 | App-link and push-open gaps found by F | LOCAL-DONE (Agent E, `978e053`; routes `r/[id]`, `p/[id]`, `u/[username]`, `i/[code]`, `a/[activityId]` exist) then NEEDS-DEVICE | E, Nemat | (a) Link routes exist; universal and app links still need the domain (3.7). (b) Cold-start tap handled in code (`launchTap`); (c) Android channel created before the ask. None run on a phone: `NOTIFICATIONS.md` section 4 step 6. | B-2, B-3 checks |
+| 1.10 | Pin the web player script | LOCAL-DONE (`web/links.ts`: hls.js 1.7.3 with sha384 SRI; Deno `web_links_test.ts` 6/6); NEEDS-HOSTED (deploy `web`, H5) | F | Done in code. Open in the app uses the page's own route. The reflected-XSS fix on `/i/<code>` (Agent C, `755694a`) is in the same file and goes out with it. | privacy and supply chain |
 | 1.11 | Integrate and re-verify | LOCAL-DONE (when done) | Lead | Merge the agents' branches; `npm ci`, typecheck, lint, Jest; pgTAP, Deno suites per BETA-READINESS 20.4. | before 2.1 |
 
 ### Stage 2. One native build, locally (no accounts needed)
@@ -68,11 +69,11 @@ reliability, **B** camera flip and native builds, **C** auth, privacy and accoun
 
 | # | Step | Class | Owner | Exact action | Closes |
 | --- | --- | --- | --- | --- | --- |
-| 3.1 | Posting-idempotency rollout | NEEDS-HOSTED, NEEDS-FOUNDER | A, Lead | BETA-READINESS 19.5 steps 2 to 5: read-only preflight, `db push` of `20261013000200` and `20261013000300`, deploy `abandon-submission`, read-only checks. The installed `ede68ed` keeps posting; a build with submission ids needs these. | section 16 to 19 |
+| 3.1 | Posting-idempotency and security rollout | NEEDS-HOSTED, NEEDS-FOUNDER | A, C, Lead | **Replaced by the ordered H-sequence in Part 1B**: H1 to H6 and H9. | section 16 to 19, `SECURITY.md` |
 | 3.2 | Mux deletion worker policy | NEEDS-FOUNDER, NEEDS-HOSTED | A | Decide when `mux-cleanup` goes live (DECISIONS 12 Oct: "no Mux deletion runs until the worker is configured and explicitly switched to live"). The privacy and deletion pages are not true until it is. | policy checks 1 |
 | 3.3 | Reference data on the hosted project | NEEDS-HOSTED | Lead | Topics, the other places, place neighbours exist only in `supabase/seed.sql` (never applied to hosted). Choose what the beta needs and apply it as a reviewed one-off, not by running the seed. | section 2 hosted row |
-| 3.4 | Deploy `web` | NEEDS-HOSTED | Lead | `supabase functions deploy web --project-ref picvoavfxnajfjkqawju` (by name only) with secrets `STORE_URL`, `WAITLIST_URL` (store URLs do not exist yet; see 6.4). Check `/r`, `/p`, `/i`, `/u` render and `noindex`. | section 6 row |
-| 3.5 | Push sender on hosted | NEEDS-HOSTED, NEEDS-CREDENTIALS | Lead | `NOTIFICATIONS.md` section 4 step 4: Vault secrets, `PUSH_SENDER_KEY`, `supabase functions deploy send-push --no-verify-jwt`. Harmless until tokens exist; do it with 4.7. | B-2 |
+| 3.4 | Deploy `web` | NEEDS-HOSTED | Lead | H5. | section 6 row |
+| 3.5 | Push sender on hosted | NEEDS-HOSTED, NEEDS-CREDENTIALS | Lead | H8; do it with 4.1, 4.6 and 4.7. | B-2 |
 | 3.6 | Auth providers on hosted | NEEDS-HOSTED, NEEDS-CREDENTIALS | Lead | After 4.4 and 4.5: flip `[remotes.hosted.auth.external.apple]` and `.google` to `enabled = true` (prepared diffs in `IOS.md` section 5 and `ANDROID.md` section 3), `supabase config diff`, preview push, push. | Gate 2 |
 | 3.7 | Web domain wiring | NEEDS-HOSTED, NEEDS-PAID-ACCOUNT | Lead | After 0.4: DNS or CNAME to the `web` function, serve `apple-app-site-association` and `assetlinks.json`, set `EXPO_PUBLIC_WEB_BASE_URL` in EAS, add `associatedDomains` and `intentFilters` (`IOS.md` section 3, `ANDROID.md` section 6) once the routes exist (1.9a). | B-3 |
 | 3.8 | Mux housekeeping | NEEDS-HOSTED | Nemat | Revoke the spike token pair and the extra token in the spike environment; decide the spike's 7 assets; give the local stack its own dev token (BETA-READINESS section 12). | section 8 |
@@ -131,6 +132,68 @@ reliability, **B** camera flip and native builds, **C** auth, privacy and accoun
 
 ---
 
+## Part 1B. The hosted deployment sequence (one ordered list, H1 to H13)
+
+Everything pending for `picvoavfxnajfjkqawju` in one order, from the repository at `90eced7` (23 migration files).
+**Each H-step is its own approval from Nemat; stop between steps.** None has been run. Sources: the order and checks are
+those of `docs/release/VIDEO-RELIABILITY.md` section 5 (steps for `20261013000200` and `20261013000300`) and
+`docs/release/SECURITY.md` section 6 (steps for `20261016000200` to `20261016000203`), merged without adding
+steps of their own. Always deploy a function by name, never `--prune`, never `--yes` on a config push.
+
+**State on the hosted project today** (BETA-READINESS section 15 and `VIDEO-RELIABILITY.md` 5.1): 17 migrations applied,
+last `20261013000100`; Edge Functions deployed: `auth-signin-method`, `mux-create-upload`, `mux-upload-status`,
+`mux-webhook`, `mux-cleanup`; **not deployed: `abandon-submission`, `web`, `send-push`, `avatar-cleanup`**; Vault empty.
+No function other than the three named below has changed in the repository since `7ebb69e`
+(`git diff --stat 7ebb69e HEAD -- supabase/functions`), so none of the deployed five needs redeploying.
+
+### The migrations, with their rollbacks
+
+| Order | Migration (pending) | Rollback file (`supabase/rollback/`) | What it changes | Batch |
+| --- | --- | --- | --- | --- |
+| 1 | `20261013000200_post_idempotency.sql` | `20261013000200_post_idempotency.down.sql` | `post_submissions`; five-argument posting functions with `p_submission` | A |
+| 2 | `20261013000300_safe_submission_abandon.sql` | `20261013000300_safe_submission_abandon.down.sql` | `begin_submission_abandon` and `finish_submission_abandon` (service role); drops `abandon_submission` | A |
+| 3 | `20261016000200_direct_read_privacy.sql` | `20261016000200_direct_read_privacy.down.sql` | members read only their own `profiles`, `follows`, `comments`; column grants hide `prompts.suggested_by` and moderator names and notes; `TRUNCATE`, `REFERENCES`, `TRIGGER` revoked (P1 to P3) | B |
+| 4 | `20261016000201_viewer_visibility.sql` | `20261016000201_viewer_visibility.down.sql` | faces, Activity rows, the badge and follow counts respect blocks, reports and deletion (P4 to P7) | B |
+| 5 | `20261016000202_session_lifecycle.sql` | `20261016000202_session_lifecycle.down.sql` | `delete_account` ends sessions; restore needs a newer session; `pre_request` refuses a revoked session; avatar writes need an active account (L1 to L4) | B |
+| 6 | `20261016000203_avatar_cleanup.sql` | `20261016000203_avatar_cleanup.down.sql` | `avatar_removals` queue, `run_avatar_cleanup()`, cron job `avatar-cleanup` every 10 minutes (L5) | B |
+| 7 | any `20261016000300`-series file Agent D adds | its own `.down.sql` beside it | **none exists in the repository at `90eced7`**; add its row, rollback and the conflict check below when it lands | C |
+
+Rollback, newest first. The two source documents describe it differently and the difference is Nemat's to settle:
+`VIDEO-RELIABILITY.md` section 6 applies each rollback body as a **new forward migration** ("never edit or remove an
+applied migration"); `SECURITY.md` section 6 step 9 runs the four 16-series files in reverse order "each in one transaction.
+Then delete the `schema_migrations` rows". Both agree on the order: any 13000-series after the 16-series after batch B is
+undone, i.e. `…203`, `…202`, `…201`, `…200`, then `…0300`, `…0200`. Sessions already ended stay ended.
+
+### The Edge Functions and what each needs
+
+| Function | Action | `verify_jwt` | Function secrets | Vault secrets | Source |
+| --- | --- | --- | --- | --- | --- |
+| `abandon-submission` | deploy (new) with `--no-verify-jwt` | false (`config.toml`; hosted tokens are ES256, the function checks the caller itself) | none new: `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` already set; `MUX_API_BASE` must stay **unset** | none | `VIDEO-RELIABILITY.md` 4, 5 |
+| `web` | deploy (new; also carries the XSS fix and the pinned script) with `--no-verify-jwt` | false | optional `STORE_URL`, `WAITLIST_URL`. If unset the code falls back to `https://shortcut.app` and to the store URL (`web/index.ts`); that domain is not owned, so set them or accept the placeholder knowingly | none | `web/index.ts`, BETA-READINESS section 6 |
+| `avatar-cleanup` | deploy (new) with `--no-verify-jwt` | false (`config.toml`) | `AVATAR_CLEANUP_KEY` (a long random string) | `avatar_cleanup_url` = `https://picvoavfxnajfjkqawju.supabase.co/functions/v1/avatar-cleanup`, `avatar_cleanup_key` = the same string as the function secret | `SECURITY.md` 6.5, 6.6 |
+| `send-push` | deploy (new) with `--no-verify-jwt`, **only with the push credentials** (H8) | false | `PUSH_SENDER_KEY`; optional `EXPO_ACCESS_TOKEN` | `push_function_url`, `push_function_key` (= `PUSH_SENDER_KEY`) | `supabase/README.md`, `NOTIFICATIONS.md` 4 |
+| `admin` (Agent D) | **not in the repository at `90eced7`** | must be false for the same ES256 reason, and the function must authenticate team members itself | to be listed when it lands | to be listed when it lands | placeholder row; also see H4 note on reading moderation tables |
+| `auth-signin-method`, `mux-create-upload`, `mux-upload-status`, `mux-webhook`, `mux-cleanup` | **no redeploy** (unchanged since `7ebb69e`) | false | unchanged (10 secrets on hosted) | `mux_cleanup_url`, `mux_cleanup_key` already used by the clean-up worker | `git diff --stat` above |
+
+### The sequence
+
+| Step | Action | Exact commands and checks | Waits for |
+| --- | --- | --- | --- |
+| H0 | Preconditions | Nemat reviews the commits behind each batch; `supabase` CLI 2.119+ logged in to the account that owns the project; a clean `git archive` of the reviewed commit to push from; both clean-up switches **non-live** (database `off`, `MUX_CLEANUP_MODE` unset); none of H1 to H9 touches them. | Nemat |
+| H1 | **Read-only preflight (stop if any fails)** | (a) `VIDEO-RELIABILITY.md` 5.1: schema fingerprint (`scripts/schema-fingerprint.sql`, 759 objects at the end of Test B2) line for line against a local stack built from the same 17 migrations; last applied `20261013000100`; `post_response(uuid, text, text, integer)` exists and `post_submissions` does not; functions and secrets as in B2 (no `abandon-submission`); health `ok`; no open job; the founder's and V's hashes. (b) `SECURITY.md` 6.1, as SQL: `select has_table_privilege('postgres','auth.sessions','select') as s, has_table_privilege('postgres','auth.sessions','delete') as d;` **both must be true** (if `s` is false every signed-in request fails in `pre_request`; if `d` is false `delete_account` fails); `select count(*) from pg_extension where extname = 'pg_graphql';` expect 0 (if 1 the same row-level rules apply through `/graphql/v1`); `select policyname from pg_policies where schemaname = 'storage' and policyname like 'avatars:%';` expect 4. | Nemat approves the read-only queries |
+| H2 | Batch A: posting idempotency | `supabase db push --linked --dry-run` must list exactly `20261013000200_post_idempotency.sql` then `20261013000300_safe_submission_abandon.sql`; then `supabase db push --linked`. Both in one push (0300 drops what 0200 creates). The installed founder build `ede68ed` keeps posting; a call during the DDL may fail once. Verify read-only (`VIDEO-RELIABILITY.md` 5.4): five-argument signatures, grants, `SECURITY DEFINER`, four-argument versions gone, `begin/finish_submission_abandon` executable by `service_role` only, `post_submissions` RLS on with no policy, `abandon_submission` absent, PostgREST lists `post_response` with `p_submission`. | H1 |
+| H3 | Deploy `abandon-submission` | `supabase functions deploy abandon-submission --project-ref picvoavfxnajfjkqawju --no-verify-jwt`. Verify: `functions list` shows `ACTIVE`, `verify_jwt` false; a `POST` without a session answers 401; the other bundles unchanged. | H2 |
+| H4 | Batch B: privacy, visibility, sessions, avatars | **Conflict check first** (`SECURITY.md` 6.2): migrations `…200` to `…203` redefine `prompt_card`, `activity_row`, `activity_unread_count`, `get_profile`, `pre_request`, `delete_account`, `get_onboarding_state` and the two avatar write policies; any later file (Agent D's `20261016000300` series, if it appears) that redefines one of them must start from Agent C's version, for example keep the `session_is_current()` check in `pre_request`. The column grants hide `moderator`, `note`, `decided_by`, `reviewed_by` from `authenticated`, so the admin must read those tables with the service role. Then `db push --linked --dry-run` must list exactly `20261016000200` to `20261016000203` (plus Agent D's files, if they are going), then `db push --linked`. `cleanup_integration_test.ts` already signs in again after deletion (`b0b7295`), so the earlier test patch is no longer needed. | H3 (batch B assumes the 19 earlier migrations; `SECURITY.md` 4) |
+| H5 | Deploy `web` | `supabase functions deploy web --project-ref picvoavfxnajfjkqawju --no-verify-jwt` (+ optional `STORE_URL`, `WAITLIST_URL` via `supabase secrets set`). Verify: `/r/<id>`, `/p/<id>`, `/i/<code>`, `/u/<name>` render; `noindex`; each page's "Open in the app" link is `shortcut://r/…`, `p/…`, `u/…`, `i/…`; the hls.js tag carries the `integrity` hash and `crossorigin`; `/i/%3C/script%3E` does not break out of the inline script. | H4 (the visibility fixes reach the web through `web_video`/`web_prompt`) |
+| H6 | Deploy `avatar-cleanup` and turn it on | `supabase functions deploy avatar-cleanup --project-ref picvoavfxnajfjkqawju --no-verify-jwt`; `supabase secrets set AVATAR_CLEANUP_KEY=<long random>`; then `select vault.create_secret('https://picvoavfxnajfjkqawju.supabase.co/functions/v1/avatar-cleanup', 'avatar_cleanup_url');` and `select vault.create_secret('<the same string>', 'avatar_cleanup_key');`. Until both exist the cron job (`avatar-cleanup`, every 10 minutes) does nothing and names simply queue. Verify read-only: the four `avatars:%` policies, the cron job, `select count(*) from public.avatar_removals`, then rows getting `done_at`. | H4; may wait |
+| H7 | Deploy `admin` (Agent D) | Add its row above (name, `verify_jwt`, secrets, Vault) from its own doc; deploy by name. **Not part of this sequence until the function and its doc exist.** | Agent D |
+| H8 | Push sender | `NOTIFICATIONS.md` section 4 step 4: choose `S`; `vault.create_secret(…/functions/v1/send-push, 'push_function_url')` and `vault.create_secret('<S>', 'push_function_key')`; `supabase secrets set PUSH_SENDER_KEY=<S>`; optional `EXPO_ACCESS_TOKEN`; `supabase functions deploy send-push --no-verify-jwt`. Harmless without tokens; do it together with 4.1, 4.6 and 4.7. | Expo project id, APNs key, FCM |
+| H9 | Post-deploy hosted checks | Fingerprint equal to a local stack built from the 23 migrations (or 17 + the ones pushed); `SESSION_GATE=1 node scripts/hosted-auth-smoke.mjs` (Nemat, own address: sign-in, refresh, product call, and that a signed-out token is refused); `supabase config diff --project-ref picvoavfxnajfjkqawju` must show **no change** from the state after 9 Oct (no Auth, API, DB or Storage setting changed; `[functions.avatar-cleanup] verify_jwt = false` is not compared and takes effect at deploy). | H2 to H6 |
+| H10 | Provider tests | `PROVIDER-TESTS.md`: C1 and C2w need none of the above and may run earlier; C2a after H3; E1 to E3 at any point, in their order. Each step that changes anything is its own approval; the database switch stays `off` except for seconds in `scripts/provider-drain.sh`. | Nemat per step |
+| H11 | Auth providers | After the credentials (4.4, 4.5): flip the hosted Apple and Google blocks, `config diff`, preview, push (3.6). Not before H9, so the sign-in hook and session changes are verified with email codes first. | 4.4, 4.5 |
+| H12 | Founder build and device checks | A founder build from the reviewed commit **after H3 and H4** (builds since `b7a02ad` send `p_submission` and fail visibly without the migration; the new startup check, sign-out cleanup and session handling come with this build; the server changes themselves work with the installed `ede68ed`, `SECURITY.md` 6.8). Device checks, in this order: (1) BETA-READINESS 19.5 step 8: lost answer then Retry, Discard while uploading online and offline, a second take while one waits, sign-out on each route, with the read-only ledger and submission checks after each. (2) `CAMERA-FLIP.md` "Physical-device test procedure": cases 1 to 19 and the file-integrity and Mux read-only checks on an iPhone (iOS 17+) and a mid-range Android (13+); pass bar is cases 1, 2, 5, 6, 10, 11, 17 and 19 on both phones plus the file checks. (3) Sessions (the claims of `SECURITY.md` L1 to L4): delete the account on phone A while signed in on phone B, then check that B is signed out and cannot cancel the deletion by opening the app, that a new sign-in restores everything, and that a signed-out phone's token is refused (`SESSION_GATE`). (4) Photos: replace a profile photo and check the old address stops working after about 10 minutes (H6 live). (5) Sign-out on a shared phone: the previous account stops receiving pushes (needs push credentials) and its recent searches are gone. | H3, H4, H6; push parts need H8 |
+| H13 | Mux clean-up live | Only when `VIDEO-RELIABILITY.md` section 8 holds: C1, C2w, E1, E2 pass on hosted and C2a after H3; the H2/H3 rollout done or deferred knowingly; a continuous dry run of 3 to 7 days with every plan explained; a named person owns `select public.mux_cleanup_health();` daily; the Mux asset count reconciled by hand once; Nemat accepts the mechanics in BETA-READINESS section 15. Then `supabase secrets set MUX_CLEANUP_MODE=live` and `select public.mux_cleanup_set_mode('live', '<who>')`. **Gate 5 note:** before any outside tester clean-up must be live, or left in dry run with a recorded decision; until then a deleted or removed video stays playable at Mux by its playback id, and the privacy and deletion pages' video statements are not true. | Nemat |
+
 ## Part 2. Gates and blockers
 
 | Item | State on 16 Oct | Waiting on | Owner |
@@ -139,9 +202,9 @@ reliability, **B** camera flip and native builds, **C** auth, privacy and accoun
 | **Gate 2** Nemat can sign up on iOS and Android | Open. Email sign-in works on the founder iPhone build and through the hosted Auth API. | 3.6, 4.2 to 4.5, 5.1 to 5.3. | Nemat |
 | **Gate 5** safety complete | Open. | 1.5, 6.x, 7.3, 7.4, B-2, the decisions in 0.5. | Nemat |
 | **Gate 7** closed beta opens in Canggu | Open. | Everything above, plus 7.7 and Nemat's decision. | Nemat |
-| **B-1** camera flip during a take | Open, in progress (Agent B). | 1.4 including the device check on both platforms. | B |
-| **B-2** push credentials | Open. Code and database built; `send-push` not deployed on hosted; no EAS project. | 4.1, 4.6, 4.7, 3.5, 5.6; gaps in 1.9. | Nemat, Lead |
-| **B-3** domain and app links | Open. Web function built; domain not bought. | 0.4, 3.7, 1.9(a), 4.2. | Nemat |
+| **B-1** camera flip during a take | Open. Built and integrated (Agent B); **not verified on a phone**. | The device procedure in `CAMERA-FLIP.md` on an iPhone and a mid-range Android (H12); Nemat closes it. | B, Nemat |
+| **B-2** push credentials | Open. Code and database built; app-side gaps 1, 2 and 4 fixed in code (not run on a phone); `send-push` not deployed on hosted; no EAS project. | 4.1, 4.6, 4.7, H8, 5.6; receipts gap and `aps-environment` check remain (`NOTIFICATIONS.md`). | Nemat, Lead |
+| **B-3** domain and app links | Open. Web function built and its app link routes exist; domain not bought. | 0.4, 3.7, 4.2. | Nemat |
 | **B-4** store builds and listings | Open. Profiles exist; release config hardened (1.2). | 0.1, 0.3, 4.1 to 4.3, 4.9, 6.x, 5.1, 5.2, 7.x. | Nemat |
 
 ## Part 3. BETA-READINESS sections 1 to 9, row by row
@@ -153,8 +216,8 @@ this checklist's. "Step" points into Part 1.
 
 | Item | Class | Owner | Step |
 | --- | --- | --- | --- |
-| B-1 camera flip | NEEDS-DEVICE | B | 1.4 |
-| B-3 app-link wiring in the app | NEEDS-PAID-ACCOUNT, NEEDS-FOUNDER | Lead | 0.4, 3.7 (routes: 1.9a) |
+| B-1 camera flip | LOCAL-DONE (built), NEEDS-DEVICE | B | 1.4, H12 |
+| B-3 app-link wiring in the app | NEEDS-PAID-ACCOUNT, NEEDS-FOUNDER (routes exist) | Lead | 0.4, 3.7 |
 | Settings rows with no destination | NEEDS-FOUNDER | E | 6.3, 6.4 |
 | Moderation web admin | NEEDS-HOSTED | D | 1.5 |
 | Post refused while creating the row | NEEDS-FOUNDER (state and copy needed) | A, E | 0.5, then fix |
@@ -248,30 +311,13 @@ this checklist's. "Step" points into Part 1.
 | Reference data (topics, other places, neighbours) | NEEDS-HOSTED | 3.3 |
 | No backups or point-in-time recovery (9 Oct) | NEEDS-FOUNDER (a paid Supabase plan may be needed) | decide plan and state it in the policies (6.2) |
 
-## Part 4. The exact change for "fail clearly on missing Supabase config" (Agent C, `app/src`)
+## Part 4. "Fail clearly on missing Supabase config": done
 
-Today `app/src/lib/env.ts` defines `missingConfig()` but nothing calls it, and `app/src/lib/supabase.ts` does
-
-```ts
-export const supabase = createClient(SUPABASE_URL || 'http://localhost', SUPABASE_ANON_KEY || 'anon', { ... });
-```
-
-so a build with an empty `EXPO_PUBLIC_SUPABASE_URL` starts normally and every request fails later against
-`http://localhost`. Proposed change, near the top of `supabase.ts`, after the existing founder check:
-
-```ts
-const configError = missingConfig();
-if (configError) throw new Error(configError);                 // empty URL or key: fail at startup, not on the first request
-if (!__DEV__ && !/^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(SUPABASE_URL)) {
-  throw new Error('Release build: EXPO_PUBLIC_SUPABASE_URL must be the hosted https://<ref>.supabase.co URL.');
-}
-```
-
-and `createClient(SUPABASE_URL, SUPABASE_ANON_KEY, ...)` without the fallbacks. Notes: `missingConfig()` already exists with
-the right message; the thrown error appears as the standard red screen in development and a startup crash in a release
-build, which is the intended "fail clearly" (a friendlier screen would need a board). Jest imports of `supabase.ts`
-need the two variables set in `jest.setup.js`. The EAS side is already covered: `app.config.ts` refuses a preview or
-production build with a bad URL or key before the binary exists.
+Closed by Agent C (`04197bc`, `docs/release/SECURITY.md` A1): `app/src/lib/supabase.ts` calls `configError()`, which throws
+at startup for an empty URL or key, and outside `__DEV__` accepts only `https://<20-char ref>.supabase.co`; LAN `http`
+still works in development; the `http://localhost` fallback is gone. Tested by Jest `supabaseConfig` (6 tests); not run
+in a release build on a phone. The EAS side is separate and unchanged: `app.config.ts` refuses a preview or production
+build with a bad URL or key before the binary exists.
 
 ## Part 5. Things found by this effort that were not on any list
 
@@ -284,10 +330,10 @@ production build with a bad URL or key before the binary exists.
 5. Apple requires an in-app privacy policy link and Play requires a web deletion path; neither has a board or a page.
 6. Sign in with Apple's client secret expires within six months; Hide My Email addresses will not receive waitlist
    emails until the sending domain is registered with Apple.
-7. Profile photo files are never deleted; the app never removes the push token on sign-out; `sent_at` on
-   `push_outbox` means "accepted by Expo", receipts are never read (`NOTIFICATIONS.md`).
-8. Opening a notification from a killed app, and shared links to `/r` and `/p`, are probably broken (no code for them).
+7. Found 16 Oct, now fixed locally and not deployed or run on a phone: profile photo files were never deleted
+   (`SECURITY.md` L5) and the app never removed the push token on sign-out (A2). Still open: `sent_at` on `push_outbox`
+   means "accepted by Expo", receipts are never read (`NOTIFICATIONS.md`).
+8. Opening a notification from a killed app, and the app routes for `/r`, `/p` and `/u`, had no code: built by Agent E (`978e053`) and the integration; not run on a phone.
 9. `SPEC.md` disagrees with itself in three places after the 14 Oct §19 revision (`SPEC-SYNC.md` Part 1.3).
-10. The shared web page loads an unpinned script from a public CDN.
-11. Android: `SYSTEM_ALERT_WINDOW` and legacy storage permissions ship in a release build by default; the dark-mode
-    setting has no effect without `expo-system-ui` (not added: dependency decision for Nemat).
+10. The shared web page loaded an unpinned script from a public CDN (now pinned with SRI, 1.10) and wrote the invite code into an inline script (reflected XSS, fixed by Agent C, `755694a`); both are in the `web` function that is **not redeployed** until H5.
+11. Android: `SYSTEM_ALERT_WINDOW` and the legacy storage permissions are now blocked in `app.config.ts` (source-level check only; confirm the merged manifest on the first release build, `ANDROID.md` section 2). The dark-mode setting still has no effect without `expo-system-ui` (not added: dependency decision for Nemat).

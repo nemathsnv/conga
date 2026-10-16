@@ -122,6 +122,10 @@ first-response draft is kept when a suggestion is declined or withdrawn.
 Moderation records for a live account are kept with who, when, why and the note. When an account is permanently deleted
 they are anonymised (no account, target, moderator, reason or note) and deleted 90 days later. A period for live accounts
 is not decided (`RETENTION-AND-RECOVERY.md`). Who on the team may read them, and how that is logged, is not decided.
+A member who reads their own moderation records (the removal and restriction notices, review requests, suggestions)
+no longer sees the moderator's name or the internal note, only the reason written for them **[LOCAL ONLY: column grants
+in `20261016000200`, `docs/release/SECURITY.md` P3; not deployed]**. A moderator tool that reads those tables must use
+the service role, not a member's session (`SECURITY.md` section 6 step 2; this is a check for the admin, Agent D).
 
 ### 3.4 What a moderator must not do
 

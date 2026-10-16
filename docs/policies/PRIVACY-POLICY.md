@@ -6,6 +6,12 @@
 > company still has to confirm. Do not publish until each placeholder is filled, each review mark is cleared and
 > each item in "Checks before publishing" at the end is true.
 >
+> **Updated 16 Oct 2026 (integration branch `90eced7`)** for `docs/release/SECURITY.md`, `VIDEO-RELIABILITY.md` and
+> `CAMERA-FLIP.md`. **[LOCAL ONLY]** marks behaviour that exists in the repository and passed local tests but is **not
+> deployed** to the hosted project (migrations `20261016000200` to `20261016000203`, function `avatar-cleanup`) or is
+> in app code no phone has run; do not publish a **[LOCAL ONLY]** sentence as true until it is deployed and checked
+> (`RELEASE-CHECKLIST.md`, stage 3).
+>
 > Sources: `SPEC.md` sections 2, 13 to 18, 21 and 22; `docs/DECISIONS.md` (9 and 12 Oct 2026); the database
 > migrations in `supabase/migrations`; the app in `app/src`. Words: a **response** is a video made for a prompt;
 > a **video reply** is a video made in reply to a response or another video reply; a **comment** is text.
@@ -49,7 +55,7 @@ older**.
 | **Phone time zone** | The name of your time zone (for example "Asia/Makassar"), refreshed when the app opens. | To send "Tonight's prompt" at about 18:30 your time. It is not your location; we do not collect GPS location. **[LEGAL REVIEW: a time zone name indicates an approximate region]** |
 | **Push token** | If you allow notifications, an identifier for your phone issued through Expo's push service, with whether it is iOS or Android. | To deliver the notifications you chose. It is removed when you delete your account or when the push service says the phone is no longer registered. |
 | **Permissions** | The camera and microphone are used only while you record. The photo library is used only when you choose a profile photo. | To record and to set a photo. Recording without sound is not allowed. |
-| **Recent searches** | Kept on your phone only. | To show recent searches. |
+| **Recent searches** | Kept on your phone only, and cleared when the account signs out of that phone **[LOCAL ONLY]**. | To show recent searches. |
 
 ### 2.3 What we do not collect
 
@@ -111,9 +117,13 @@ Full detail is in `RETENTION-AND-RECOVERY.md`. In short:
 
 - **Your account and everything you made** stay until you delete them or your account.
 - **If you delete a video**, it disappears everywhere at once and its file is deleted from our video provider.
-- **If you delete your account**, everything you made is hidden immediately and permanently deleted after **30 days**.
-  If you sign back in during the 30 days, everything comes back. Your username stays reserved for the 30 days.
-  Details in `ACCOUNT-DELETION.md`.
+- **If you delete your account**, everything you made is hidden immediately and permanently deleted after **30 days**,
+  and you are signed out on every phone **[LOCAL ONLY]**. If you sign in again during the 30 days, everything comes
+  back (a phone that was already signed in cannot cancel the deletion by itself **[LOCAL ONLY]**). Your username stays
+  reserved for the 30 days. Details in `ACCOUNT-DELETION.md`.
+- **Profile photos.** A photo you replace or remove, and all photos of a permanently deleted account, are deleted from
+  our file storage within minutes **[LOCAL ONLY]** (a queue and the `avatar-cleanup` function). During the 30-day
+  window a deleted account's photo can still be opened by anyone who already has its web address.
 - **A video we removed** for breaking the guidelines is kept privately, and invisible, until 30 days after the
   moderation case on it closes, so a mistake can be put right; then it is permanently deleted. A case closes when we
   remove the video, or, if you ask for a review in time, when the review is decided.
@@ -133,6 +143,11 @@ Full detail is in `RETENTION-AND-RECOVERY.md`. In short:
 - **Notifications:** Pause all, or choose each type, in Settings; or turn them off in your phone's settings.
 - **Block** a person: it is silent; undo it in Settings > Blocked accounts.
 - **Delete your account:** Settings > Delete account (`ACCOUNT-DELETION.md`).
+- **What stays on your phone:** an unposted recording and, for a take with camera flips, its segment files until the
+  stitched clip is kept (then they are deleted); your sign-in session; and, until you sign out, the app's queue of
+  events not yet sent and your recent searches. Signing out removes this phone's notification token and clears the
+  queued events and recent searches of the account that leaves **[LOCAL ONLY]**. A recording that could not yet be
+  confirmed as discarded stays private on the phone for that account.
 - **Ask us:** to see, correct, export or delete personal data, or to object to a use, write to [PLACEHOLDER: privacy
   contact]. We will check it is you. [LEGAL REVIEW: list the rights that apply and the response period; the product
   has no in-app data export today.]
@@ -142,7 +157,12 @@ Full detail is in `RETENTION-AND-RECOVERY.md`. In short:
 ## 8. Security
 
 Data is sent over encrypted connections. Access to your data inside the product follows rules enforced on the
-server: you can only act as yourself, and database access is restricted by row-level rules. Video upload links are
+server: you can only act as yourself, and database access is restricted by row-level rules. Members can read only
+their own rows of the profile, follow and comment tables directly; what they see of other people goes through
+functions that apply blocks, reports and the 30-day deletion window **[LOCAL ONLY]** (`SECURITY.md` P1 to P7).
+Moderator names and internal moderator notes are not readable by members, including on records about their own
+account **[LOCAL ONLY]** (P3). When a session ends, because you sign out or delete the account, its access is refused
+on the next request, not after the token would have expired **[LOCAL ONLY]** (L4). Video upload links are
 created by our server for your account only, are single-use and expire; no provider secret is stored in the app.
 Only our team can read the product events and moderation records. [PLACEHOLDER: who on the team has access, and
 how that is logged. **[LEGAL REVIEW]**] No system is perfectly secure, and we cannot promise it is.
@@ -178,10 +198,10 @@ Each line is a statement above that is true of the **design** but not yet verifi
    but switched to dry-run: no Mux asset has been permanently deleted by the system except one canary
    (BETA-READINESS section 15). The statements in sections 6 and 7 are not yet true on the hosted project until Nemat
    switches the worker to live.
-2. **Profile photos are not deleted by the system.** Photos are files in the public `avatars` storage bucket. A new
-   photo is a new file; the old file stays. Account purge removes the profile row but nothing deletes the file
-   (verified in the migrations and `app/src/lib/photo.ts` on 16 Oct). Either the system must delete them, or section 6
-   must say photos can remain reachable by their web address. Raise with the person who owns account lifecycle.
+2. **Profile photos.** The fix is local only: the queue in `20261016000203` and the `avatar-cleanup` function. It is
+   inert on the hosted project until the function is deployed and the two Vault secrets exist, and then a read-only
+   check must show replaced and purged photos gone from the `avatars` bucket (`SECURITY.md` L5, section 6 step 6).
+   Until then section 6's photo bullet is not true.
 3. **Product events have no retention rule.** `analytics_events` is never pruned. A period must be decided.
    Likewise `push_outbox` rows already sent, `activity` rows, `video_uploads` and `post_submissions` have no
    deletion rule (BETA-READINESS section 4, "Data rules", still open).
@@ -199,3 +219,7 @@ Each line is a statement above that is true of the **design** but not yet verifi
    function would remove that third party; it is not done. Re-check the hash whenever the version changes.
 9. **Hide My Email** (Apple): the waitlist-admission email may not reach those addresses unless the sending domain is
    registered with Apple (`docs/release/IOS.md` section 5).
+10. **Sessions and direct reads** (sections 6 and 8) are **[LOCAL ONLY]** until the hosted preflight in
+    `SECURITY.md` section 6 passes (`postgres` must be able to read and delete `auth.sessions`) and migrations
+    `20261016000200` to `20261016000202` are pushed.
+11. **Camera flip** (section 7, on-phone data): built, not run on a phone (`CAMERA-FLIP.md`).
