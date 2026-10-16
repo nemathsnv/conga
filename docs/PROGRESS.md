@@ -15,7 +15,7 @@ branch listed by `git worktree list` on 16 Oct is an ancestor of that commit.
 | Agent | Model | Scope | Status |
 |---|---|---|---|
 | A | Opus | Video reliability: Mux `errored` handling, verification of the reliability list, C1/C2/E1/E2 procedures, rollout plan | implemented locally; integrated. pgTAP 1245, abandon 16, provider rehearsal 8/8 on an isolated stack; hosted steps await approval (docs/release/VIDEO-RELIABILITY.md, PROVIDER-TESTS.md) |
-| B | Opus | B-1 camera flip during a take with native segment stitching (iOS AVFoundation, Android Media3) | in progress |
+| B | Opus | B-1 camera flip during a take with native segment stitching (iOS AVFoundation, Android Media3) | implemented locally; integrated (06db56d). Jest 30 new tests, macOS AVFoundation harness 27/27, iOS simulator build succeeded, Android module compiles; awaiting verification on real phones (docs/release/CAMERA-FLIP.md). B-1 stays open |
 | C | Opus | Auth hardening verification, privacy audit, account lifecycle, hosted config checklist | implemented locally; integrated. 4 migrations (200 to 203), pgTAP 1412, auth integration 52/52 on an isolated stack; hosted deployment awaits approval (docs/release/SECURITY.md) |
 | D | Sonnet | Moderator removal keeps the response slot; internal moderation admin (`admin` Edge Function) | in progress |
 | E | Sonnet | Failed-post review package (P1 to P9), approved-UI audit and fixes, P1 to P9 prepared on a holding branch | implemented locally; integrated (becd7fa); P1 to P9 on `hold/failed-post-ui` (9c32722) awaiting Nemat's approval; simulator walk-through pending. Follow-up integrated (4e16360): notification tap at cold start, push routes per kind with tests, Android channel |
