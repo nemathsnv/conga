@@ -4539,6 +4539,33 @@ removed, linked to `picvoavfxnajfjkqawju`. Package: `docs/release/H2-DEPLOY.md`.
 
 *Next:* H3 on Nemat's go-ahead (`docs/release/H2-DEPLOY.md` step 4), then H4.
 
+## 23. H3 deployed: `abandon-submission` (16 Oct 12:04 UTC; Nemat approved)
+
+Approved by Nemat on 16 Oct ("run H3 … deploy abandon-submission --no-verify-jwt from the
+integration tip, verify the function list and the 401 on an unauthenticated POST, record it, and
+stop before H4"). Deployed by the lead from the integration worktree at `f95eb24` (function tree
+`2110c453…`, `_shared` tree `c8c36b3a…`; the handler is Agent A's `be99363` with the conservative
+`errored` rule, `docs/release/VIDEO-RELIABILITY.md` section 2).
+
+- **Deploy (12:04:00 to 12:04:07 UTC):** `supabase functions deploy abandon-submission
+  --project-ref picvoavfxnajfjkqawju --no-verify-jwt`: "Bundling Function", "Deploying Function
+  (script size: 715 kB)", "Deployed Functions", exit 0.
+- **Verification (12:04:19 UTC):** `functions list`: `abandon-submission` v1 `ACTIVE`,
+  `verify_jwt` false; `auth-signin-method` v10, `mux-cleanup` v8, `mux-create-upload` v10,
+  `mux-upload-status` v11, `mux-webhook` v12 unchanged, with their earlier update times. A `POST`
+  with no session answers **401**; a `GET` answers 405. No secret, Vault entry, switch or other
+  function changed; the function needs only the existing `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET`
+  and makes Mux `GET`s and, for a `waiting` upload the member discards, one documented cancel.
+- **Effect:** builds since `b7a02ad` can now discard: the server asks Mux before anything is
+  retired; a confirmed cancel or a documented terminal state retires the row and the phone
+  deletes the recording; `errored` or undocumented states are kept unverified until 10 minutes
+  after the URL expiry. The installed founder build (`ede68ed`) has no Discard and is unaffected.
+- **Not done:** H4 onwards. The abandon path has not been exercised against real Mux (that is
+  provider test C2a, `docs/release/PROVIDER-TESTS.md`, its own approval).
+
+*Next:* H4 (batch B, migrations `20261016000200` to `204`) on Nemat's go-ahead; its preflight
+(`auth.sessions` privileges) passed in H1.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
