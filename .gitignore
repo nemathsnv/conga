@@ -38,3 +38,5 @@ yarn-error.*
 # spike recordings and exports
 spike/recordings/
 spike/logs/*.jsonl
+docs/release/h1-results-*.txt
+docs/release/h1-hosted-fingerprint-*.fp

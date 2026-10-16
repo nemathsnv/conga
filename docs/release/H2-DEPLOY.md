@@ -1,8 +1,8 @@
 # H2 and H3: batch A on the hosted project (prepared 16 Oct; NOT authorised yet)
 
 Steps H2 and H3 of `RELEASE-CHECKLIST.md` Part 1B, written out so that each needs one decision and
-one command. Preconditions: H1 passed (`docs/release/h1-results-*.txt` with every compared block
-PASS), the integration branch reviewed at the commit named below, both clean-up switches
+one command. Preconditions: H1 passed (`docs/release/h1-results-*.txt` whose first line says `mode linked`,
+with every compared block PASS and block 8 read by a person), the integration branch reviewed at the commit named below, both clean-up switches
 non-live, and Nemat's go-ahead for each numbered step separately. Nothing here runs by itself.
 
 Reviewed commit for the archive: the integration tip at the time of the go-ahead (record its hash
@@ -83,12 +83,13 @@ rollback;
 ```
 
 Expected: 19 applied, latest `20261013000300`; all six booleans true; the posting functions are
-`SECURITY DEFINER` with a pinned `search_path`, executable by `authenticated` only; the two abandon
-helpers by `service_role` only; `post_submissions` RLS on with 0 policies. Then the schema
+`SECURITY DEFINER` with a pinned `search_path`, executable by `authenticated` and `service_role`
+(the default grant, which the migration keeps), not by `anon` or PUBLIC; the two abandon helpers
+by `service_role` only; `post_submissions` RLS on with 0 policies. Then the schema
 fingerprint (`scripts/schema-fingerprint.sql` wrapped as in `H1-PREFLIGHT.md` block 2) must equal
-a local stack built from the same 19 migrations (produce it the way `h1-expected-17-migrations.fp`
-was produced: `rm` the `20261016…` files in a scratch copy, `supabase start`, `db reset`, run the
-script). PostgREST: `GET /rest/v1/` with the anon key lists `post_response` with a `p_submission`
+`docs/release/h2-expected-19-migrations.fp` (a local stack built from the same 19 migrations,
+16 Oct: 788 objects, listing md5 `13d25b7796fee9876ce41826f5decce5` by the H1 block 2 method;
+compare count and md5 first, then the listing). PostgREST: `GET /rest/v1/` with the anon key lists `post_response` with a `p_submission`
 parameter (the schema cache reloads on DDL; if not, `NOTIFY pgrst, 'reload schema'` is the only
 write involved and needs its own nod).
 

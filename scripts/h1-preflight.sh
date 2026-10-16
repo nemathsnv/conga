@@ -14,6 +14,10 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 MODE="linked"; STACK=""
 if [ "${1:-}" = "--local" ]; then MODE="local"; STACK="${2:?stack folder}"; fi
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+cd "$REPO"
+if [ "$MODE" = "linked" ] && [ ! -s supabase/.temp/project-ref ]; then
+  echo "not linked: run 'supabase link --project-ref picvoavfxnajfjkqawju' in $REPO first (it writes local files only)" >&2; exit 2
+fi
 OUT="$REPO/docs/release/h1-results-$STAMP.txt"
 FAILED=0
 
@@ -31,11 +35,13 @@ try:
     d = json.loads(raw)
 except Exception:
     print("ERROR " + raw[:300].replace("\n", " ")); sys.exit(0)
-if isinstance(d, dict) and "rows" in d:
-    for r in d["rows"]:
-        print(r.get("v", "") if r.get("v") is not None else "")
-else:
+rows = d["rows"] if isinstance(d, dict) and "rows" in d else (d if isinstance(d, list) else None)
+if rows is None:
     print("ERROR " + json.dumps(d)[:300])
+else:
+    for r in rows:
+        v = r.get("v") if isinstance(r, dict) else r
+        print("" if v is None else v)
 '
 }
 say() { echo "$1" | tee -a "$OUT"; }
@@ -82,6 +88,10 @@ verdict "5 members with two primary rows on one prompt" "0" "$r"
 h="$(q "select public.mux_cleanup_health()::text as v" | tail -1)"
 say "6 health: $h"
 r="$(q "select coalesce((public.mux_cleanup_health()->>'mode'), '?') as v" | tail -1)"; verdict "6 clean-up mode" "off" "$r"
+r="$(q "select coalesce((public.mux_cleanup_health()->>'status'), '?') as v" | tail -1)"
+case "$r" in ok) say "PASS  6 health status: ok" ;; warn) say "CHECK 6 health status: warn (read the problems in the health line above; only schedule_never_ran warnings are acceptable)" ;; *) say "FAIL  6 health status: $r"; FAILED=1 ;; esac
+r="$(q "select coalesce((public.mux_cleanup_health()->'metrics'->>'failed'), '?') || '|' || coalesce((public.mux_cleanup_health()->'metrics'->>'stuck'), '?') || '|' || coalesce((public.mux_cleanup_health()->'metrics'->>'due'), '?') as v" | tail -1)"
+verdict "6 failed|stuck|due jobs" "0|0|0" "$r"
 r="$(q "select count(*) as v from public.mux_cleanup_jobs where status not in ('done', 'skipped')" | tail -1)"; verdict "6 open jobs" "0" "$r"
 r="$(q "select count(*) as v from public.account_purge_failures" | tail -1)"; verdict "6 purge failures" "0" "$r"
 r="$(q "select string_agg(jobname || '=' || schedule || '/' || active, ';' order by jobname) as v from cron.job" | tail -1)"
@@ -96,7 +106,7 @@ verdict "7 founder ledger md5|status" "9726bb8fdf8d9eb0cb759d13ce59c8b6|claimed"
 r="$(q "select r.status || '|' || coalesce(r.mux_playback_id, '') || '|' || coalesce(r.mux_asset_id, '') || '|' || r.author_id as v from public.responses r where r.id = '52bbaabb-6faa-4bd2-94f9-015e43be791d'" | tail -1)"
 verdict "7 V status|playback|asset|author" "live|tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo|01IyQdSiLvAbHXb01Xg1ZQISiMz9UvMxLMgfZDpscKMBw|b0c14e38-4e89-4dbd-a9a3-8a8c01872a78" "$r"
 r="$(q "select (a.deleted_at is null) || '|' || coalesce(a.moderation_status, 'none') as v from public.accounts a where a.id = 'b0c14e38-4e89-4dbd-a9a3-8a8c01872a78'" | tail -1)"
-verdict "7 T1 active|moderation" "true|none" "$r"
+verdict "7 T1 active|moderation" "true|active" "$r"
 r="$(q "select (select count(*) from public.accounts where deleted_at is not null) || '|' || (select count(*) from public.responses where status in ('removed', 'deleted')) as v" | tail -1)"
 verdict "7 deleted accounts|removed or deleted videos" "0|0" "$r"
 
@@ -110,7 +120,11 @@ try:
 except Exception:
     print("could not parse functions list"); sys.exit(0)
 if isinstance(fs, dict): fs = fs.get("functions", fs.get("data", []))
-print("; ".join(f"{f.get(\"slug\", f.get(\"name\"))} v{f.get(\"version\")} {f.get(\"status\")} verify_jwt={f.get(\"verify_jwt\")}" for f in fs))')"
+parts = []
+for f in fs:
+    slug = f.get("slug") or f.get("name")
+    parts.append("%s v%s %s verify_jwt=%s" % (slug, f.get("version"), f.get("status"), f.get("verify_jwt")))
+print("; ".join(parts))')"
   say "8 secrets (names only): $(supabase secrets list --project-ref "$REF" -o json 2>/dev/null | python3 -c '
 import json, sys
 try:
@@ -126,6 +140,6 @@ else
   say "8 skipped in local mode"
 fi
 
-say "# result: $( [ "$FAILED" = 0 ] && echo 'every compared block PASS' || echo 'at least one FAIL; H2 does not start' )"
+say "# result: $( [ "$FAILED" = 0 ] && echo 'every compared block PASS (block 8 and any CHECK line still need a person to read them)' || echo 'at least one FAIL; H2 does not start' )"
 say "# written to $OUT"
 exit "$FAILED"

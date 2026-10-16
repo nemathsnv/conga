@@ -5,8 +5,12 @@ the project (`supabase link --project-ref picvoavfxnajfjkqawju`, which writes on
 run `scripts/h1-preflight.sh`; it runs blocks 1 to 8 as single read-only SELECTs through
 `supabase db query --linked`, compares each with the expected value below, prints PASS/FAIL per
 block and writes `docs/release/h1-results-<timestamp>.txt` with no key, token, email or name in
-it (tested on a local 17-migration stack on 16 Oct). The blocks below are the same checks for the
-SQL editor, if you prefer to run them by hand. Everything here only reads. Nothing is deployed or changed by it. Run the SQL blocks in the Supabase SQL
+it (tested on a local 17-migration stack on 16 Oct; reviewed independently the same day). The
+script sends plain SELECTs with no transaction wrapper (the CLI runs one statement per call), so
+its safety rests on every statement being a SELECT of catalogs, counts and hashes, which the review
+confirmed; the blocks below are the same checks for the SQL editor, wrapped in a read-only
+transaction, if you prefer to run them by hand. Block 8 (functions, secret names, migration list)
+is printed, not compared: read it. Everything here only reads. Nothing is deployed or changed by it. Run the SQL blocks in the Supabase SQL
 editor of project `picvoavfxnajfjkqawju` (it runs as `postgres`), each block as written: they
 open a `read only` transaction and roll it back. Paste each result back; the "expected" lines
 say what passes. **Stop at the first block that does not match** and report it; the H-sequence
@@ -49,7 +53,8 @@ rollback;
 ```
 
 Expected: `objects` 759, `listing_md5` `f4990575c686f379fa6bec9c70e37e16` (a local stack built from
-the same 17 migrations on 16 Oct; its full listing is `docs/release/h1-expected-17-migrations.fp`,
+the same 17 migrations on 16 Oct; the `10acc19f…` recorded on 13 Oct is the md5 of the same listing
+as a file with a trailing newline, so the two conventions agree; its full listing is `docs/release/h1-expected-17-migrations.fp`,
 759 lines, for a line-by-line diff). If the count matches but the md5 does not, run the script
 unwrapped (its own final `select`), export the result as CSV and send it; the diff names the
 changed objects. Extension
@@ -145,7 +150,7 @@ Expected: founder response `c9918f8241a2c45eefb106b5d0ec0a8f`, `live`; founder l
 `9726bb8fdf8d9eb0cb759d13ce59c8b6`, `claimed`; V
 `live` with playback `tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo` (P2) on asset
 `01IyQdSiLvAbHXb01Xg1ZQISiMz9UvMxLMgfZDpscKMBw`, author T1
-`b0c14e38-4e89-4dbd-a9a3-8a8c01872a78`; T1 active with no moderation status; 0 deleted
+`b0c14e38-4e89-4dbd-a9a3-8a8c01872a78`; T1 active with `moderation_status` `active` (the column's default; BETA-READINESS records it so); 0 deleted
 accounts, 0 removed or deleted videos. A different founder hash means the row changed since
 13 Oct (for example a new response or a caption edit): paste the row's `updated_at` and status
 and it is explained, not necessarily a stop.
@@ -169,7 +174,7 @@ Expected: functions `auth-signin-method`, `mux-create-upload`, `mux-upload-statu
 redeploy). Secrets: 11 names, among them `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`,
 `MUX_WEBHOOK_SECRET`, `MUX_CLEANUP_KEY`, and **no** `MUX_CLEANUP_MODE`, `PUSH_SENDER_KEY` or
 `AVATAR_CLEANUP_KEY`. Paste the names only, never values. `migration list` shows 17 applied on
-remote and the 8 newer files local-only (the list must agree with block 1).
+remote and the 9 newer files local-only (`20261013000200`, `20261013000300` and the seven `20261016…` files) (the list must agree with block 1).
 
 ## 9. Does the default domain serve a function's HTML as a page? (H5b, can be answered now)
 
