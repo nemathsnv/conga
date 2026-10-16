@@ -4684,6 +4684,41 @@ were removed. It exists only in the function's secrets and in Vault.
 
 *Next:* Nemat's decisions on the custom domain (H5b) and on H9 and H10.
 
+## 27. Provider test C1 passed on the hosted project and real Mux (16 Oct 12:43 UTC; Nemat approved)
+
+Approved by Nemat on 16 Oct ("run provider test C1 … against hosted and real Mux with account T1,
+exactly as written, read-only at Mux except the documented cancel"). Procedure:
+`docs/release/PROVIDER-TESTS.md` section 4 (unchanged from section 18.5). Evidence:
+`docs/release/c1-results-20261016.md`.
+
+- **T1's session:** T1's address was read from `auth.users` (read-only, kept in a mode-600 file,
+  never printed; the records do not store it); one sign-in code was sent at 12:34:22 UTC with
+  `scripts/provider-member.mjs otp`; Nemat typed the code into a private terminal prompt
+  (`scripts/provider-t1-verify.sh`, no echo), which saved the token to a mode-600 file. No token,
+  code or address appears in any log or commit.
+- **Before (S1 12:25:57, S3 12:26:00 UTC):** T1 held no slot (its one unclaimed URL from 13 Oct
+  expired that day), 0 minted in 24 h, switch `off`, health `ok`, no open job; Mux: 2 assets,
+  inventory `ccb8b093…`.
+- **Run (12:43:44 to 12:44:06 UTC, `scripts/c1-retire.mjs`, hosted guard flags set):** calls 1 to
+  3 `200` (U1 `OK6YRmec…`, U2 `3eRAk2ZJ…`, U3 `B02LbkiY…`); call 4 at once `429 upload_limit_active`,
+  `Retry-After` 3595 (all three under 15 s old, so nothing retired and Mux not asked); after 20 s,
+  call 5 `200` with U4 `r01Ax4Te…`. `ok: true`.
+- **After (S1 12:44:40, S3 12:44:43 UTC):** ledger U1 `cancelled`, `cancelled_at` 12:44:06.16
+  (the retiring call), U2 to U4 `active`; `t1_minted_1h` 4, `t1_minted_24h` 4 (within 10 and 30);
+  Mux: U1 `cancelled`, U2 to U4 `waiting`, each with passthrough T1 and **no `asset_id`**; assets
+  still **2**, inventory `ccb8b093…` unchanged, so **no asset was created**. Founder response
+  `c9918f82…` `live` with its asset and playback id unchanged; V `live` on P2; responses
+  `deleted=1`, `live=2`, no new T1 row; no submission; clean-up `off`, health `ok`, no open job;
+  functions (9) and secret names (12, no `MUX_CLEANUP_MODE`) unchanged.
+- **What this proves on the real provider:** the stage 2 retirement works end to end: at the
+  3-URL cap the server asks Mux for the oldest unclaimed URL's status, cancels it only because Mux
+  reported it `waiting`, frees the slot only after Mux confirmed, and mints the next URL. Mux's
+  documented cancel guarantee held: a cancelled upload has no asset.
+- **Rollback:** nothing to undo. U2 to U4 time out at Mux at about 13:44 UTC and their slots free
+  themselves; they count towards T1's hour and day until then.
+
+*Next:* C2w and C2a (`PROVIDER-TESTS.md` section 5), E1 to E3 (section 6), each its own approval.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

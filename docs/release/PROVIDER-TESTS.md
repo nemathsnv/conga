@@ -106,6 +106,9 @@ only): unchanged, and no `MUX_CLEANUP_MODE`.
 
 ## 4. Test C1: the stage 2 retirement of an unused URL (no switch; 0 assets)
 
+**PASSED on hosted and real Mux, 16 Oct 12:43 UTC (BETA-READINESS section 27; evidence
+`docs/release/c1-results-20261016.md`).**
+
 Unchanged from `docs/BETA-READINESS.md` 18.5. **Confirmed against the final code (16 Oct):**
 `mux-create-upload` (`retireAbandonedUpload`) has not changed since `43c97fe` (12 Oct), the version
 deployed at R0 (bundle `bd0a6937…`; the platform has moved the version number since, with the same
