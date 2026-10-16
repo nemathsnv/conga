@@ -14,9 +14,13 @@
 //                                     mints one URL, makes a video reply row with it (no Post screen),
 //                                     optionally starts and cuts a transfer, then discards it
 //   abandon <submission id>           asks abandon-submission again (reconciliation)
-//   delete-account                    delete_account() (needs a sign-in in the last 10 minutes)
-//   sign-in-state                     get_onboarding_state(), as the app does at launch (restores a
-//                                     deleted account inside its 30 days)
+//   delete-account                    delete_account() (needs a sign-in, from `verify`, in the last
+//                                     10 minutes; with 20261016000202 it ends every session of the
+//                                     account, so the saved token stops working)
+//   sign-in-state                     get_onboarding_state(), as the app does at launch. It restores a
+//                                     deleted account inside its 30 days only on a session that began
+//                                     after the deletion: run `otp` and `verify` again first. The old
+//                                     token is answered `session_revoked` (printed as error)
 //
 // Local stacks only (127.0.0.1, localhost). The hosted project needs PT_HOSTED_REF=<project ref>
 // matching the URL and PT_APPROVED_BY_NEMAT=yes; no script in this repository sets either.

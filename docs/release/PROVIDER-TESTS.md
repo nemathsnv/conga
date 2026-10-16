@@ -63,6 +63,12 @@ node scripts/provider-member.mjs otp <T1 email>
 node scripts/provider-member.mjs verify <T1 email> <6-digit code>   # token saved to PT_TOKEN_FILE (mode 600)
 ```
 
+A saved token lasts one session. Get a new one (a new code) before each test day, before E1's
+deletion (it needs a sign-in from the last 10 minutes), and after E1 (with `20261016000202`, the
+deletion ends every session; an old token is refused with `session_revoked`). C1 and C2 do not
+delete anything account-wide and keep working on one session, but they must run before E3 (after
+the purge T1 is gone).
+
 ## 3. The same read-only checks before and after every step
 
 Run with `scripts/provider-sql.sh hosted "<statement>"`. Each is one `select` that calls only
@@ -208,9 +214,15 @@ node scripts/provider-member.mjs c2 --reply-to 52bbaabb-6faa-4bd2-94f9-015e43be7
 
 ## 6. Tests E1, E2, E3: account deletion, recovery and the purge (T1, reusing V)
 
-These need none of the unreleased migrations (E1 to E3 use `delete_account`, the launch call
-`get_onboarding_state`, `purge_deleted_accounts` and the worker, all deployed 12 and 13 Oct). They
-must run in this order, each drain before the next account change: **a sign-in while E1's playback
+These need none of the unreleased video migrations (E1 to E3 use `delete_account`, the launch call
+`get_onboarding_state`, `purge_deleted_accounts` and the worker, all deployed 12 and 13 Oct).
+**Sessions:** with Agent C's `20261016000202_session_lifecycle` deployed, `delete_account` needs a
+sign-in (not a token refresh) from the last 10 minutes, ends **every** session of the account at
+once, and only a session that **began after the deletion** restores it; a token of an ended session
+is refused everywhere with `session_revoked`. Before that migration, any existing session's launch
+call restored the account. The steps below are written to work either way: every sign-in is a new
+email code, never a reused session. Record in the results which behaviour the hosted project showed.
+They must run in this order, each drain before the next account change: **a sign-in while E1's playback
 job is still pending joins that job** (one `sync_playback` per video; the worker decides revoke or
 restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
 
@@ -219,11 +231,14 @@ restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
 1. **Preconditions:** S1: V `live` with P2; T1 not deleted; no due job; health `ok`. S3: asset a
    `ready`, playback ids exactly [P2]; P2 HLS 200.
 2. **The deletion.** Preferred: T1 deletes the account in the app (Settings, Delete account; it asks
-   for a fresh sign-in). Or, with a session less than 10 minutes old:
-   `node scripts/provider-member.mjs delete-account` (expected `204`; `reauth_required` means sign in
-   again). Expected (S1): `deleted_at` set; T1's push tokens gone; exactly one new job,
-   `sync_playback` / `account_deleted`, asset a, response V, due now. V stays `live` in the database
-   but is hidden (account deleted).
+   for a fresh sign-in). Or sign in with a new code (`otp`, then `verify`) and, within 10 minutes,
+   `node scripts/provider-member.mjs delete-account` (expected `204`; `reauth_required` means the
+   sign-in is older than 10 minutes: get a new code). Expected (S1): `deleted_at` set; T1's push
+   tokens gone; exactly one new job, `sync_playback` / `account_deleted`, asset a, response V, due
+   now. V stays `live` in the database but is hidden (account deleted). With `20261016000202`: T1's
+   `auth.sessions` rows gone, the app on the phone is signed out, and
+   `node scripts/provider-member.mjs sign-in-state` with the token just used answers
+   `session_revoked` and restores nothing (check `deleted_at` is still set).
 3. **E1 dry run:** `PROVIDER_WRITE_STEP=E1-dry scripts/provider-drain.sh hosted dry_run "Nemat: E1 dry run" <job>`.
    Expected: `200`; plan `direction` `revoke`, `would_revoke` [P2], `owner_verified`.
 4. **E1 live (separate approval):** `secrets set MUX_CLEANUP_MODE=live`, then
@@ -234,9 +249,14 @@ restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
 
 ### E2: T1 signs back in within 30 days (approval: the sign-in, then a dry run; then, separately, one playback-id `POST`)
 
-1. **The sign-in:** T1 signs in in the app (the launch calls `get_onboarding_state`), or
-   `node scripts/provider-member.mjs sign-in-state` with a fresh session. Expected: `deleted_at` null;
-   exactly one new job, `sync_playback` / `account_restored`, for V.
+1. **The sign-in, with a new email code** (one Auth email to T1). On the phone: sign in again from
+   the sign-in screen (the deletion signed the phone out); do not expect the app's old session to
+   restore anything. Or `node scripts/provider-member.mjs otp <T1 email>`, then
+   `verify <T1 email> <code>` (a new session, saved over the old token), then
+   `node scripts/provider-member.mjs sign-in-state`. Expected: `200`; `deleted_at` null; exactly one
+   new job, `sync_playback` / `account_restored`, for V. If `sign-in-state` is tried first with the
+   token from before the deletion: `session_revoked` (with `20261016000202`) and `deleted_at` still
+   set; that is correct, not a failure.
 2. **E2 dry run:** plan `direction` `restore`, `would_create` `public`.
 3. **E2 live:** as E1 live. Expected: job `done` `{"outcome": "restored"}`; V's `mux_playback_id` =
    P3 (new); `muxread asset a` playback ids exactly [P3], same `created_at`; P3 HLS 200; still 2
@@ -245,7 +265,8 @@ restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
 
 ### E3: the purge (approval: the asset `DELETE`, irreversible; ends the stage 3 rollback option)
 
-1. T1 deletes the account again (as E1, step 2), and nobody signs in as T1 for 30 days. The 03:15 UTC
+1. T1 deletes the account again (as E1, step 2, after a new sign-in: E2's session is more than 10
+   minutes old by then), and nobody signs in as T1 for 30 days (a sign-in would cancel it). The 03:15 UTC
    `purge-deleted-accounts` removes it on day 31. Its playback job from the deletion is drained as in
    E1 (dry run, then live) so V's P3 is revoked during the window.
 2. **Expected after the purge (S1):** no T1 account, profile or rows (V is not kept: no other
