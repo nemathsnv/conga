@@ -3,7 +3,7 @@
 -- it and records again. Removed by moderation keeps the slot; a restore keeps it the primary
 -- response; the author's own deletion frees it; a draft is checked when it is published.
 begin;
-select plan(61);
+select plan(58);
 
 delete from public.reports;
 delete from public.review_requests;
