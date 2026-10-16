@@ -59,7 +59,12 @@ export function recordingOnPhone(recording: Recording): boolean {
   }
 }
 
-/** The file that is uploaded. One segment only until stitching lands (docs/BLOCKERS.md B-1). */
+/**
+ * The file that is uploaded: the recording's one file. A take with a camera flip has several
+ * segments until Post Review stitches them into one (stitch.ts ensureStitched, docs/BLOCKERS.md
+ * B-1); this stays synchronous, so it does not stitch itself: an unstitched recording is refused
+ * with `stitching_required` and a partial take (one segment of several) is never uploaded.
+ */
 export function uploadableFile(recording: Recording): File {
   if (recording.segments.length !== 1) throw new Error('stitching_required');
   const file = new File(recording.segments[0].uri);

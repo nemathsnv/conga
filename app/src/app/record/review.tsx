@@ -2,6 +2,8 @@
 // (Discard this recording?) and A-Disclosure (first public video). SPEC.md Sections 6, 16.
 // PR-Reply: the same review for a video reply, with the context card and "Post reply".
 // PR-Draft: a private first response for a suggestion in review, with "Save draft".
+// A take with a camera flip arrives as several segments: they are stitched once, here, and the
+// stitched file is what plays and what Post sends (docs/BLOCKERS.md B-1, video/stitch.ts).
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -20,6 +22,8 @@ import { VideoSurface } from '@/ui/VideoSurface';
 import { usePosting } from '@/video/posting';
 import { createGate } from '@/video/postingFlow';
 import { getCurrentRecording, setCurrentRecording } from '@/video/recordingStore';
+import { abandonStitch, ensureStitched, needsStitching } from '@/video/stitch';
+import type { Recording } from '@/video/types';
 import { deleteRecordingFiles } from '@/video/upload';
 import { uploadTickets } from '@/video/uploadTickets';
 
@@ -40,6 +44,20 @@ export default function ReviewScreen() {
   const [busy, setBusy] = useState(false);
   // Post and the disclosure sheet's Post run one at a time: taps before the re-render join the first.
   const [gate] = useState(createGate);
+  // Re-renders once the stitched recording replaces the segments in the store.
+  const [, setStitchedId] = useState<string | null>(null);
+
+  // Stitch a multi-segment take as soon as Review opens; Post waits for this same stitch.
+  useEffect(() => {
+    const arrived = getCurrentRecording();
+    if (!arrived || !needsStitching(arrived.recording)) return;
+    ensureStitched(arrived.recording)
+      .then((stitched) => {
+        if (!adoptStitched(stitched)) deleteRecordingFiles(stitched);
+        else setStitchedId(stitched.id);
+      })
+      .catch((e) => console.error('stitch failed', e));
+  }, []);
 
   // Ask for the upload URL now, while the person reviews, so Post does not wait for it. Post uses
   // this same request (or the URL it gave), even if it is still running: one URL per post.
@@ -55,6 +73,7 @@ export default function ReviewScreen() {
   const rootName = replyTo?.context.kind === 'reply' ? replyTo.context.root?.author.name ?? null : null;
 
   const discard = () => {
+    abandonStitch(recording);
     deleteRecordingFiles(recording);
     setCurrentRecording(null);
     setDiscardAsk(false);
@@ -62,6 +81,7 @@ export default function ReviewScreen() {
   };
 
   const rerecord = () => {
+    abandonStitch(recording);
     deleteRecordingFiles(recording);
     setCurrentRecording(null);
     router.replace({ pathname: '/record/[promptId]', params: { promptId: draftFor ? 'draft' : prompt.id, ...(replyTo ? { replyTo: replyTo.id } : {}), ...(draftFor ? { draftFor } : {}) } });
@@ -71,7 +91,10 @@ export default function ReviewScreen() {
     if (!ownerId) return;
     setBusy(true);
     try {
-      await posting.post({ recording, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, tickets: uploadTickets.forOwner(ownerId), replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined, draftFor });
+      // A take with a flip is posted as its stitched file (already done, or still running).
+      const stitched = await ensureStitched(recording);
+      adoptStitched(stitched);
+      await posting.post({ recording: stitched, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, tickets: uploadTickets.forOwner(ownerId), replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined, draftFor });
       setCurrentRecording(null);
       if (draftFor) router.dismissTo('/suggestions');
       else router.dismissTo('/(tabs)');
@@ -122,7 +145,8 @@ export default function ReviewScreen() {
     }
   });
 
-  const localUri = recording.segments[0]?.uri;
+  // Until the stitch is done there is no one clip to play.
+  const localUri = needsStitching(recording) ? undefined : recording.segments[0]?.uri;
 
   return (
     <View style={s.root}>
@@ -241,6 +265,14 @@ export default function ReviewScreen() {
       </Modal>
     </View>
   );
+}
+
+/** Puts the stitched recording in place of its segments, if it is still the one under review. */
+function adoptStitched(stitched: Recording): boolean {
+  const now = getCurrentRecording();
+  if (now?.recording.id !== stitched.id) return false;
+  if (now.recording !== stitched) setCurrentRecording({ ...now, recording: stitched });
+  return true;
 }
 
 function Point({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
