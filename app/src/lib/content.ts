@@ -157,6 +157,10 @@ function unwrap<T>(res: { data: T; error: { message: string; code?: string } | n
     // The server refuses everything from a suspended account (pre_request gate): the session
     // re-reads its state so the app lands on LV-Suspended.
     if (res.error.message.includes('suspended')) onSuspended();
+    // A token whose session Auth no longer has (signed out elsewhere, account deleted; the
+    // pre_request gate, 20261016000202): the same re-read finds session_revoked and signs this
+    // phone out locally, instead of every call failing until the token expires.
+    if (res.error.message.includes('session_revoked')) onSuspended();
     // PostgREST and Postgres answers carry a code; a network failure or a gateway error does not.
     throw new ServerError(res.error.message, !!res.error.code);
   }

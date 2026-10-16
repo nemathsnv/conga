@@ -59,6 +59,14 @@ begin
     return true;
   end if;
   return exists (select 1 from auth.sessions s where s.id = v_sid::uuid and s.user_id = auth.uid());
+exception
+  -- If this database cannot read auth.sessions (a grant missing on a hosted project), the check
+  -- falls back to the behaviour before this migration (a token is good until it expires) instead of
+  -- refusing every signed-in request. The warning shows in the Postgres logs; the deployment
+  -- preflight in docs/release/SECURITY.md checks the grant before this runs on hosted.
+  when insufficient_privilege or undefined_table then
+    raise warning 'session_is_current: auth.sessions is not readable (%); sessions are not checked', sqlerrm;
+    return true;
 end;
 $$;
 

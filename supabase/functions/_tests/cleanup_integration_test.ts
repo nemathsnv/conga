@@ -155,6 +155,17 @@ async function member(name: string): Promise<Member> {
   members.push(m);
   return m;
 }
+// Signing back in after deleting the account (20261016000202): deletion ends every session, so
+// the old token is refused; a new sign-in (a new session, signed in after the deletion) restores.
+async function signInAgain(m: Member): Promise<Member> {
+  const email = (await http(`/auth/v1/admin/users/${m.id}`)).json as { email: string };
+  const link = await http("/auth/v1/admin/generate_link", { method: "POST", body: { type: "magiclink", email: email.email } });
+  const otp = (link.json as { email_otp: string }).email_otp;
+  const verified = await http("/auth/v1/verify", { method: "POST", key: ANON, body: { type: "email", email: email.email, token: otp } });
+  assertEquals(verified.status, 200, "sign in again");
+  m.token = (verified.json as { access_token: string }).access_token;
+  return m;
+}
 async function account(id: string, patch: Record<string, unknown>) {
   assertEquals((await http(`/rest/v1/accounts?id=eq.${id}`, { method: "PATCH", body: patch })).status, 204, "account patch");
 }
@@ -372,7 +383,7 @@ Deno.test("account deletion and recovery: playback off for the window, back on a
   await drainAll();
   assertEquals(assets.get(v.asset.id)!.playback_ids, [], "revoked at Mux");
   assert(assets.has(v.asset.id), "nothing deleted during the window");
-  assertEquals((await rpc(sam, "get_onboarding_state")).json.has_profile, true, "signing back in restores");
+  assertEquals((await rpc(await signInAgain(sam), "get_onboarding_state")).json.has_profile, true, "signing back in restores");
   await drainAll();
   const pb = (await row(v.id))!.mux_playback_id;
   assert(pb, "a new playback id");
@@ -393,7 +404,7 @@ Deno.test("concurrency: a restore never overlaps a running revoke of the same vi
   const first = drain(1);
   await new Promise((r) => setTimeout(r, 300));
   assertEquals((await jobs(v.asset.id)).map((j) => j.status), ["running"], "the revoke is inside Mux");
-  assertEquals((await rpc(dee, "get_onboarding_state")).json.has_profile, true);
+  assertEquals((await rpc(await signInAgain(dee), "get_onboarding_state")).json.has_profile, true);
   await drain(1);
   assertEquals((await jobs(v.asset.id)).map((j) => j.status), ["running", "pending"], "the restore waits: one job per asset at a time");
   release();
@@ -683,7 +694,7 @@ Deno.test("ordering: a restore whose video is deleted again while Mux creates th
   assertEquals((await rpc(ama, "delete_account")).status, 204);
   await drainAll();
   assertEquals(assets.get(v.asset.id)!.playback_ids, []);
-  assertEquals((await rpc(ama, "get_onboarding_state")).json.has_profile, true);
+  assertEquals((await rpc(await signInAgain(ama), "get_onboarding_state")).json.has_profile, true);
   // Mux is slow to create the new playback id; meanwhile Ama deletes her account again.
   let release!: () => void;
   const gate = new Promise<void>((r) => (release = r));
@@ -709,7 +720,7 @@ Deno.test("ordering: a deleted video stays deleted through account deletion and 
   const gone = await liveVideo(bo), kept = await liveVideo(bo);
   await rpc(bo, "delete_video", { p_id: gone.id });
   assertEquals((await rpc(bo, "delete_account")).status, 204);
-  assertEquals((await rpc(bo, "get_onboarding_state")).json.has_profile, true);
+  assertEquals((await rpc(await signInAgain(bo), "get_onboarding_state")).json.has_profile, true);
   await drainAll();
   assert(!assets.has(gone.asset.id), "the deleted video's asset is deleted");
   assertEquals((await web(gone.id)).status, "unavailable");
