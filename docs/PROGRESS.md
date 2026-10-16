@@ -18,7 +18,7 @@ branch listed by `git worktree list` on 16 Oct is an ancestor of that commit.
 | B | Opus | B-1 camera flip during a take with native segment stitching (iOS AVFoundation, Android Media3) | in progress |
 | C | Opus | Auth hardening verification, privacy audit, account lifecycle, hosted config checklist | in progress |
 | D | Sonnet | Moderator removal keeps the response slot; internal moderation admin (`admin` Edge Function) | in progress |
-| E | Sonnet | Failed-post review package (P1 to P9), approved-UI audit and fixes, P1 to P9 prepared on a holding branch | in progress |
+| E | Sonnet | Failed-post review package (P1 to P9), approved-UI audit and fixes, P1 to P9 prepared on a holding branch | implemented locally; integrated (becd7fa); P1 to P9 on `hold/failed-post-ui` (9c32722) awaiting Nemat's approval; simulator walk-through pending |
 | F | Sonnet | Lockfile and reproducible build, release configuration, iOS/Android/notification readiness, policy drafts, gate checklist, spec sync | in progress |
 
 ## Conventions fixed for this effort
