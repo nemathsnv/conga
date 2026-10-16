@@ -44,15 +44,15 @@ What the app needs, and what is extra:
 - **Extra and worth removing before Play:** `SYSTEM_ALERT_WINDOW` comes from the Expo template (dev menu
   overlay), `WRITE_EXTERNAL_STORAGE` and `READ_EXTERNAL_STORAGE` come from libraries for pre-Android-13 media
   access the app does not need (the photo library is only used through the system picker). Each one is a line in
-  the Play Data safety and permissions review. Proposed addition to `app.config.ts`, **not applied** because no
-  Android build exists to confirm it does not break the dev client or the picker:
-
-  ```ts
-  android: { /* existing keys */ blockedPermissions: ['android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.WRITE_EXTERNAL_STORAGE'] },
-  ```
-
-  Debug builds add `SYSTEM_ALERT_WINDOW` from the debug manifest, so blocking it in the main manifest does not
-  affect development. Verify on the first release build with `aapt dump permissions app-release.apk`.
+  the Play Data safety and permissions review. **Applied 16 Oct** in `app.config.ts` (`android.blockedPermissions`:
+  `SYSTEM_ALERT_WINDOW`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`). A throwaway `npx expo prebuild --no-install
+  --platform android` shows the app manifest declaring `CAMERA`, `INTERNET`, `RECORD_AUDIO`, `VIBRATE` and the three
+  blocked ones as `tools:node="remove"`; `POST_NOTIFICATIONS` is not blocked (it comes from expo-notifications'
+  library manifest). The debug manifest still adds `SYSTEM_ALERT_WINDOW`, so development is unaffected. **The merged
+  manifest is produced by Gradle and was not built**: confirm on the first release build with
+  `aapt dump permissions app-release.apk` that the three are gone and camera, record audio, internet and post
+  notifications are present, and that choosing a profile photo from the library still works on an Android 12 or older
+  phone.
 - **Notification prompt on Android 13+ (verify):** Expo's documentation says the system permission dialog may not
   appear until at least one notification channel exists. The app never calls `setNotificationChannelAsync`
   (`NOTIFICATIONS.md` gap 4). If N-Prime's "Turn on notifications" shows no system dialog on an Android 13+
