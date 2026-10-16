@@ -75,8 +75,8 @@ network beyond the stack:
 | `scripts/provider-rehearsal.sh` (C2w, C2a, C2e, E1, E2, E3, guards, cleanup) | 8/8 |
 | `scripts/auth-integration.mjs` | 52/52 |
 | App: `tsc --noEmit`, `expo lint` | clean |
-| App: Jest, 24 suites | 322/322 |
-| iOS simulator (Agent B, `SIMULATOR-WALK.md`) | onboarding, Home, record screen states, playback failure and Try again, links, delete own reply, sign-out: as the boards; no product crash |
+| App: Jest, 24 suites | 322/322 in run 3; 327/327 after the Back fix (`955a2aa`) |
+| iOS simulator (Agent B, `SIMULATOR-WALK.md`, three walks) | onboarding, Home, record screen states, playback failure and Try again, `r`, `p`, `u` links, unknown link, Back from a link and from a pushed screen, delete own reply, sign-out, A-Mic/A-Camera/R-Record icons: as the boards; no product crash (two development-client reload crashes, not reproducible) |
 | Native: iOS simulator build of the integrated tip | BUILD SUCCEEDED |
 | Native: Android `video-stitcher` module | compiles; app never assembled for Android |
 | macOS AVFoundation harness for the stitcher core | 27/27 |
@@ -137,9 +137,8 @@ four stale SPEC lines.
 
 iPhone and a mid-range Android, in this order: `CAMERA-FLIP.md` 19 cases (flips, interruption,
 permissions, orientation, failed stitch, 2 s and 30 s, backgrounding, file checks, playback and
-upload); the failed-post device checks (BETA-READINESS 19.5 step 8) after H2 and H3; a cold-start
-link open and Back, `r`, `p`, `u` links, `shortcut://nothing-here` (B2 and B3 were fixed by
-reasoning only); notification taps once credentials exist; sign-out, deletion and restore with the
+upload); the failed-post device checks (BETA-READINESS 19.5 step 8) after H2 and H3; a Release-build
+cold start from a link and Back (walked only on a development build); notification taps once credentials exist; sign-out, deletion and restore with the
 new session rules; the Android spike checklist for Gate 1. Exact lists: `RELEASE-CHECKLIST.md`
 stages 2 and 5, `SIMULATOR-WALK.md` "not walked".
 
