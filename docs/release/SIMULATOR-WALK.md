@@ -116,3 +116,34 @@ visibly navigate (the profile stayed). Two things to fix in `app/src/ui/navigati
    or `router.navigate('/(tabs)')` may be what's wanted; this needs checking.
 
 Test it with a link at launch in a Release build too, where there's no development launcher.
+
+## Back fix (16 Oct 2026, late)
+
+Lead-authorised change to Agent E's `app/src/ui/navigation.ts`, `hasScreenBeneath` in
+`app/src/lib/links.ts` and its test. Code at `8debdd8` plus this change. Same simulator build (no
+native change), stack `shortcut-b` brought up fresh and stopped at the end.
+
+**What the state looks like.** Logged from `useRootNavigationState()` with a temporary dump (removed):
+
+```
+pushed from Home:      {"type":"stack","index":0,"routes":[{"name":"__root","state":{"type":"stack","index":1,"routes":[{"name":"(tabs)"},{"name":"profile/[id]"}]}}]}
+u/<name> at launch:    {"type":"stack","index":0,"routes":[{"name":"__root","state":{"type":"stack","index":0,"routes":[{"name":"profile/[id]"}]}}]}
+```
+
+The root is expo-router's one-route `__root` wrapper, so the old `routes.length > 1` was always false.
+
+**Fix.**
+- `hasScreenBeneath(state)` walks the focused path (`routes[index].state` level by level). A stack
+  level whose focused route isn't its first is a screen beneath; tab navigators don't count.
+- With nothing beneath, Back calls `router.replace('/(tabs)')`. Tried empirically: `replace('/')`
+  from the link-opened profile left the profile on screen, and `replace('/(tabs)')` landed on Home.
+- The two logged shapes are now the test fixtures, along with a push chain, link-then-push, a
+  non-first tab and no state (`linkRoutes.test.ts`).
+
+| Check | Seen | Result | Shot |
+| --- | --- | --- | --- |
+| `u/adamnovak` at launch, then Back | Adam's profile with nothing beneath; Back lands on Home (For you) | **fixed** | [29](screenshots/29-cold-link-profile.png), [30](screenshots/30-cold-back-home.png) |
+| Home, then Maya's name (pushed profile), then Back | Back returns to Home | **fixed** (was stuck at `a181f0c`) | — |
+| Home, then "3 more responses" (player), then comments, then ✕ | The sheet closes back onto the player (which had played on to "You've seen all 4 responses"); one more Back returns to Home | push chain pops one at a time | [31](screenshots/31-comments-closed-back-to-player.png) |
+
+Not checked: a Release-build cold start (the development launcher sits in front of it), and Android.
