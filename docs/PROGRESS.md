@@ -30,6 +30,12 @@ branch listed by `git worktree list` on 16 Oct is an ancestor of that commit.
 - Local stacks: `shortcut-a`, `shortcut-c`, `shortcut-d` (ports 551xx, 552xx, 553xx), at most two
   running at once; the founder's `shortcut` stack is never touched.
 
+## Consolidated verification (16 Oct, run 3 at d708cc7, isolated stack shortcut-int)
+
+pgTAP 1662/1662; every Deno unit and integration suite; rollback check; scheduler 13/13; C1 29;
+provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and lint clean; Jest
+322/322. Full table: docs/release/FINAL-REPORT.md section D.
+
 ## Not authorised in this effort (prepared only)
 
 Push, deploy, hosted changes, real Mux calls, continuous clean-up, EAS/Apple/Google accounts,
