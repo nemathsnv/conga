@@ -166,7 +166,12 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
 
     if (path.startsWith("/v/")) {
       if (req.method !== "GET") return json({ error: "method_not_allowed" }, 405);
-      return await view(path.slice(3), url.searchParams);
+      try {
+        return await view(path.slice(3), url.searchParams);
+      } catch {
+        // A row that is not the shape the page expects must not become a stack trace.
+        return fragment(html`<h1>Could not show this</h1><p class="muted">The data was not in the expected shape.</p>`, 502);
+      }
     }
 
     if (path.startsWith("/a/")) {
