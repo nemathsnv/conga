@@ -38,3 +38,46 @@ export function videoLinkTarget(id: string, video: { kind: 'response' | 'reply';
   if (video && video.kind === 'response') return { pathname: '/player/[promptId]', params: { promptId: video.prompt_id, entry: id, ...(opts.openComments ? { openComments: '1' } : {}) } };
   return { pathname: '/reply/[id]', params: { id } };
 }
+
+/** get_video's answer: a video card (it has a `status` of its own: live, processing...) or, for a video
+ *  that cannot be watched, only `{ status: 'unavailable' }`. A card is not "unavailable" because it has
+ *  a status field. */
+export function readableVideo<T extends { status?: string; kind?: string; prompt_id?: string }>(raw: T | null | undefined): (T & { kind: 'response' | 'reply'; prompt_id: string }) | null {
+  if (!raw || raw.status === 'unavailable') return null;
+  if ((raw.kind !== 'response' && raw.kind !== 'reply') || typeof raw.prompt_id !== 'string') return null;
+  return raw as T & { kind: 'response' | 'reply'; prompt_id: string };
+}
+
+/** shortcut://p/<id> "opens the prompt's first response" (SPEC.md Section 4): the response the player
+ *  would show first for this person, passed as the entry so the player starts on it. A prompt with no
+ *  responses opens the player's empty state. */
+export function promptLinkTarget(promptId: string, responses: { id: string }[]): { pathname: '/player/[promptId]'; params: { promptId: string; entry?: string } } {
+  const first = responses[0];
+  return { pathname: '/player/[promptId]', params: { promptId, ...(first ? { entry: first.id } : {}) } };
+}
+
+/** Top-level paths the app has screens for. A link to anything else is not ours to show a page for. */
+const KNOWN_LINK_ROOTS = new Set(['', 'a', 'comments', 'create', 'activity', 'discover', 'me', 'i', 'notice', 'notifications', 'p', 'place', 'player', 'plus', 'profile', 'r', 'record', 'replies', 'reply', 'safety', 'search', 'settings', 'suggest', 'suggestion', 'suggestions', 'u']);
+
+/**
+ * A link that opens the app (shortcut://x, https://shortcut.app/x, an Expo development URL) goes to its
+ * screen when the app has one, and Home otherwise: an unknown link must never leave a blank page.
+ * Used by `+native-intent.tsx`, before the router sees the URL.
+ */
+export function systemPathRedirect(path: string): string {
+  const afterDevMarker = path.includes('/--/') ? path.slice(path.indexOf('/--/') + 3) : path;
+  const hasHost = /^https?:\/\//i.test(afterDevMarker);
+  let rest = afterDevMarker.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  if (hasHost) rest = rest.replace(/^[^/]*/, '');
+  rest = rest.replace(/^\/+/, '');
+  const root = rest.split(/[/?#]/)[0] ?? '';
+  // Route groups such as (tabs) are the app's own paths, never a link's.
+  if (KNOWN_LINK_ROOTS.has(root) || /^\(.*\)$/.test(root)) return path;
+  return '/';
+}
+
+/** Whether a screen has another screen under it in the app's stack. A link or a notification that
+ *  opened the app leaves exactly one; Back then goes Home instead of doing nothing. */
+export function hasScreenBeneath(rootRouteCount: number): boolean {
+  return rootRouteCount > 1;
+}

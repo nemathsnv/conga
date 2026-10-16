@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { getVideo } from '@/lib/content';
-import { videoLinkTarget, type VideoLinkTarget } from '@/lib/links';
+import { readableVideo, videoLinkTarget, type VideoLinkTarget } from '@/lib/links';
 import { Spinner } from '@/ui/HomeStates';
 
 export default function VideoLinkScreen() {
@@ -17,7 +17,8 @@ export default function VideoLinkScreen() {
     let cancelled = false;
     getVideo(id)
       .then((v) => {
-        if (!cancelled) setTarget(videoLinkTarget(id, 'status' in v ? null : v, { openComments: openComments === '1' }));
+        // A video card has a status of its own ('live'); only { status: 'unavailable' } means it cannot be watched.
+        if (!cancelled) setTarget(videoLinkTarget(id, readableVideo(v as never), { openComments: openComments === '1' }));
       })
       .catch(() => {
         if (!cancelled) setTarget(videoLinkTarget(id, null));
