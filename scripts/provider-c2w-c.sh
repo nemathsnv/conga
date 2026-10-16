@@ -15,10 +15,14 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"; cd "$REPO"
 source scripts/provider-env.sh >/dev/null || exit 1
 REF=picvoavfxnajfjkqawju
 LOG="$REPO/docs/release/c2w-c-$(date -u +%Y%m%dT%H%M%SZ).log"
-unset_mode() { supabase secrets unset MUX_CLEANUP_MODE --project-ref "$REF" 2>&1 | grep -v -i 'new version\|recommend' | tee -a "$LOG"; echo "function switch unset at $(date -u '+%H:%M:%S UTC')" | tee -a "$LOG"; }
-trap unset_mode EXIT
+STATUS=1
+unset_mode() { supabase secrets unset MUX_CLEANUP_MODE --project-ref "$REF" </dev/null 2>&1 | grep -v -i 'new version\|recommend' | tee -a "$LOG"; echo "function switch unset at $(date -u '+%H:%M:%S UTC') (unset exit ${PIPESTATUS[0]})" | tee -a "$LOG"; exit "$STATUS"; }
+trap unset_mode EXIT INT TERM
 echo "C2w-c start $(date -u '+%Y-%m-%d %H:%M:%S UTC'), job $JOB" | tee "$LOG"
-supabase secrets set MUX_CLEANUP_MODE=live --project-ref "$REF" 2>&1 | grep -v -i 'new version\|recommend' | tee -a "$LOG"
+supabase secrets set MUX_CLEANUP_MODE=live --project-ref "$REF" </dev/null 2>&1 | grep -v -i 'new version\|recommend' | tee -a "$LOG"
+SET_EXIT=${PIPESTATUS[0]}
+if [ "$SET_EXIT" != 0 ]; then echo "secrets set failed (exit $SET_EXIT); no drain" | tee -a "$LOG"; STATUS=2; exit 2; fi
 echo "function switch live at $(date -u '+%H:%M:%S UTC')" | tee -a "$LOG"
 PROVIDER_WRITE_STEP=C2w-c scripts/provider-drain.sh hosted live "Nemat: C2w-c cancellation" "$JOB" 2>&1 | tee -a "$LOG"
-echo "drain exit=${PIPESTATUS[0]}" | tee -a "$LOG"
+STATUS=${PIPESTATUS[0]}
+echo "drain exit=$STATUS" | tee -a "$LOG"

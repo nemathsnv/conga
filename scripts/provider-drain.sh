@@ -50,6 +50,10 @@ off() {
   [ "$m" = off ]
 }
 
+# A Ctrl-C or kill after this point must still put the switch back: the transaction may already
+# have committed on the server (16 Oct review, finding B).
+trap 'echo "interrupted: setting the switch off"; off; exit 130' INT TERM
+
 # 2. The guarded transaction.
 GUARD="do \$guard\$
 declare
