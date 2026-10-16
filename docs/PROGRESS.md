@@ -46,7 +46,10 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 | H4 batch B migrations 20261016000200 to 204 | done 16 Oct 12:07 UTC, verified (BETA-READINESS section 24) |
 | H5 web, auth-signin-method, send-push | done 16 Oct 12:18 UTC (BETA-READINESS section 25) |
 | H5b HTML on the default domain | checked: text/plain; custom domain needed for shared links and the admin |
-| H6 onwards | awaiting go-ahead |
+| H6 avatar-cleanup, secret, Vault | done 16 Oct 12:20 UTC (BETA-READINESS section 26) |
+| H7 admin | blocked by H5b: custom domain needed |
+| H8 push sender | waits for EAS/APNs/FCM (B-2) |
+| H9 hosted auth smoke, H10 provider tests, H12 founder build | awaiting go-ahead |
 
 ## Not authorised in this effort (prepared only)
 

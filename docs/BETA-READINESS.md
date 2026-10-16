@@ -4646,6 +4646,44 @@ the lead from the integration worktree at `18c1b20` (trees `web` `8b7ffed0…`,
 
 *Next:* H6 on Nemat's go-ahead; a decision on the custom domain (H5b) before H7 and B-3.
 
+## 26. H6 deployed: `avatar-cleanup`, its secret and Vault entries (16 Oct 12:20 UTC; Nemat approved)
+
+Approved by Nemat on 16 Oct ("deploy avatar-cleanup --no-verify-jwt, generate a random
+AVATAR_CLEANUP_KEY and set it with supabase secrets set, create the two Vault secrets
+(avatar_cleanup_url, avatar_cleanup_key) with db query, verify the function answers 401 without the
+key and that the cron job can reach it", then record and stop before H7). Done by the lead from
+the integration worktree at `4602169`, 12:20:41 to 12:20:53 UTC. The key is 64 hex characters from
+`openssl rand`, written to a temporary file with mode 600, passed to `supabase secrets set
+--env-file` and to `vault.create_secret` through a SQL file, and never printed; the temporary files
+were removed. It exists only in the function's secrets and in Vault.
+
+- **Function:** `avatar-cleanup` deployed (`verify_jwt` false, per `config.toml`). The
+  `secrets set` that followed moved every function up one version (as on 13 Oct): now
+  `abandon-submission` v2, `auth-signin-method` v12, `avatar-cleanup` v2, `mux-cleanup` v9,
+  `mux-create-upload` v11, `mux-upload-status` v12, `mux-webhook` v13, `send-push` v2, `web` v2,
+  all `ACTIVE`; bundles unchanged by a secret change.
+- **Secrets:** 12 names, `AVATAR_CLEANUP_KEY` added; still no `MUX_CLEANUP_MODE` or
+  `PUSH_SENDER_KEY`. **Vault:** `avatar_cleanup_url` (12:20:51 UTC) =
+  `https://picvoavfxnajfjkqawju.supabase.co/functions/v1/avatar-cleanup`, `avatar_cleanup_key`
+  (12:20:53 UTC). Vault was empty before; these are its first two entries.
+- **Verification (12:21:16 UTC):** POST without a key 401, POST with a wrong key 401, GET 405.
+  The `avatar-cleanup` cron job (`*/10 * * * *`, `select public.run_avatar_cleanup()`) ran at
+  12:10 and 12:20 UTC, both `succeeded`; `avatar_removals` has 0 rows; pg_net has 0 queued
+  requests and no response from this function.
+- **What "the cron job can reach it" means today:** `run_avatar_cleanup()` reads both Vault
+  entries and posts only when `avatar_cleanup_due(1)` is non-empty. The queue is empty (no photo
+  has been replaced and no account deleted since H4), so the job returns before any HTTP call.
+  The pieces are in place and each was checked (URL, key names, function authorisation, cron
+  success); the first end-to-end call happens at the first photo replacement or account deletion
+  and shows up as a 2xx row in `net._http_response` and a drained `avatar_removals` row. Not
+  exercised yet.
+- **Not done:** H7 (admin; blocked by H5b, the custom domain), H8 (push sender secrets; useless
+  without the EAS project and APNs/FCM credentials, B-2), H9 (hosted auth smoke with
+  `SESSION_GATE=1`, Nemat's own address; the client-address header check), H10 (provider tests
+  C1, C2w, C2a, E1 to E3, each its own approval), H12 (founder build and device checks).
+
+*Next:* Nemat's decisions on the custom domain (H5b) and on H9 and H10.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
