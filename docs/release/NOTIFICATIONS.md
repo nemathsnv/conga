@@ -4,6 +4,11 @@ Written 16 Oct 2026 from the code at `de3acbc` plus this effort's commits. SPEC.
 rule. Nothing here was run against Expo's push service, APNs or FCM: no EAS project, no Apple or Google
 credentials and no Android device exist yet (`docs/BLOCKERS.md` B-2).
 
+**Update, 16 Oct (integration branch `90eced7`).** Since this document was first written, Agent E fixed the
+app side of gaps 1 and 4 (commit `978e053`) and Agent C fixed gap 2 (`bdc1cd2`, `docs/release/SECURITY.md` A2).
+Section 2 and 2.1 below are updated to the code as it now stands; neither fix has been run on a phone, so the device
+checks in section 4 step 6 still decide. Gaps 3 and 5 remain.
+
 **The distinction that matters for the whole beta.** A row in `push_outbox` is *a database fact*: "the
 server decided this person should be told". A *delivered push* is a notification shown on a phone. Between
 the two are four hand-offs that have never run end to end on a real device: the sender function, Expo's push
@@ -83,35 +88,42 @@ event (reply, comment, follow, like, prompt, moderation, suggestion)
 | First ask | Home, right after the first public video; shown when the server's `notification_ask` is `never` and the moment is `first_post`. | `src/lib/notificationAsk.ts`, `src/app/(tabs)/index.tsx` |
 | Second ask | After "Not now" the server marks a second ask due when the first reply or comment arrives (DECISIONS 7 Oct); the tab layout shows N-Prime at the next safe foreground moment. After that, Settings only. | `src/app/(tabs)/_layout.tsx` |
 | Permission off | Settings -> Notifications opens the same N-Prime sheet; its button opens the phone's settings. | `src/app/notifications/prime.tsx` (`mode=settings`) |
-| Token registration | After the person accepts, and on every launch into Home: if the permission is granted and `extra.eas.projectId` exists, `getExpoPushTokenAsync({projectId})` then RPC `register_push_token`. **Without `EAS_PROJECT_ID` it logs once and registers nothing.** The founder build never registers (no push entitlement). | `registerTokenIfAllowed` |
+| Token registration | After the person accepts, and on every launch into Home: on Android the default channel is created first (`ensureNotificationChannel`), then, if the permission is granted and `extra.eas.projectId` exists, `getExpoPushTokenAsync({projectId})` and RPC `register_push_token`. **Without `EAS_PROJECT_ID` it logs once and registers nothing.** The founder build never registers (no push entitlement). | `registerTokenIfAllowed`, `requestPermissionAndRegister` in `src/lib/notifications.ts` |
 | Foreground display | Banner, list and sound on. | `setNotificationHandler` |
-| Opening | Tap routes by `data.kind`: `video_reply` -> `/reply/<video_id>`; `comment` and `comment_reply` -> `/comments/<video_id>`; `tonight_prompt`, `place_prompt`, `followed_responded` -> `/player/<prompt_id>`; **everything else** (follow, like, removed, restricted, suspended, review outcome, suggestion outcomes) -> the Activity tab. Missing ids fall back to Activity or Home. An analytics event `push_opened` records the first path segment. | `hrefForPush`, `src/app/_layout.tsx` |
-| Token cleanup | Account deletion removes the account's tokens (database). The app has an RPC `remove_push_token` but never calls it. | see gaps |
+| Opening | `hrefForPush(data)` (`src/lib/pushRoutes.ts`): `video_reply` -> `/reply/<video_id>`; `comment` and `comment_reply` -> `/r/<video_id>?openComments=1` (the comments sheet over the commented response); `tonight_prompt`, `place_prompt` -> `/player/<prompt_id>`; `followed_responded` -> `/player/<prompt_id>` at that response when `video_id` is present; `follow`, `removed`, `restricted`, `suspended`, `review_outcome`, `suggestion_live`, `suggestion_declined` -> `/a/<activity_id>` (opens what that Activity row opens; falls back to the Activity tab); `like` and unknown kinds -> the Activity tab. A missing id falls back to Activity or Home. A tap while the app runs goes through `onNotificationTap`; a tap that launched a closed app is read once with `launchTap()` (`getLastNotificationResponse`), and `claimPush` makes each tap count once. `push_opened` records the push kind. | `src/lib/pushRoutes.ts`, `src/lib/notifications.ts`, `src/app/_layout.tsx` |
+| Token cleanup | Account deletion removes the account's tokens (database, `delete_account`). Every sign-out route runs `beforeSignOut()` first, which calls `unregisterPushToken()` -> RPC `remove_push_token` (it deletes only the caller's own row; allowed while suspended), best effort and bounded at 3 s. A suspended account keeps its tokens on purpose so it still receives the suspension and review-outcome notices. If another account registers the same token, `register_push_token` moves it. | `src/lib/notifications.ts`, `docs/release/SECURITY.md` A2 |
 
-### 2.1 Gaps found while tracing (none fixed here: `app/src` is not this role's)
+### 2.1 Gaps found while tracing, and what has happened to each
 
-1. **Opening from a killed app.** The tap listener is registered in an effect that runs only after sign-in
-   state is known (`step === 'home'`). `getLastNotificationResponseAsync` / `useLastNotificationResponse` is
-   never used, so a tap that launches a *terminated* app can be dropped and land on Home. This is the
-   standard cold-start trap; it needs a device test and probably a small fix (Agent B/C).
-2. **Sign-out leaves the token on the account.** `remove_push_token` is never called, so after sign-out the
-   phone keeps receiving the previous account's pushes until another account registers the same token
-   (`register_push_token` re-points it). Relevant to shared phones and to testing with two accounts on one
-   device.
-3. **`sent_at` is "accepted by Expo", not "delivered".** `send-push` never fetches Expo receipts
+1. **Opening from a killed app: fixed in code, not run on a phone.** The tap listener was registered too late
+   to catch the tap that launches a closed app. `978e053` reads the phone's last notification response once the
+   navigator is ready (`launchTap()`), shares one path with foreground and background taps, and handles each tap
+   once. Remains: a device test of a tap on a killed app (iOS and Android), step 6 below.
+2. **Sign-out left the token on the account: fixed in code, not run on a phone.** `bdc1cd2`: every sign-out route
+   first removes this phone's token (`remove_push_token`) and flushes queued events. Remains: confirm on two
+   accounts on one phone that the previous account stops receiving pushes after sign-out. The Expo token that
+   `unregisterPushToken` removes is the one registered in this app run, or, if there is none, the one
+   `getExpoPushTokenAsync` returns; if the call fails the next account's `register_push_token` takes the token over.
+3. **`sent_at` is "accepted by Expo", not "delivered". Unchanged.** `send-push` never fetches Expo receipts
    (`/--/api/v2/push/getReceipts`). Errors that only appear in receipts (APNs or FCM rejection,
    `DeviceNotRegistered` for stale tokens, `MessageRateExceeded`) are invisible, and dead tokens are not
-   pruned by that route. Expo recommends reading receipts about 15 minutes after sending. Proposal for Agent D
-   or whoever owns `supabase/functions`: store ticket ids, add a receipts pass, drop tokens on
-   `DeviceNotRegistered`. Until then, treat a manual device check as the only proof of delivery.
-4. **No Android notification channel or icon.** `setNotificationChannelAsync` is not used, so Android shows the
-   fallback channel; the `expo-notifications` config plugin is applied only implicitly (no `icon`, `color`).
-   The small icon will be the launcher glyph, which Android renders as a white square. It needs the brand
-   icon (DECISIONS 9 Oct) and a monochrome asset.
+   pruned by that route. Expo recommends reading receipts about 15 minutes after sending. Proposal for whoever
+   owns `supabase/functions`: store ticket ids, add a receipts pass, drop tokens on `DeviceNotRegistered`. Until
+   then, treat a manual device check as the only proof of delivery. Also from `SECURITY.md` section 3: `send-push`
+   compares its key with `!==`, not in constant time (low).
+4. **Android channel: created; icon and colour still missing.** `ensureNotificationChannel()` creates the default
+   channel (id `default`, name "Shortcut") before the permission ask and the token request, which addresses the
+   Android 13 prompt concern (`pushRoutes.test.ts` checks the channel id; the prompt itself is unverified on a
+   phone). The `expo-notifications` config plugin still has no `icon` or `color`, so the small icon will be the
+   launcher glyph, which Android renders as a white square. It needs the brand icon (DECISIONS 9 Oct) and a
+   monochrome asset.
 5. **`aps-environment` is `development`** in a local prebuild (verified 16 Oct). EAS store and TestFlight
    builds are signed with a distribution profile whose APNs environment is production; confirm in the first
    TestFlight build with `codesign -d --entitlements :- Shortcut.app`. If it is not `production`, set
-   `['expo-notifications', { mode: 'production' }]` for the production profile.
+   `['expo-notifications', { mode: 'production' }]` for the production profile. Unchanged.
+
+What still blocks delivery is unchanged: no EAS project id, no APNs key, no FCM credentials, `send-push` and its
+Vault secrets not on the hosted project (section 4).
 
 ## 3. What is verified, and how
 
@@ -119,7 +131,8 @@ event (reply, comment, follow, like, prompt, moderation, suggestion)
 | --- | --- | --- | --- |
 | Queue rules, defaults, Pause all, blocks, grouping, text | **Yes, locally** | pgTAP `supabase/tests/0003_conversation.sql` (99 assertions in that file; push assertions at lines 63-224), `0004_safety.sql`, `0005_places_suggestions.sql`. Run with `supabase test db` against a local stack (not re-run by this role; no Docker started). | The 18:30 trigger across a real timezone and DST change. |
 | N-Prime timing | **Yes, as a pure rule** | Jest `src/__tests__/notificationAsk.test.ts` (`shouldAsk`, `hasReplyOrComment`). Included in the 246/246 run of 16 Oct. | The sheet, the OS prompt and the second ask on a device. |
-| `hrefForPush` routing | **No test exists** | none | every route, cold start, warm start |
+| `hrefForPush` routing, tap-once rule, Android channel id | **Yes, as pure functions** | Jest `src/__tests__/pushRoutes.test.ts`: every kind the server can queue, missing-id fallbacks, escaped ids, `claimPush` (launch tap and listener count once), channel id, `activityTarget`. Part of the app's Jest suite (258/258 in `SECURITY.md` section 4; not re-run by this role). | every route on a phone, cold start, warm start; the Android 13 prompt |
+| Sign-out drops the token | **Logic only** | Jest `accountCleanup.test.ts` (`beforeSignOut`/`afterSignOut`, per `SECURITY.md` A2). | on a phone, with two accounts |
 | `send-push` function | Reviewed, **no automated test** | none in `supabase/functions/_tests` | auth check, Expo call, token drop, retry |
 | Cron wiring | **Yes on hosted (read-only)** | `send-push` and `tonight-prompt` jobs active and succeeding, doing nothing without Vault secrets | with secrets present |
 | Expo push service, APNs, FCM | **No** | needs EAS project, APNs key, FCM credentials | everything |

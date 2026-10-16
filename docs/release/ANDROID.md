@@ -54,9 +54,10 @@ What the app needs, and what is extra:
   notifications are present, and that choosing a profile photo from the library still works on an Android 12 or older
   phone.
 - **Notification prompt on Android 13+ (verify):** Expo's documentation says the system permission dialog may not
-  appear until at least one notification channel exists. The app never calls `setNotificationChannelAsync`
-  (`NOTIFICATIONS.md` gap 4). If N-Prime's "Turn on notifications" shows no system dialog on an Android 13+
-  phone, that is the cause; the fix is app code (create a default channel before `requestPermissionsAsync`).
+  appear until at least one notification channel exists. Since `978e053` the app creates a default
+  channel before the permission ask and the token request (`ensureNotificationChannel`, `NOTIFICATIONS.md` gap 4).
+  Not run on a phone: if N-Prime's "Turn on notifications" still shows no system dialog on an Android 13+ phone,
+  report it.
 
 ## 3. Google Sign-In
 
@@ -150,8 +151,8 @@ monochrome glyph. Without `google-services.json` in the build, `getExpoPushToken
 
 ## 6. App links (assetlinks.json)
 
-Prerequisites (B-3, nothing exists): the domain; a route for every shared path in the app (only `/i/<code>`
-exists; `/r/<id>`, `/p/<id>`, `/u/<name>` do not); then in `app.config.ts`
+Prerequisites (B-3, nothing exists): the domain; a route for every shared path in the app (they now exist: `r/[id]`, `p/[id]`,
+`u/[username]`, `i/[code]`); then in `app.config.ts`
 
 ```ts
 android: { intentFilters: [{ action: 'VIEW', autoVerify: true,

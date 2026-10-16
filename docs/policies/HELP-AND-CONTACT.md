@@ -22,6 +22,7 @@
 | Stop seeing someone | Block them (Settings > Blocked accounts to undo). |
 | Challenge a removal, restriction or suspension | Open the notice and choose **Request a review**. |
 | Delete my account | Settings > Delete account (`ACCOUNT-DELETION.md`). |
+| I deleted my account and want it back | Within 30 days, sign in again with the same method (a new sign-in; every phone is signed out when you delete). After day 30 it cannot be restored (`ACCOUNT-DELETION.md`; the sign-out behaviour is **[LOCAL ONLY]** until deployed). |
 | Get back into my account after I lost my Apple, Google or email sign-in | Write to [PLACEHOLDER: support contact] from any address and say what happened. There are no passwords, so there is nothing to reset: we **verify you by hand**. [PLACEHOLDER: what we ask for, and what we cannot do if we cannot verify you. **[LEGAL REVIEW]**] One sign-in method per account; accounts cannot be merged. |
 | Use my invite, or get an invite | An invite link or code from a member. If you do not have one, join the waitlist; we email you when there is room. Invites are single-use and expire (7 days at the time of writing). |
 | I have an invite that does not work | Check it has not expired or been used. Then write to us with the code. |
