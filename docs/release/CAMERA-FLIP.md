@@ -34,7 +34,8 @@ expo-camera ends a recording when the camera changes (spike run 21), so a take i
   2 seconds" and deletes every segment. Two segments of 1.5 s make a 3 s response.
 - **Guards** (engineering limits, not product rules):
   - A flip in the first 0.5 s of a segment is ignored (a segment that short may hold no frame).
-  - A flip with less than 1 s of the 30 left ends the take, as reaching the limit would.
+  - A flip with less than 1 s of the 30 left is ignored: nothing happens and the take runs on to
+    its limit on the same camera (no segment under a second is started; Android could not limit it).
   - A flip while a flip is under way is ignored.
 - **Stop during the switch** ends the take with the segments so far. **Stop while the flip is
   ending the segment** wins: no next segment.
@@ -109,9 +110,9 @@ Nothing here has run on a phone. No camera recording has been made with this cod
 
 | Check | How | Result |
 | --- | --- | --- |
-| Take logic: segments, totals, 30 s across segments, per-segment camera limit (iOS/Android), PR-Short on the total, flip guards, stop/cancel/interruption during a flip, lost segment, camera not coming back, files deleted on cancel and short | Jest, `src/__tests__/take.test.ts` (22 tests, camera and files faked) | pass |
+| Take logic: segments, totals, 30 s across segments, per-segment camera limit (iOS/Android), PR-Short on the total, flip guards, stop/cancel/interruption during a flip, lost segment, camera not coming back, files deleted on cancel and short | Jest, `src/__tests__/take.test.ts` (23 tests, camera and files faked) | pass |
 | Stitch once and cache, Post reusing the running stitch, segments deleted only after the stitched file is kept, typed error mapping, retry after failure, Discard during a stitch, upload refusing an unstitched take | Jest, `src/__tests__/stitch.test.ts` (8 tests, native module mocked) | pass |
-| Whole suite, types, lint | `npm test` (276 tests), `npm run typecheck`, `npm run lint` | clean |
+| Whole suite, types, lint | `npm test` (312 tests on the integration tip), `npm run typecheck`, `npm run lint` | clean |
 | iOS native module compiles and links, and is registered | `expo prebuild -p ios`, `pod install`, `xcodebuild … -sdk iphonesimulator build` (Xcode 27.1); `VideoStitcherModule` is in the generated `ExpoModulesProvider.swift` | BUILD SUCCEEDED |
 | The iOS AVFoundation core on real files | `app/modules/video-stitcher/harness/run.sh` on the Mac (macOS AVFoundation, not iOS): generated segments shaped like camera files (back camera 1920×1080 rotated 90°, front camera rotated and mirrored, an upright one, a 720p one; H.264 + AAC in QuickTime) | 27 checks pass: one H.264 and one AAC track; 1080×1920 upright, identity transform; duration 7.500 s of 7.5; audio spans the whole clip; 225 frames at 30 fps; timestamps increase; `ftyp moov mdat`; every segment's top, bottom-left and bottom-right colours as in its source (so rotation and mirroring are kept); 2.9 Mbps on moving detail (target 2.5; about 11 MB for 30 s); a QuickTime file named `.mp4` reads; a missing and an unreadable segment are input errors; about 1 s to stitch 7.5 s on an M-series Mac |
 | The module loads in the app on the iOS simulator | Debug build installed on an iPhone 18 Pro simulator (iOS 27.0), Metro, a temporary log (not committed) of `isAvailable()` from the record route | the app launches to the welcome screen; log: `VideoStitcher native module available: true` |
@@ -181,9 +182,10 @@ played, the file's facts (below), and pass or fail.
    joins, each part on the right camera, sound throughout, the parts in order.
 3. **Fast flips.** Tap Flip twice quickly, then again within half a second of a new segment
    starting. Expect: the extra taps do nothing; no crash; the take continues.
-4. **Flip near the limit.** Record to 0:29 and tap Flip. Expect: the take ends and Review opens
-   (it does not try to record under a second on the other camera). Then record and flip at 0:27:
-   the timer stops at 0:30 and Review opens; the clip is no longer than 30 s.
+4. **Flip near the limit.** Record to 0:29.2 or later and tap Flip. Expect: nothing happens; the
+   camera does not switch, the timer runs on to 0:30 and Review opens with one camera for the last
+   part. Then record and flip at 0:27: the camera switches, the timer stops at 0:30 and Review
+   opens; the clip is no longer than 30 s.
 5. **30 s with flips.** Record with two flips and let it run out. Expect: it stops by itself at
    0:30; the clip's duration is 30 s or a little under.
 6. **2 s total.** Record 1 s, flip, record about 0.6 s, Stop. Expect: "Keep going: responses are at
