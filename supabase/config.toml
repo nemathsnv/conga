@@ -447,6 +447,11 @@ verify_jwt = false
 [functions.avatar-cleanup]
 verify_jwt = false
 
+# The moderation admin checks the caller's token (auth.getUser) and active moderator membership
+# inside the function, on every request (docs/release/MODERATION.md). Its sign-in page is public.
+[functions.admin]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
