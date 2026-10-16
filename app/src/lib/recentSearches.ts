@@ -30,3 +30,12 @@ export async function saveRecent(list: string[]): Promise<void> {
     // not fatal
   }
 }
+
+/** Sign-out: recent searches are the account's, not the phone's. */
+export async function clearRecent(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(KEY);
+  } catch {
+    // not fatal
+  }
+}

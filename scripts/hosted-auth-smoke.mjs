@@ -9,7 +9,7 @@
 // Steps: request a code (new account, confirmation email) -> Nemat checks the email -> verify the
 // code -> session issued through the access token hook (method otp) -> refresh -> one product
 // RPC -> password sign-in refused -> a password set through the Auth API is not stored and cannot
-// sign in -> sign out.
+// sign in -> sign out -> (SESSION_GATE=1, after 20261016000202) the signed-out token is refused.
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createInterface } from 'node:readline';
@@ -138,6 +138,15 @@ check(signin2.status === 400 && !signin2.json?.access_token, 'password set throu
 // Sign out: revokes this session's refresh tokens. The account stays.
 const logout = await call('/auth/v1/logout?scope=global', { token });
 check(logout.status === 204, 'signed out', `HTTP ${logout.status}`);
+
+// 9. Only once 20261016000202_session_lifecycle.sql is deployed (SESSION_GATE=1): the access token
+// of the session just signed out is refused by the product API at once, not at its expiry.
+const after = await call('/rest/v1/rpc/get_onboarding_state', { body: {}, token });
+if (process.env.SESSION_GATE === '1') {
+  check(after.status === 403 && /session_revoked/.test(JSON.stringify(after.json ?? {})), 'signed-out token refused by the product API (session_revoked)', `HTTP ${after.status}`);
+} else {
+  console.log(`      (info) signed-out token on the product API: HTTP ${after.status}; set SESSION_GATE=1 once 20261016000202 is deployed to check it`);
+}
 
 rl.close();
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}. The account for this address stays on the hosted project.`);

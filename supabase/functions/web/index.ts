@@ -30,6 +30,11 @@ type WebVideo = { status: "live"; video: Card; prompt: Prompt; more: Card[]; rep
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 }
+// A JS string literal that is safe inside <script>: JSON.stringify leaves "<", so a code such as
+// "</script><script>…" from the URL would end the script and run its own (reflected XSS).
+function scriptString(s: string): string {
+  return JSON.stringify(s).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+}
 function thumb(pb: string | null, w = 540, h = 960): string {
   return pb ? `https://image.mux.com/${pb}/thumbnail.jpg?time=1&width=${w}&height=${h}&fit_mode=crop` : "";
 }
@@ -134,7 +139,7 @@ ${moreCount > 0 && data.more.length ? `<a href="/functions/v1/web/r/${data.more[
 ${FOOT}
 ${hlsScriptTag()}
 <script>
-(function(){var v=document.getElementById('v'),src=${JSON.stringify(pb ? hls(pb) : "")};if(!src)return;
+(function(){var v=document.getElementById('v'),src=${scriptString(pb ? hls(pb) : "")};if(!src)return;
 if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=src;}else if(window.Hls&&Hls.isSupported()){var h=new Hls({maxBufferLength:4});h.loadSource(src);h.attachMedia(v);}
 v.addEventListener('timeupdate',function(){if(v.duration)document.getElementById('bar').style.width=(v.currentTime/v.duration*100)+'%';});
 v.addEventListener('click',function(){v.muted=false;v.play();});})();
@@ -188,7 +193,7 @@ ${BAR}
 <a href="${esc(appUrl)}" class="pillw" style="margin-top:24px;height:50px;padding:0 26px;border-radius:25px;font-size:16px">Open in the app</a>
 <a href="${STORE_URL}" style="margin-top:12px;font-size:15px;color:rgba(255,255,255,0.86)">Get the app</a>
 </div></div>
-<script>setTimeout(function(){location.href=${JSON.stringify(appUrl)};},300);</script>`;
+<script>setTimeout(function(){location.href=${scriptString(appUrl)};},300);</script>`;
   return page("Shortcut invite", body, { title: "You're invited to Shortcut", description: "Open the invite in the app.", url }, appUrl);
 }
 

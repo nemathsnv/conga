@@ -443,6 +443,10 @@ verify_jwt = false
 [functions.web]
 verify_jwt = false
 
+# pg_cron calls this through pg_net with AVATAR_CLEANUP_KEY instead of a user JWT.
+[functions.avatar-cleanup]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

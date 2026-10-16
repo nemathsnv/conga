@@ -182,9 +182,10 @@ select throws_ok($$ insert into public.moderation_actions (moderator, account_id
 -- ---------------------------------------------------------------------------
 -- Delete your account: a fresh sign-in first, then hidden for 30 days, restored by signing in.
 set local role authenticated;
-select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":1000}', true);
-select throws_ok($$ select public.delete_account() $$, 'P0001', 'reauth_required', 'an old session cannot delete the account');
-select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":%s}', extract(epoch from now())::bigint), true);
+-- The sign-in time is the token's amr timestamp, which a refresh keeps (20261016000202).
+select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":%s,"amr":[{"method":"otp","timestamp":1000}]}', extract(epoch from now())::bigint), true);
+select throws_ok($$ select public.delete_account() $$, 'P0001', 'reauth_required', 'an old session cannot delete the account, even with a freshly refreshed token');
+select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":%1$s,"amr":[{"method":"otp","timestamp":%1$s}]}', extract(epoch from now())::bigint), true);
 select lives_ok($$ select public.delete_account() $$, 'a fresh sign-in can');
 reset role;
 select is((select deleted_at is not null from public.accounts where id = 'c3333333-3333-3333-3333-333333333333'), true, 'soft deleted');
@@ -196,7 +197,8 @@ reset role;
 select is((public.web_video('d5555555-5555-5555-5555-555555555555'))->>'status', 'unavailable', 'on the web too');
 select is((select username from public.profiles where id = 'c3333333-3333-3333-3333-333333333333'), 'testmaya', 'the username stays reserved');
 set local role authenticated;
-select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated"}', true);
+-- A sign-in after the deletion (one second later: now() does not move inside the transaction).
+select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","amr":[{"method":"otp","timestamp":%s}]}', extract(epoch from now())::bigint + 1), true);
 select is((public.get_onboarding_state())->>'has_profile', 'true', 'signing back in restores');
 reset role;
 select is((select deleted_at from public.accounts where id = 'c3333333-3333-3333-3333-333333333333'), null, 'deleted_at cleared');
