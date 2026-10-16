@@ -191,6 +191,8 @@ When `post_response` is next edited, add `'removed'` to the status list in its e
 and is not left to the index. Keep its `exception when unique_violation` handler: without it the
 index's refusal would reach the app as a raw database error instead of `already_responded`.
 
+## 6. (16 Oct 12:18 UTC: confirmed on the hosted project. The default domain serves the function's HTML as `text/plain` with a sandbox CSP; a custom domain is required before the admin or shared links work. BETA-READINESS section 25.)
+
 ## 6. Deploying (later, on Nemat's go-ahead)
 
 Nothing in this section has been run. Order:

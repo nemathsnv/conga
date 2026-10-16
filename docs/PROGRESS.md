@@ -44,7 +44,9 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 | H2 batch A migrations 20261013000200, 20261013000300 | done 16 Oct 11:59 UTC, verified (BETA-READINESS section 22) |
 | H3 abandon-submission deployment | done 16 Oct 12:04 UTC, verified (BETA-READINESS section 23) |
 | H4 batch B migrations 20261016000200 to 204 | done 16 Oct 12:07 UTC, verified (BETA-READINESS section 24) |
-| H5 onwards | awaiting go-ahead |
+| H5 web, auth-signin-method, send-push | done 16 Oct 12:18 UTC (BETA-READINESS section 25) |
+| H5b HTML on the default domain | checked: text/plain; custom domain needed for shared links and the admin |
+| H6 onwards | awaiting go-ahead |
 
 ## Not authorised in this effort (prepared only)
 

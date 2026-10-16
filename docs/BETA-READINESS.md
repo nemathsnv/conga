@@ -4610,6 +4610,42 @@ migrations do: `docs/release/SECURITY.md`.
 
 *Next:* H5 on Nemat's go-ahead.
 
+## 25. H5 deployed: `web`, `auth-signin-method`, `send-push` (16 Oct 12:18 UTC; Nemat approved). H5b: the default domain serves HTML as text/plain
+
+Approved by Nemat on 16 Oct ("deploy web --no-verify-jwt (leave STORE_URL and WAITLIST_URL unset
+for now), redeploy auth-signin-method, deploy send-push --no-verify-jwt; verify the function list,
+the 401/405 answers and the H5b content-type check; record it and stop before H6"). Deployed by
+the lead from the integration worktree at `18c1b20` (trees `web` `8b7ffed0…`,
+`auth-signin-method` `bbf282c4…`, `send-push` `39822830…`, `_shared` `c8c36b3a…`), 12:18:05 to
+12:18:23 UTC, each by name, exit 0.
+
+- **Function list (12:18:47 UTC):** `web` v1, `send-push` v1 (new), `auth-signin-method` v11
+  (was v10), all `ACTIVE`, `verify_jwt` false; `abandon-submission` v1, `mux-cleanup` v8,
+  `mux-create-upload` v10, `mux-upload-status` v11, `mux-webhook` v12 unchanged. No secret, Vault
+  entry or switch changed; `STORE_URL` and `WAITLIST_URL` unset (the function falls back to its
+  built-in placeholders).
+- **Answers:** `auth-signin-method` POST with an empty body 401, GET 405; `send-push` POST without
+  the sender key 401, GET 405 (the key is not set, so the push sender does nothing; outbox rows
+  wait, as before). `web`: `/r/<unknown id>` 404; `/r/<V>` 200 with the full page: the pinned
+  `hls.js@1.7.3` tag with its integrity hash and `href="shortcut://r/<V>"` as the app link;
+  `x-robots-tag: noindex`.
+- **H5b, failed as feared:** on `picvoavfxnajfjkqawju.supabase.co` the function's HTML is served
+  with `content-type: text/plain` and `content-security-policy: default-src 'none'; sandbox`,
+  for `/i/CHECK` and for `/r/<V>` alike. The platform rewrites HTML responses on the default
+  functions domain (Agent D's open question in `MODERATION.md` section 6, now confirmed). So a
+  browser shows the page source, not the page; link previews cannot read the Open Graph tags
+  either. **Consequence:** shared-link pages (B-3) and the moderation admin (H7) need a custom
+  domain in front of the functions (the Supabase custom-domain add-on, or the product domain with
+  a proxy) before either is usable; the app's links keep pointing at the function URL until
+  `EXPO_PUBLIC_WEB_BASE_URL` names the domain. The deployment itself is correct and stays: the
+  function is reachable, read-only and `noindex`; nothing links to it from outside yet.
+- **Not done:** H6 (`avatar-cleanup` function and its secrets: names are queueing in
+  `avatar_removals` since H4 but nothing deletes them yet), H7 (admin, which also needs the custom
+  domain), H8 (push sender secrets), the hosted auth smoke with `SESSION_GATE=1`, the
+  client-address header check for the rate limits (`SECURITY.md` section 6 step 7).
+
+*Next:* H6 on Nemat's go-ahead; a decision on the custom domain (H5b) before H7 and B-3.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
