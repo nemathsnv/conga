@@ -18,7 +18,7 @@ import { getPrompt, getSuggestion, getVideo, type PromptCard, type Video } from 
 import { ReplyCard } from '@/ui/ReplyCard';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool } from '@/ui/dark';
-import { CloseIcon, FlipIcon, LightIcon } from '@/ui/Icons';
+import { CameraOffIcon, CloseIcon, FlipIcon, LightIcon, MicOffIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { formatTimer } from '@/video/limits';
 import {
@@ -296,7 +296,7 @@ export default function RecordScreen() {
         {promptCard}
         <View style={s.stateBlock}>
           <Glass style={s.stateIcon} radius={32}>
-            <FlipIcon size={28} />
+            <CameraOffIcon size={28} />
           </Glass>
           <Text style={s.stateTitle}>Camera access is off</Text>
           <Text style={s.stateText}>Responses are recorded on video. Turn on camera access for Shortcut in your phone&apos;s settings.</Text>
@@ -339,7 +339,7 @@ export default function RecordScreen() {
         <Glass style={s.micCard}>
           <View style={s.micRow}>
             <View style={s.micIcon}>
-              <LightIcon size={18} />
+              <MicOffIcon size={18} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.micTitle}>Microphone access is off</Text>

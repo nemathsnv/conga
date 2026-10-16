@@ -209,14 +209,40 @@ export function CloseIcon({ size = 20, color = '#FFFFFF' }: IconProps) {
   );
 }
 
-export function FlipIcon({ size = 20, color = '#FFFFFF' }: IconProps) {
+/** Flip camera: two circular arrows (R-Record, A-Camera, A-Mic; the boards draw it at 19). */
+export function FlipIcon({ size = 19, color = '#FFFFFF' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M4 8.5h3l1.5-2.5h7L17 8.5h3V19H4z" />
-      <Path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.8" />
-      <Path d="M14.5 13.5a2.5 2.5 0 0 1-4.3 1.8" />
-      <Path d="m13 10.5 1 1.3-1.6.4" />
-      <Path d="m11 16.5-1-1.3 1.6-.4" />
+      <Path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5" />
+      <Path d="M20 4v4.5h-4.5" />
+      <Path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.5" />
+      <Path d="M4 20v-4.5h4.5" />
+    </Svg>
+  );
+}
+
+/** A crossed-out microphone: the A-Mic card ("Microphone access is off"). */
+export function MicOffIcon({ size = 18, color = '#FFFFFF' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 3l18 18" />
+      <Path d="M9 5.5a3 3 0 0 1 6 0V11" />
+      <Path d="M9 9.5V11a3 3 0 0 0 4.6 2.5" />
+      <Path d="M5.5 11a6.5 6.5 0 0 0 10.7 5" />
+      <Path d="M18.5 11a6.4 6.4 0 0 1-.4 2.2" />
+      <Path d="M12 17.5V21" />
+    </Svg>
+  );
+}
+
+/** A crossed-out video camera: the A-Camera card ("Camera access is off"; the board draws it at 28). */
+export function CameraOffIcon({ size = 28, color = '#FFFFFF' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 3l18 18" />
+      <Path d="M15.5 12.5v-2l5-2.8v8.6l-2.2-1.2" />
+      <Path d="M13 17.5H6a3 3 0 0 1-3-3v-5a3 3 0 0 1 2-2.8" />
+      <Path d="M9.5 6.5H12.5a3 3 0 0 1 3 3" />
     </Svg>
   );
 }
