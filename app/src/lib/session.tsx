@@ -4,6 +4,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { afterSignOut, beforeSignOut } from './accountCleanup';
 import { setSuspendedHandler } from './content';
 import { getOnboardingState } from './api';
 import { loadPendingInvite, savePendingInvite, type PendingInvite } from './pendingInvite';
@@ -55,6 +56,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       return next;
     } catch (e) {
+      // This session was ended on the server (signed out everywhere, or the account deleted on
+      // another phone): pre_request refuses it, and only this phone still holds it.
+      if (e instanceof Error && e.message.includes('session_revoked')) {
+        void supabase.auth.signOut({ scope: 'local' });
+        return null;
+      }
       // Keep the splash up; the auth listener retries when the session changes.
       console.warn('get_onboarding_state failed', e);
       return null;
@@ -68,6 +75,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const apply = (next: Session | null) => {
       const userId = next?.user.id ?? null;
       const changed = latestUser.current !== userId;
+      // The account that was signed in has left this phone: drop what was kept for it.
+      if (changed && latestUser.current !== null) void afterSignOut();
       latestUser.current = userId;
       setSession(next);
       setSessionLoaded(true);
@@ -104,6 +113,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     setPhotoStepPending(false);
+    // While the session is still there: this phone stops getting the account's pushes, and its
+    // queued events go out under it. Bounded; never stops the sign-out.
+    await beforeSignOut();
     await supabase.auth.signOut();
   }, []);
 

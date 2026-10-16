@@ -119,6 +119,16 @@ export async function flush(): Promise<void> {
   }
 }
 
+/**
+ * Sign-out: what is still queued belongs to the account that is leaving. Called after a last
+ * flush, so a later sign-in on this phone never sends it under the next account's id.
+ */
+export async function clearQueue(): Promise<void> {
+  await load();
+  queue = [];
+  await persist();
+}
+
 /** Starts the periodic flush and the flush on going to the background. Returns a stop function. */
 export function startAnalytics(): () => void {
   void load();

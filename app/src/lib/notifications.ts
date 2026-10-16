@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 
 import { registerPushToken, setTimezone } from './content';
 import { FOUNDER_BUILD } from './env';
+import { supabase } from './supabase';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -34,7 +35,7 @@ export async function registerTokenIfAllowed(): Promise<void> {
   // The founder build has no push entitlement (free Personal Team), so no token can exist.
   if (FOUNDER_BUILD) return;
   if (!(await permissionGranted())) return;
-  const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
+  const projectId = easProjectId();
   if (!projectId) {
     console.warn('push: no EAS project id in app config; token not registered (docs/BLOCKERS.md B-2)');
     return;
@@ -42,8 +43,35 @@ export async function registerTokenIfAllowed(): Promise<void> {
   try {
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     await registerPushToken(token, Platform.OS === 'ios' ? 'ios' : 'android');
+    registeredToken = token;
   } catch (e) {
     console.warn('push token registration failed', e);
+  }
+}
+
+function easProjectId(): string | undefined {
+  return (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
+}
+
+let registeredToken: string | null = null;
+
+/**
+ * Sign-out: this phone's token stops receiving the account's pushes (remove_push_token, which
+ * removes it only from the signed-in account). Must run while the session is still there. Best
+ * effort: it never throws, and the caller bounds how long it waits.
+ */
+export async function unregisterPushToken(): Promise<void> {
+  try {
+    let token = registeredToken;
+    if (!token && !FOUNDER_BUILD && (await permissionGranted())) {
+      const projectId = easProjectId();
+      if (projectId) token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    }
+    if (!token) return;
+    const { error } = await supabase.rpc('remove_push_token', { p_token: token });
+    if (!error) registeredToken = null;
+  } catch {
+    // Not fatal: the next account to register this token takes it over (register_push_token).
   }
 }
 
