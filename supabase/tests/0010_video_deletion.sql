@@ -110,8 +110,11 @@ exception when others then
 end;
 $$;
 grant execute on function pg_temp.err(text) to authenticated, anon;
+-- A fresh sign-in (amr), one second after now(), so after any deletion in this transaction: here
+-- "signs back in" restores (20261016000202 needs a sign-in after the deletion; 0022 tests that).
 create function pg_temp.act(p_account uuid) returns void language sql as $$
-  select set_config('request.jwt.claims', json_build_object('sub', p_account, 'role', 'authenticated', 'iat', extract(epoch from now())::bigint)::text, true);
+  select set_config('request.jwt.claims', json_build_object('sub', p_account, 'role', 'authenticated', 'iat', extract(epoch from now())::bigint,
+    'amr', json_build_array(json_build_object('method', 'otp', 'timestamp', extract(epoch from now())::bigint + 1)))::text, true);
 $$;
 grant execute on function pg_temp.act(uuid) to authenticated;
 -- The job of an action for an asset or an upload: the open one if there is one (now() does not
