@@ -270,6 +270,7 @@ Deno.test("E1: T1 deletes the account: one playback job; a dry run plans the rev
   await signInAgain(T1.email);
   const d = await t1("delete-account");
   assertEquals(d.json?.http, 204, d.out);
+  assertEquals((await t1("sign-in-state")).json?.error, "session_revoked", "the deletion signs the phone out at once");
   const queued = await jobs(`response_id=eq.${V.id}&status=eq.pending`);
   assertEquals(queued.map((j) => [j.action, j.reason]), [["sync_playback", "account_deleted"]]);
   assertEquals((await due()).map((x) => x.id), [queued[0].id]);
@@ -287,6 +288,13 @@ Deno.test("E1: T1 deletes the account: one playback job; a dry run plans the rev
 
 Deno.test("E2: T1 signs back in within 30 days: restored; a live drain makes a new public id P3; V plays again on the same asset", async () => {
   calls.length = 0;
+  // The deletion ended every session (20261016000202): the phone's old token is refused, and only a
+  // new sign-in (a new email code) restores the account.
+  const stale = await t1("sign-in-state");
+  assertEquals(stale.json?.error, "session_revoked", stale.out);
+  assert(stale.json?.http === 401 || stale.json?.http === 403, `old session refused: ${stale.json?.http}`);
+  assertEquals(await sql(`select deleted_at is not null from public.accounts where id = ${lit(T1.id)}`), "t", "a refused call restores nothing");
+  await signInAgain(T1.email);
   const s = await t1("sign-in-state");
   assertEquals(s.json?.http, 200, s.out);
   assertEquals(await sql(`select deleted_at is null from public.accounts where id = ${lit(T1.id)}`), "t");
