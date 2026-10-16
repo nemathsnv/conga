@@ -38,6 +38,41 @@ suspension and review-outcome notices. If a token is still registered when anoth
 in, `register_push_token` moves it to that account (`on conflict ... do update`). So no new server
 gap was found.
 
+## 1b. Abuse limits (R1 to R3; migration `20261016000204`, functions `auth-signin-method`, `web`, `send-push`)
+
+There is one fixed-window counter (`rate_limit_counters`). Keys are the client address or account
+id, or the email or code stem, hashed with HMAC-SHA-256 and a random per-database salt
+(`rate_limit_salt`). No address, email or code is stored. Old windows are pruned daily at 03:50 UTC.
+Over a limit, every path gives an answer it already gives, so the app shows no new state.
+
+| Rule | Limit | What it counts | Over the limit |
+|---|---|---|---|
+| `invite_client` | 10 per 15 min | Failed invite lookups (`not_found`, `expired`, `used`), per client address. When signed in, also per account (`check_invite`, `redeem_invite`). | Every lookup answers `{"status":"not_found"}`, valid codes included. That is W-Invalid, the same inline error as an unknown code. Nothing about the inviter is returned. |
+| `invite_stem` | 100 per hour | Failed lookups per code stem (the part before the dash: `SC` for team codes, the first name for personal codes), all clients together. Bounds what many addresses can try. | The same `not_found`, for that stem only. |
+| `signin_address` | 5 per 15 min | `auth-signin-method` lookups per email address (normalised). Every lookup counts. | `{"providers": []}`, with status 200: exactly what an address with no account gets. The app then sends the email code as usual, and the access token hook still refuses it for an Apple or Google account, which shows E-Code. |
+| `signin_client` | 30 per 15 min | `auth-signin-method` lookups per client address. | The same `{"providers": []}`. |
+| `web_event` | 60 per hour | Web player analytics events (`web_link_opened`, `web_signin_sheet_shown`) per client address. | The event is dropped. The page and the beacon's 204 are unchanged. |
+
+Successful invite lookups are never counted, so opening a valid link repeatedly is not limited.
+`invite_preview` and `check_invite` changed from `STABLE` to `VOLATILE` because they now write a
+counter; the app calls them with POST, which is unaffected. `invite_lookup`'s old body is now
+`invite_lookup_unlimited`, unchanged. All callers go through the limited `invite_lookup`.
+
+**Changing a threshold** (service role, SQL editor). It takes effect immediately and needs no
+migration:
+```sql
+update public.rate_limit_rules set max_hits = 20, window_seconds = 900 where rule = 'invite_client';
+delete from public.rate_limit_counters where rule = 'invite_client';   -- optional: forget the current windows now
+```
+
+**The client address** comes from `cf-connecting-ip`, then `x-real-ip`, then the first
+`x-forwarded-for` entry. That is `public.request_client_ip()` in the database and
+`clientIp()` in `_shared/client.ts`. See risk 2.
+
+**`send-push`** now compares `Authorization` with `PUSH_SENDER_KEY` in constant time
+(`bearerMatches` in `_shared/client.ts`, also used by `avatar-cleanup`). It still refuses everything
+when no key is set.
+
 ## 2. Verified safe (no change needed)
 
 | Area | Evidence |
@@ -57,25 +92,26 @@ gap was found.
 
 ## 3. Remaining risks, ranked
 
-1. **Invite codes can be brute-forced (needs Nemat).** `invite_preview` is anonymous and has no rate
-   limit. Team codes are `SC-` plus 3 characters, which is 32,768 possibilities. Personal codes are
-   `NAME-` plus 4 characters, about 1 M per first name. Enumerating the codes yields valid invites
-   (a way round the closed beta) and the inviter's name and photo. A limit, or longer generated
-   codes, is a product decision: the spec's example is `PUTU-7K2`, and W-Invalid's copy would
-   apply.
-2. **Account enumeration through `auth-signin-method` (open since 9 Oct, needs Nemat).** Anyone with
-   the public key learns whether an address has an account and with which provider, with no limit.
-   E-Linked needs the answer. A per-IP or per-address limit needs a decision and a board for the
-   refusal.
+1. **Invite codes and E-Linked lookups are now limited, not closed (R1, R2).** The limits slow
+   enumeration but do not make it impossible: an attacker with many addresses gets 10 failed invite
+   lookups per address per 15 minutes, and 100 per code stem per hour in total. Each limited
+   address, and each limited stem during an attack, also turns away legitimate people for the rest
+   of its window (they see W-Invalid, or E-Code). The thresholds are the trade-off between the two;
+   see section 1b. Longer generated codes would be the stronger fix, but they are a product
+   decision (the spec's example is `PUTU-7K2`).
+2. **Which header carries the client address on the hosted project is unverified.** The order is
+   `cf-connecting-ip`, then `x-real-ip`, then the first `x-forwarded-for` entry. Locally the client
+   can set the first `x-forwarded-for` entry itself. If it can do the same on hosted, each spoofed
+   value is a fresh per-client bucket, and only the per-stem and per-address limits still hold.
+   Check this on hosted with one request before relying on the per-client numbers.
 3. **Deploy dependency: `postgres` must read auth.sessions.** On the hosted project, `postgres` must
    be able to `SELECT` and `DELETE` on `auth.sessions`. If `SELECT` is missing, every signed-in API
    request fails (`pre_request`). If `DELETE` is missing, `delete_account` fails. This is a hard
    preflight (see 6).
-4. **Old phones show errors for up to an hour after deletion or sign-out elsewhere.** A phone still
-   holding an access token for a deleted session gets `session_revoked` on every call until its
-   token expires or its next launch. `session.tsx` signs out on `session_revoked` from
-   `get_onboarding_state` (that is, at launch and on `refresh()`). Recommended one-line follow-up in
-   `content.ts` `unwrap` (not my file): route `session_revoked` to the same handler as `suspended`.
+4. **Old phones after deletion or sign-out elsewhere.** A phone holding an access token for a
+   deleted session gets `session_revoked`. `session.tsx` signs out locally when that comes back from
+   `get_onboarding_state`. Since `b0b7295` (lead), `content.ts` also routes `session_revoked` to the
+   same handler, so the phone returns to Welcome at the next refused call. Not seen on a device.
 5. **Suspended authors' content stays visible to others.** The spec says only that the suspended
    person "can't use the app"; it does not say whether their responses stay up. This is unchanged,
    with no rule invented. **Needs Nemat.**
@@ -98,10 +134,9 @@ gap was found.
    reproducible without real providers; check it on the hosted project when providers are enabled.
 10. **The web player has small exposures.** It loads `hls.js@1` from jsDelivr with no pinned version
     and no SRI. It serves `Cache-Control: public, max-age=60`, so a deleted video's page can linger
-    in shared caches for up to 60 s (spec: "disappears everywhere at once"). The `/e/signin` beacon
-    inserts an analytics row per request without any limit. Low.
+    in shared caches for up to 60 s (spec: "disappears everywhere at once"). Low. (The event beacon
+    is now limited: R3.)
 11. **Further low items:**
-    - `send-push` compares its key with `!==`, not in constant time.
     - `has_profile(uuid)` is callable by any member.
     - `net.*` and `cron.*` functions are executable by the API roles, but their schemas are not
       exposed by PostgREST. Confirm on the hosted project that `pg_graphql` is not installed.
@@ -127,7 +162,22 @@ gap was found.
 | App: `tsc --noEmit`, `eslint src`, Jest | Clean, clean, 258/258 (19 suites; new: `supabaseConfig` 6, `accountCleanup` 6) |
 | `deno check` and `deno lint` on `web`, `avatar-cleanup` and the new test | Clean |
 
+**Abuse limits (R1 to R3), on the integration branch at `00ad798` plus `20261016000204`:**
+
+| Suite | Result |
+|---|---|
+| pgTAP, all 22 files | 1656/1662. New 0024 (40) passes. The 6 failures are all in Agent A's `0014_submission_account_lifecycle.sql`: its fixture deletes without an amr sign-in, which `20261016000202` requires. The lead is fixing that test. |
+| Rollback of `20261016000204` | The catalog fingerprint is identical to a build without it (Agent D's `…0300` and `…0301` present in both). |
+| Deno `client_test` (new) | 3/3 |
+| Deno `signin_method_integration_test` (new, handler in-process) | 3/3 |
+| Deno `web_beacon_integration_test` (new, through the served `web` function) | 1/1 |
+| Deno `avatar_cleanup_integration_test` | 3/3 |
+| Deno `mux_test`, `cleanup_unit_test`, `integration_test` and `cleanup_integration_test` (A's, now patched by the lead) | 80/80 |
+| `scripts/auth-integration.mjs` | 52/52 (E-Linked goes through the limited lookup) |
+| `deno check` and `deno lint` on `web`, `send-push`, `avatar-cleanup`, `auth-signin-method`, `_shared/client.ts` and the new tests | Clean |
+
 **Not run:**
+- `send-push` against Expo. Only the shared key check is unit-tested; the function itself has no test harness.
 - `scripts/scheduler-integration.sh`, `c1-rehearsal.sh` and `idempotency-rollback-check.sh`.
 - `PHASE=legacy-setup` of auth-integration (it needs the hook off and an Auth restart).
 - Real Apple or Google sign-in.
@@ -135,9 +185,8 @@ gap was found.
 - Any device or simulator.
 - The app's screens with the new sign-out cleanup. The logic is unit-tested only.
 
-**Patch needed in Agent A's `supabase/functions/_tests/cleanup_integration_test.ts`** (not
-applied; in the scratchpad as `agent-c-cleanup-integration-test.patch`, which passes
-`git apply --check`):
+**Patch for Agent A's `supabase/functions/_tests/cleanup_integration_test.ts`** (applied by the
+lead in `b0b7295`):
 - Add a `signInAgain(m)` helper: an Admin `generate_link` code, then `/verify`, which replaces
   `m.token`.
 - Use `rpc(await signInAgain(x), "get_onboarding_state")` at the four "signs back in" calls (sam,
@@ -211,7 +260,9 @@ applied; in the scratchpad as `agent-c-cleanup-integration-test.patch`, which pa
 2. **Conflicts with other agents' migrations.** Mine redefine:
    - `prompt_card`, `activity_row`, `activity_unread_count`, `get_profile`;
    - `pre_request`, `delete_account`, `get_onboarding_state`;
-   - the two avatar write policies.
+   - the two avatar write policies;
+   - `invite_lookup` (204 renames the old body to `invite_lookup_unlimited`), and the volatility of
+     `invite_preview` and `check_invite`.
 
    Any later migration (Agent D's `20261016000300`+) that redefines one of these must start from
    my version: for example, keep the `session_is_current()` check in `pre_request`. Agent A's block
@@ -219,23 +270,34 @@ applied; in the scratchpad as `agent-c-cleanup-integration-test.patch`, which pa
    The column grants on `moderation_actions`, `review_requests` and `suggestions` mean that a
    moderator UI reading those tables as `authenticated` would not see `moderator`, `note`,
    `decided_by` or `reviewed_by`. The admin should read them with the service role (Agent D, check).
-3. `supabase db push --dry-run`: exactly `20261016000200` to `20261016000203` (with the other
+3. `supabase db push --dry-run`: exactly `20261016000200` to `20261016000204` (with the other
    agents' files, if they are going too). Then `db push`.
 4. Patch Agent A's `cleanup_integration_test.ts` (section 4) in the same change, or its four
    recovery tests fail.
-5. `supabase functions deploy web` (XSS fix) and
-   `supabase functions deploy avatar-cleanup --no-verify-jwt`. Each by name, never `--prune`.
+5. **After** the migration, because they call its new RPCs:
+   - `supabase functions deploy web` (the XSS fix and the beacon limit);
+   - `supabase functions deploy auth-signin-method` (the limits);
+   - `supabase functions deploy avatar-cleanup --no-verify-jwt`.
+
+   `supabase functions deploy send-push --no-verify-jwt` (the constant-time key check) can go at any
+   time. Deploy each by name, never `--prune`. A `web` or `auth-signin-method` deployed before 204
+   answers without events, or with `lookup_failed`.
 6. Avatar clean-up on (it can wait; names simply queue):
    - `supabase secrets set AVATAR_CLEANUP_KEY=<long random>`.
    - `select vault.create_secret('https://<ref>.supabase.co/functions/v1/avatar-cleanup', 'avatar_cleanup_url');`
    - `select vault.create_secret('<the same string>', 'avatar_cleanup_key');`
 7. Check:
    - `SESSION_GATE=1 node scripts/hosted-auth-smoke.mjs` (Nemat, own address).
-   - Read-only: the four policies, the `avatar-cleanup` cron job, and `select count(*) from public.avatar_removals`.
+   - Read-only: the four policies, the `avatar-cleanup` and `prune-rate-limit-counters` cron jobs,
+     `select count(*) from public.avatar_removals`, and `select * from public.rate_limit_rules`.
+   - Which header carries the client address (risk 2): one invite preview from a known address,
+     then `select rule, hits from public.rate_limit_counters`. Two calls from one phone should
+     land in one bucket.
 8. **App.** The server changes work with the installed founder build: its delete flow signs in again
    before deleting, and it signs out afterwards. A new build is needed only for the A1 and A2 fixes.
-9. **Rollback.** The files in `supabase/rollback/2026101600020{3,2,1,0}_*.down.sql`, in that order,
-   each in one transaction. Then delete the `schema_migrations` rows. Sessions already ended stay
+9. **Rollback.** The files in `supabase/rollback/2026101600020{4,3,2,1,0}_*.down.sql`, in that
+   order, each in one transaction. Before 204's rollback, redeploy the previous `web` and
+   `auth-signin-method`. Then delete the `schema_migrations` rows. Sessions already ended stay
    ended.
 
 ## 7. Files outside my ownership that I touched
@@ -247,3 +309,5 @@ applied; in the scratchpad as `agent-c-cleanup-integration-test.patch`, which pa
 - `supabase/config.toml`: `[functions.avatar-cleanup] verify_jwt = false`.
 - `app/src/lib/notifications.ts`, `analytics.ts` and `recentSearches.ts`: the sign-out helpers
   `unregisterPushToken`, `clearQueue` and `clearRecent`.
+- `supabase/functions/web/index.ts` (the beacon limit), `send-push/index.ts` (the constant-time key
+  check) and the new `_shared/client.ts`.
