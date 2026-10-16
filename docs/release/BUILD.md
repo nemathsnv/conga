@@ -66,7 +66,7 @@ packages and changes no existing version and removes none:
 - build tooling: `@react-native/metro-config` and `@react-native/babel-preset` and
   `@react-native/metro-babel-transformer` (0.86.3), six `@babel/plugin-transform-*` plugins,
   `@types/react-test-renderer`;
-- and it relabels 78 existing entries from `dev` to `devOptional`.
+- and it changes the metadata of 78 existing entries (mostly `dev` to `devOptional`).
 
 It was rejected because three of those are native code that Expo autolinking would compile into every
 iOS and Android binary, none is pinned by Expo SDK 57, and the app uses none of them. If Nemat prefers the
