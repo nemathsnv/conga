@@ -1,0 +1,25 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.shortcut.videostitcher'
+version = '0.1.0'
+
+android {
+  namespace "app.shortcut.videostitcher"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // Media3 at the version expo-video already ships (node_modules/expo-video/android/build.gradle,
+  // androidxMedia3Version), so the app carries one Media3. Keep them equal when expo-video moves.
+  def media3Version = "1.9.0"
+  implementation "androidx.media3:media3-transformer:${media3Version}"
+  implementation "androidx.media3:media3-effect:${media3Version}"
+  implementation "androidx.media3:media3-common:${media3Version}"
+  implementation "androidx.media3:media3-muxer:${media3Version}"
+}
