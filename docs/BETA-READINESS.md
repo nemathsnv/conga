@@ -4719,6 +4719,48 @@ exactly as written, read-only at Mux except the documented cancel"). Procedure:
 
 *Next:* C2w and C2a (`PROVIDER-TESTS.md` section 5), E1 to E3 (section 6), each its own approval.
 
+## 28. Provider test C2w: C2w-a and C2w-b passed; C2w-c not run, U5 timed out at Mux first (16 Oct; Nemat approved C2w)
+
+Approved by Nemat on 16 Oct ("continue with C2w, followed by C2a"), after a read-only preflight
+(the purpose and Mux operations of both halves, 2 assets in the Beta environment plus the 7 spike
+assets on record, 0 assets needed, the disposable rows and URLs involved, and the one expected side
+effect: the first mint retiring U2, since T1's three C1 URLs still held its slots).
+
+- **C2w-a (12:50:06 to 12:50:11 UTC, `scripts/provider-member.mjs c2 --submission no --bytes partial
+  --discard abandon-response`):** mint `200` U5 `eg7Pj500…` (the server first retired U2
+  `3eRAk2ZJ…` at Mux, the C1 mechanism, as predicted); `post_reply` `200`, row `56816df5…`, a video
+  reply to T1's own V; PUT of 262,144 of a declared 8,388,608 bytes, cut; `abandon_response` `204`.
+  After: the row `deleted` (12:50:10.99); ledger U5 `claimed`; exactly one new job `e48cdb45…`
+  (`cancel_upload`, `abandoned`, upload U5, no asset, due at once); Mux: U5 `waiting`, passthrough
+  T1, no `asset_id`; U2 `cancelled`; assets 2, inventory `ccb8b093…`; founder hash unchanged, 0
+  activity rows for the founder.
+- **C2w-b (12:51:05 UTC, `scripts/provider-drain.sh hosted dry_run`, step `C2w-b`):** worker `200`,
+  `mode dry_run`, `claimed 1, release 1`; the job `pending` with `result.dry_run true`, `would
+  {act cancel, owner_verified true, upload_status waiting}`; switch `off` after (its release set
+  `not_before` 13:51:08, the release's hour; `mux_cleanup_set_mode('live')` would have made it due
+  at once).
+- **C2w-c, prepared and reviewed, not run:** the lead's shell may not write the function's
+  secret store (`supabase secrets set MUX_CLEANUP_MODE=live` is refused by the permission
+  classifier), so the step was packaged as one command for Nemat, `scripts/provider-c2w-c.sh
+  <job>`, and reviewed independently (no blocker; the drain's exit status and a Ctrl-C trap added,
+  `738b05e`). Before Nemat ran it, the recheck he asked for (18:55 UTC) found **U5 `timed_out` at
+  Mux**: its URL expired at 13:50 UTC (ledger `expires_at` 13:50:09; Mux `timeout` 3600). The job
+  is still `pending` and due, both switches are off (database `off`, no `MUX_CLEANUP_MODE`),
+  assets 2, inventory unchanged.
+- **What this means:** C2w-c's proof, the worker cancelling a *waiting* upload with partial
+  bytes, can no longer be given with U5. A live drain of the existing job now exercises the other
+  documented branch: Mux reports the upload ended, the worker records the job `done` with no Mux
+  change (a timed-out upload holds nothing and makes no asset). That is harmless and still
+  evidence, but not the cancel. A fresh C2w-a (a new URL and partial transfer, a new T1 sign-in
+  code since the session expired at 13:43 UTC) followed by C2w-c within the hour would give the
+  cancel proof. Nothing was created automatically; Nemat decides.
+- **Nothing changed at Mux except the documented cancel of U2 and the four creates and one cancel
+  of C1; no asset exists beyond the two; the founder's content is untouched.**
+
+*Next:* Nemat's choice: (a) drain the existing job to close it (`scripts/provider-c2w-c.sh
+e48cdb45-…`, expected `done` with an ended outcome, no Mux change), then (b) a fresh C2w-a and
+C2w-c within the hour, then C2a; or (b) alone, listing both jobs as expected in the drain.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
