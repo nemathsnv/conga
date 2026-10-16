@@ -3,6 +3,13 @@
 begin;
 select plan(99);
 
+-- Fixture lookups by comment text, outside RLS: members read only their own comments directly
+-- (20261016000200), so a lookup made as another member would find nothing.
+create function pg_temp.comment_id(p_body text) returns uuid language sql stable security definer set search_path = '' as $$
+  select id from public.comments where body like p_body;
+$$;
+grant execute on function pg_temp.comment_id(text) to authenticated;
+
 delete from public.responses;
 delete from public.prompts;
 
@@ -103,7 +110,7 @@ reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"b2222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
-select is((public.post_comment('d4444444-4444-4444-4444-444444444444', 'Bring a jacket.', (select id from public.comments where body like 'Pererenan%')))->>'is_author', 'true', 'the response author gets the Author tag');
+select is((public.post_comment('d4444444-4444-4444-4444-444444444444', 'Bring a jacket.', pg_temp.comment_id('Pererenan%')))->>'is_author', 'true', 'the response author gets the Author tag');
 reset role;
 select is((select count(*)::int from public.activity where recipient_id = 'b2222222-2222-2222-2222-222222222222' and kind = 'comment'), 2, 'Adam has one comment row per comment on his response');
 select is((select count(*)::int from public.push_outbox where recipient_id = 'b2222222-2222-2222-2222-222222222222' and kind = 'comment' and sent_at is null), 1, 'comments on one response share one pending push');
@@ -112,8 +119,8 @@ select is((select public.push_text(o) from public.push_outbox o where kind = 'co
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated"}', true);
-select is((public.post_comment('d4444444-4444-4444-4444-444444444444', 'Colder than you think at 6.', (select id from public.comments where body = 'Bring a jacket.')))->>'thread_id',
-          (select id::text from public.comments where body like 'Pererenan%'), 'a reply to a reply joins the same thread');
+select is((public.post_comment('d4444444-4444-4444-4444-444444444444', 'Colder than you think at 6.', pg_temp.comment_id('Bring a jacket.')))->>'thread_id',
+          pg_temp.comment_id('Pererenan%')::text, 'a reply to a reply joins the same thread');
 select is((public.comments_list('d4444444-4444-4444-4444-444444444444'))->>'count', '4', 'comments_list counts every live comment');
 select is(jsonb_array_length((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments'), 2, 'two top-level comments');
 select is(jsonb_array_length((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments'->0->'replies'), 2, 'the thread holds both replies');
@@ -123,23 +130,23 @@ select is((select count(*)::int from public.activity where recipient_id = 'b2222
 select is((select count(*)::int from public.activity where recipient_id = 'b2222222-2222-2222-2222-222222222222' and kind = 'comment'), 2, 'a reply to the author''s own comment is not a comment on his response twice over');
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated"}', true);
-select throws_ok($$ select public.delete_comment((select id from public.comments where body like 'Pererenan%')) $$, 'P0001', 'comment_not_found', 'you cannot delete someone else''s comment');
+select throws_ok($$ select public.delete_comment(pg_temp.comment_id('Pererenan%')) $$, 'P0001', 'comment_not_found', 'you cannot delete someone else''s comment');
 select throws_ok($$ select public.like_comment('00000000-0000-0000-0000-000000000000') $$, 'P0001', 'comment_not_found', 'liking a missing comment fails');
-select lives_ok($$ select public.like_comment((select id from public.comments where body like 'Pererenan%')) $$, 'like a comment');
+select lives_ok($$ select public.like_comment(pg_temp.comment_id('Pererenan%')) $$, 'like a comment');
 select is((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments'->0->>'liked', 'true', 'a liked comment shows liked, with no count');
 select is((select count(*)::int from public.activity where kind = 'like'), 0, 'comment likes make no Activity rows');
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
-select lives_ok($$ select public.delete_comment((select id from public.comments where body like 'Pererenan%')) $$, 'you can delete your own comment');
+select lives_ok($$ select public.delete_comment(pg_temp.comment_id('Pererenan%')) $$, 'you can delete your own comment');
 select is((public.comments_list('d4444444-4444-4444-4444-444444444444'))->>'count', '3', 'deleting a top-level comment leaves other people''s replies counted');
 select is(jsonb_array_length((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments'), 2, 'the deleted parent keeps its place while it has replies');
 -- (every comment in this transaction shares one created_at, so the row is found by flag, not position)
 select is((select count(*)::int from jsonb_array_elements((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments') x where x->>'deleted' = 'true'), 1, 'the parent is a deleted-parent row');
 select is((select x->'body' from jsonb_array_elements((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments') x where x->>'deleted' = 'true'), 'null'::jsonb, 'a deleted parent shows no text');
 select is((select jsonb_array_length(x->'replies') from jsonb_array_elements((public.comments_list('d4444444-4444-4444-4444-444444444444'))->'comments') x where x->>'deleted' = 'true'), 2, 'its replies stay under it');
-select throws_ok($$ select public.delete_comment((select id from public.comments where body like 'Pererenan%')) $$, 'P0001', 'comment_not_found', 'a deleted comment cannot be deleted again (no undo, no second confirmation)');
+select throws_ok($$ select public.delete_comment(pg_temp.comment_id('Pererenan%')) $$, 'P0001', 'comment_not_found', 'a deleted comment cannot be deleted again (no undo, no second confirmation)');
 reset role;
 select is((select public.push_text(o) from public.push_outbox o where kind = 'comment' and recipient_id = 'b2222222-2222-2222-2222-222222222222'), 'Lena Hart commented on your response', 'a reply to the author''s own comment is not a second commenter');
 set local role authenticated;

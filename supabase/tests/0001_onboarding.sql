@@ -63,7 +63,8 @@ select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-1111111
 select throws_ok($$ select public.team_create_invite('X-1') $$, '42501', null, 'a signed-in person cannot create invites');
 select throws_ok($$ select public.signin_providers_for_email('a@b.co') $$, '42501', null, 'a signed-in person cannot look up sign-in providers');
 select is((select count(*)::int from public.accounts), 1, 'a person reads only their own account');
-select is((select count(*)::int from public.profiles where id = '22222222-2222-2222-2222-222222222222'), 1, 'profiles are readable by signed-in people');
+-- Other people's profiles reach a member only through the read functions (20261016000200).
+select is((select count(*)::int from public.profiles where id = '22222222-2222-2222-2222-222222222222'), 0, 'other people''s profiles are not readable directly');
 select is((select count(*)::int from public.invites), 0, 'invites of other people are not readable');
 
 select is(
@@ -114,7 +115,7 @@ select is((public.get_onboarding_state())->'profile', '{"name":"Lena Hart","user
 
 -- Direct writes are closed: only the functions write.
 update public.profiles set name = 'Hacked' where id = '22222222-2222-2222-2222-222222222222';
-select is((select name from public.profiles where id = '22222222-2222-2222-2222-222222222222'), 'Putu Ayu', 'profiles cannot be updated directly');
+select is((public.get_profile('22222222-2222-2222-2222-222222222222'))->>'name', 'Putu Ayu', 'profiles cannot be updated directly');
 update public.accounts set age_confirmed_at = null where id = '11111111-1111-1111-1111-111111111111';
 select is((public.get_onboarding_state())->>'age_confirmed', 'true', 'accounts cannot be updated directly');
 reset role;
