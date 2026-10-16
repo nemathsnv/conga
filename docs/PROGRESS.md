@@ -14,7 +14,7 @@ branch listed by `git worktree list` on 16 Oct is an ancestor of that commit.
 
 | Agent | Model | Scope | Status |
 |---|---|---|---|
-| A | Opus | Video reliability: Mux `errored` handling, verification of the reliability list, C1/C2/E1/E2 procedures, rollout plan | in progress |
+| A | Opus | Video reliability: Mux `errored` handling, verification of the reliability list, C1/C2/E1/E2 procedures, rollout plan | implemented locally; integrated. pgTAP 1245, abandon 16, provider rehearsal 8/8 on an isolated stack; hosted steps await approval (docs/release/VIDEO-RELIABILITY.md, PROVIDER-TESTS.md) |
 | B | Opus | B-1 camera flip during a take with native segment stitching (iOS AVFoundation, Android Media3) | in progress |
 | C | Opus | Auth hardening verification, privacy audit, account lifecycle, hosted config checklist | in progress |
 | D | Sonnet | Moderator removal keeps the response slot; internal moderation admin (`admin` Edge Function) | in progress |
