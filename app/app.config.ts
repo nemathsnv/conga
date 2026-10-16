@@ -75,6 +75,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    // Not used by the app: the dev-menu overlay (template) and the pre-Android-13 storage access that
+    // libraries declare. The photo library is only reached through the system picker. Fewer lines in
+    // the Play permissions review and Data safety form (docs/release/ANDROID.md section 2).
+    blockedPermissions: [
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+    ],
     // FCM (push on Android): the Firebase client file, a git-ignored file supplied as an EAS file
     // variable (docs/release/ANDROID.md). Left out when unset, so builds without push still work.
     ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),

@@ -3,12 +3,13 @@
 //   /r/{id}   a response or video reply, with "N more responses" and the reply room
 //   /p/{id}   a prompt: its newest response, or the empty state
 //   /i/{code} an invite link: opens the app (shortcut://i/{code}) or the store page
+// "Open in the app" opens the matching route (shortcut://r/{id}, p/{id}, u/{name}, i/{code}); links.ts.
 //   /u/{name} profiles have no web page in v1: the sign-in sheet
 // Pages are noindex during the beta and carry link previews (Open Graph). Every interaction
 // opens the sign-in sheet. Blocking works only in the app; a visitor can watch public content.
 import { adminClient } from "../_shared/supabase.ts";
+import { APP_SCHEME, appLink, hlsScriptTag, type LinkKind, parseWebPath } from "./links.ts";
 
-const APP_SCHEME = "shortcut://";
 const STORE_URL = Deno.env.get("STORE_URL") ?? "https://shortcut.app";
 const WAITLIST_URL = Deno.env.get("WAITLIST_URL") ?? STORE_URL;
 
@@ -50,12 +51,13 @@ function avatar(path: string | null, size: number, extra = ""): string {
     : `<span style="display:inline-block;width:${size}px;height:${size}px;border-radius:50%;background:#F2F2F7;${extra}"></span>`;
 }
 
-const SHEET = `
+function sheet(appUrl: string): string {
+  return `
 <div id="dim" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9" onclick="hideSheet()"></div>
 <section id="sheet" style="display:none;position:fixed;left:0;right:0;bottom:0;background:#FFFFFF;color:#1C1C1E;border-radius:14px 14px 0 0;padding:6px 16px 34px;z-index:10">
 <div style="margin:0 auto;width:36px;height:5px;border-radius:3px;background:#D1D1D6"></div>
 <div style="margin-top:18px;text-align:center"><h2 style="margin:0;font:700 22px -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.4px">Join the conversation</h2><p style="margin:8px 0 0;font-size:15px;line-height:1.42;color:#6E6E73">Anyone can watch. Responding, replying, liking and following need an account in the app.</p></div>
-<a id="open-app" href="${APP_SCHEME}" style="margin-top:22px;height:52px;border-radius:26px;background:#1C1C1E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;text-decoration:none">Open in the app</a>
+<a id="open-app" href="${esc(appUrl)}" style="margin-top:22px;height:52px;border-radius:26px;background:#1C1C1E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;text-decoration:none">Open in the app</a>
 <a href="${STORE_URL}" style="margin-top:10px;height:52px;border-radius:26px;background:#F2F2F7;color:#1C1C1E;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;text-decoration:none">Get the app</a>
 <div style="margin-top:14px;text-align:center;font-size:13px;line-height:1.4;color:#8A8A8E">Shortcut is in closed beta. No invite yet? <a href="${WAITLIST_URL}" style="color:#1C1C1E;font-weight:600;text-decoration:none">Join the waitlist</a></div>
 </section>
@@ -63,8 +65,9 @@ const SHEET = `
 function showSheet(){document.getElementById('dim').style.display='block';document.getElementById('sheet').style.display='block';try{navigator.sendBeacon('/functions/v1/web/e/signin')}catch(e){}}
 function hideSheet(){document.getElementById('dim').style.display='none';document.getElementById('sheet').style.display='none';}
 </script>`;
+}
 
-function page(title: string, body: string, og: { title: string; description: string; image?: string; url: string }): string {
+function page(title: string, body: string, og: { title: string; description: string; image?: string; url: string }, appUrl: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -90,14 +93,14 @@ a{color:inherit}
 video{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;background:#000}
 </style>
 </head>
-<body><div class="frame">${body}${SHEET}</div></body>
+<body><div class="frame">${body}${sheet(appUrl)}</div></body>
 </html>`;
 }
 
 const BAR = `<div class="bar"><span style="font:700 17px -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.3px">Shortcut</span><button class="pillw" style="height:32px;padding:0 14px" onclick="showSheet()">Open in app</button></div>`;
 const FOOT = `<div class="foot"><span style="flex-grow:1;min-width:0;font-size:13px;line-height:1.35;color:rgba(255,255,255,0.8)">Watch freely. Sign in to respond, reply, like or follow.</span><button class="pillw" onclick="showSheet()">Sign in</button></div>`;
 
-function videoPage(data: Extract<WebVideo, { status: "live" }>, url: string): string {
+function videoPage(data: Extract<WebVideo, { status: "live" }>, url: string, appUrl: string): string {
   const v = data.video;
   const pb = v.playback_id ?? "";
   const faces = data.more.slice(0, 3).map((m, i) => avatar(m.author.photo_path, 24, `border:1.5px solid #1A1A1A;${i ? "margin-left:-7px" : ""}`)).join("");
@@ -129,7 +132,7 @@ ${moreCount > 0 && data.more.length ? `<a href="/functions/v1/web/r/${data.more[
 <div style="position:absolute;left:0;right:0;top:721px;height:2px;background:rgba(255,255,255,0.22)"><div id="bar" style="width:0;height:2px;background:rgba(255,255,255,0.9)"></div></div>
 </div>
 ${FOOT}
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+${hlsScriptTag()}
 <script>
 (function(){var v=document.getElementById('v'),src=${JSON.stringify(pb ? hls(pb) : "")};if(!src)return;
 if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=src;}else if(window.Hls&&Hls.isSupported()){var h=new Hls({maxBufferLength:4});h.loadSource(src);h.attachMedia(v);}
@@ -141,10 +144,10 @@ v.addEventListener('click',function(){v.muted=false;v.play();});})();
     description: v.caption ? `${data.prompt.text} — "${v.caption}"` : data.prompt.text,
     image: thumb(pb, 720, 1280),
     url,
-  });
+  }, appUrl);
 }
 
-function unavailablePage(url: string): string {
+function unavailablePage(url: string, appUrl: string = APP_SCHEME): string {
   const body = `
 ${BAR}
 <div style="position:relative;height:100vh;min-height:640px;background:#0E0E10">
@@ -156,10 +159,10 @@ ${BAR}
 <button class="pillw" style="margin-top:24px;height:44px;padding:0 20px;border-radius:22px;font-size:15px" onclick="showSheet()">See more on Shortcut</button>
 </div></div>
 ${FOOT}`;
-  return page("Shortcut", body, { title: "Shortcut", description: "This video isn't available.", url });
+  return page("Shortcut", body, { title: "Shortcut", description: "This video isn't available.", url }, appUrl);
 }
 
-function emptyPage(prompt: Prompt, url: string): string {
+function emptyPage(prompt: Prompt, url: string, appUrl: string): string {
   const body = `
 ${BAR}
 <div style="position:relative;height:100vh;min-height:640px;background:#0E0E10">
@@ -172,20 +175,21 @@ ${BAR}
 <button class="pillw" style="margin-top:20px;height:50px;padding:0 26px;border-radius:25px;font-size:16px" onclick="showSheet()">Respond in the app</button>
 </div></div>
 ${FOOT}`;
-  return page(prompt.text, body, { title: prompt.text, description: "No responses yet. Respond in the app.", url });
+  return page(prompt.text, body, { title: prompt.text, description: "No responses yet. Respond in the app.", url }, appUrl);
 }
 
 function invitePage(code: string, url: string): string {
+  const appUrl = appLink("i", code);
   const body = `
 ${BAR}
 <div style="position:relative;height:100vh;min-height:640px;background:#0E0E10">
 <div style="position:absolute;left:28px;right:28px;top:190px;display:flex;flex-direction:column;align-items:center;text-align:center">
 <h1 style="margin:12px 0 0;font:700 28px/1.12 -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.6px">You're invited to Shortcut</h1>
-<a href="${APP_SCHEME}i/${esc(code)}" class="pillw" style="margin-top:24px;height:50px;padding:0 26px;border-radius:25px;font-size:16px">Open in the app</a>
+<a href="${esc(appUrl)}" class="pillw" style="margin-top:24px;height:50px;padding:0 26px;border-radius:25px;font-size:16px">Open in the app</a>
 <a href="${STORE_URL}" style="margin-top:12px;font-size:15px;color:rgba(255,255,255,0.86)">Get the app</a>
 </div></div>
-<script>setTimeout(function(){location.href=${JSON.stringify(`${APP_SCHEME}i/${code}`)};},300);</script>`;
-  return page("Shortcut invite", body, { title: "You're invited to Shortcut", description: "Open the invite in the app.", url });
+<script>setTimeout(function(){location.href=${JSON.stringify(appUrl)};},300);</script>`;
+  return page("Shortcut invite", body, { title: "You're invited to Shortcut", description: "Open the invite in the app.", url }, appUrl);
 }
 
 function html(body: string, status = 200): Response {
@@ -204,23 +208,23 @@ async function logWebEvent(admin: ReturnType<typeof adminClient>, name: string, 
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/functions\/v1\/web/, "").replace(/^\/web/, "");
-  const m = /^\/(r|p|i|u|e)\/([^/]+)\/?$/.exec(path);
-  if (!m) return html(unavailablePage(url.toString()), 404);
-  const [, kind, id] = m;
+  const route = parseWebPath(url.pathname);
+  if (!route) return html(unavailablePage(url.toString()), 404);
+  const { kind, id } = route;
   const admin = adminClient();
   if (kind === "e") {
     if (id === "signin") await logWebEvent(admin, "web_signin_sheet_shown", { logged_in: false });
     return new Response(null, { status: 204 });
   }
+  const link = appLink(kind as LinkKind, id);
   void logWebEvent(admin, "web_link_opened", { target: kind === "r" ? "video" : kind === "p" ? "prompt" : kind === "i" ? "invite" : "profile", logged_in: false });
-  if (kind === "i") return html(invitePage(decodeURIComponent(id), url.toString()));
-  if (kind === "u") return html(unavailablePage(url.toString()));
+  if (kind === "i") return html(invitePage(id, url.toString()));
+  if (kind === "u") return html(unavailablePage(url.toString(), link));
   const rpc = kind === "r" ? "web_video" : "web_prompt";
   const { data, error } = await admin.rpc(rpc, { p_id: id });
-  if (error) return html(unavailablePage(url.toString()), 500);
+  if (error) return html(unavailablePage(url.toString(), link), 500);
   const result = data as WebVideo;
-  if (result.status === "live") return html(videoPage(result, url.toString()));
-  if (result.status === "empty") return html(emptyPage(result.prompt, url.toString()));
-  return html(unavailablePage(url.toString()), 404);
+  if (result.status === "live") return html(videoPage(result, url.toString(), link));
+  if (result.status === "empty") return html(emptyPage(result.prompt, url.toString(), link));
+  return html(unavailablePage(url.toString(), link), 404);
 });

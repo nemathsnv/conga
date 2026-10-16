@@ -61,7 +61,7 @@ financial data, and no information from other apps or websites.
 
 Anyone with a link can watch a shared response, video reply or prompt in a browser without an account. The page we
 serve sets no cookies. To play the video the page loads a small open-source video player script from the public
-content network jsDelivr, and the video and thumbnail from our video provider, so those providers see the visitor's
+content network jsDelivr (a fixed, integrity-checked version, so the script cannot change without us changing it), and the video and thumbnail from our video provider, so those providers see the visitor's
 technical request data (such as the IP address). When a link is opened we also record one event ("web link opened":
 a video, a prompt or an invite) with a random id that is different on every visit and is not tied to a person.
 **[LEGAL REVIEW: our hosting provider also receives request data such as IP addresses as part of serving the page;
@@ -192,7 +192,10 @@ Each line is a statement above that is true of the **design** but not yet verifi
    the store listing and, for Apple, in the app. A board is needed before any link is built (design gate).
 6. **Who may read `analytics_events`** (section 8).
 7. **Supplier locations and terms** in section 4.
-8. **Web player script.** The shared-link page loads `hls.js@1` from `cdn.jsdelivr.net` (unpinned, no integrity hash;
-   `supabase/functions/web/index.ts` line 132). Pin and self-host it, or keep the third-party disclosure above.
+8. **Web player script.** The shared-link page loads `hls.js` 1.7.3 from `cdn.jsdelivr.net`, pinned to that exact
+   version with a sha384 integrity hash and `crossorigin="anonymous"` (`supabase/functions/web/links.ts`, 16 Oct).
+   The script itself is now fixed, but jsDelivr still receives each visitor's request (IP address, browser,
+   referring page), so the third-party disclosure in sections 2.4 and 4 stays true. Self-hosting the file from our own
+   function would remove that third party; it is not done. Re-check the hash whenever the version changes.
 9. **Hide My Email** (Apple): the waitlist-admission email may not reach those addresses unless the sending domain is
    registered with Apple (`docs/release/IOS.md` section 5).
