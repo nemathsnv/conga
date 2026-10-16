@@ -47,9 +47,10 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 | H5 web, auth-signin-method, send-push | done 16 Oct 12:18 UTC (BETA-READINESS section 25) |
 | H5b HTML on the default domain | checked: text/plain; custom domain needed for shared links and the admin |
 | H6 avatar-cleanup, secret, Vault | done 16 Oct 12:20 UTC (BETA-READINESS section 26) |
-| H7 admin | blocked by H5b: custom domain needed |
+| H7 admin | blocked by H5b: custom domain needed; options in docs/release/CUSTOM-DOMAIN.md (recommendation: the Supabase add-on, about $10/month on Pro, once the domain exists) |
 | H8 push sender | waits for EAS/APNs/FCM (B-2) |
 | H10 provider test C1 | passed 16 Oct 12:43 UTC on hosted and real Mux (BETA-READINESS section 27) |
+| H10 provider test C2w | C2w-a and C2w-b done 12:50 to 12:51 UTC (job e48cdb45 pending, plan: cancel U5); C2w-c (one live cancellation) needs Nemat to run scripts/provider-c2w-c.sh (the lead's shell may not write the secret store) |
 | H9 hosted auth smoke, H10 C2w/C2a/E1 to E3, H12 founder build | awaiting go-ahead |
 
 ## Not authorised in this effort (prepared only)
