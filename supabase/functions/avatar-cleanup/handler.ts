@@ -5,21 +5,16 @@
 // this function removes them through the Storage API with the service role.
 // Called by pg_cron through pg_net (public.run_avatar_cleanup) with the key stored in Vault as
 // avatar_cleanup_key; the same value is this function's AVATAR_CLEANUP_KEY secret. No user JWT.
-import { json, timingSafeEqual } from "../_shared/mux.ts";
+import { bearerMatches } from "../_shared/client.ts";
+import { json } from "../_shared/mux.ts";
 import { adminClient } from "../_shared/supabase.ts";
 
 const BATCH = 100;
 const BUCKET = "avatars";
 
-function authorized(header: string, key: string | undefined): boolean {
-  if (!key) return false;
-  const enc = new TextEncoder();
-  return timingSafeEqual(enc.encode(header), enc.encode(`Bearer ${key}`));
-}
-
 export async function handleAvatarCleanup(req: Request): Promise<Response> {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
-  if (!authorized(req.headers.get("Authorization") ?? "", Deno.env.get("AVATAR_CLEANUP_KEY"))) return json({ error: "unauthorized" }, 401);
+  if (!bearerMatches(req.headers.get("Authorization"), Deno.env.get("AVATAR_CLEANUP_KEY"))) return json({ error: "unauthorized" }, 401);
 
   const admin = adminClient();
   const { data, error } = await admin.rpc("avatar_cleanup_due", { p_limit: BATCH });
