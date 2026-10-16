@@ -10,6 +10,7 @@ import { deleteAccount } from '@/lib/content';
 import { useSession } from '@/lib/session';
 import { normaliseOtp, OTP_LENGTH } from '@/lib/validation';
 import { Button, Header, Lead, Title } from '@/ui/components';
+import { useSignOutWarning } from '@/ui/SignOutWarning';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
 
 const BOX_W = 46;
@@ -17,7 +18,8 @@ const BOX_W = 46;
 export default function ConfirmEmailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { state, signOut } = useSession();
+  const { state } = useSession();
+  const signOutWarning = useSignOutWarning();
   const email = state?.email ?? '';
   const [code, setCode] = useState('');
   const [codeFailed, setCodeFailed] = useState(false);
@@ -41,8 +43,10 @@ export default function ConfirmEmailScreen() {
         setCodeFailed(true);
         return;
       }
+      // P9: asked once the code is confirmed and before anything is deleted, so Cancel really cancels.
+      if (!(await signOutWarning.confirm())) return;
       await deleteAccount();
-      await signOut();
+      await signOutWarning.signOut();
     } catch (e) {
       console.error('delete account failed', e);
     } finally {
@@ -105,6 +109,7 @@ export default function ConfirmEmailScreen() {
         </Pressable>
         <Button title="Cancel" variant="text" onPress={() => router.back()} style={{ marginTop: 6 }} textStyle={{ fontSize: 16, fontWeight: '500' }} />
       </View>
+      {signOutWarning.sheet}
     </KeyboardAvoidingView>
   );
 }

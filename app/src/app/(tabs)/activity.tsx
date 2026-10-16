@@ -15,9 +15,11 @@ import { Spinner } from '@/ui/HomeStates';
 import { ActivityTabIcon, HeartIcon, PlacePinIcon, PlayIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 export default function ActivityTab() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<ActivityList | null>(null);
   const [followedBack, setFollowedBack] = useState<Set<string>>(new Set());
@@ -83,7 +85,7 @@ export default function ActivityTab() {
             <Text style={s.emptyText}>When people reply to your responses, comment, or follow you, you&apos;ll see it here.</Text>
             {tonight ? (
               <>
-                <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/record/[promptId]', params: { promptId: tonight.id } })} style={({ pressed }) => [s.tonightButton, pressed && { opacity: 0.8 }]}>
+                <Pressable accessibilityRole="button" onPress={() => openRecord.open({ pathname: '/record/[promptId]', params: { promptId: tonight.id } })} style={({ pressed }) => [s.tonightButton, pressed && { opacity: 0.8 }]}>
                   <RecordDotIcon />
                   <Text style={s.tonightText}>Respond to tonight&apos;s prompt</Text>
                 </Pressable>

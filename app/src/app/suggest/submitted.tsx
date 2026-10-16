@@ -9,9 +9,11 @@ import { getSuggestion, type Suggestion } from '@/lib/content';
 import { Button } from '@/ui/components';
 import { CheckIcon, PlacePinIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 export default function SuggestSubmittedScreen() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [sg, setSg] = useState<Suggestion | null>(null);
@@ -44,7 +46,7 @@ export default function SuggestSubmittedScreen() {
         </View>
       ) : null}
       <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}>
-        <Pressable accessibilityRole="button" disabled={!sg} onPress={() => sg && router.replace({ pathname: '/record/[promptId]', params: { promptId: 'draft', draftFor: sg.id } })} style={({ pressed }) => [s.recordButton, pressed && { opacity: 0.7 }]}>
+        <Pressable accessibilityRole="button" disabled={!sg} onPress={() => sg && openRecord.open({ pathname: '/record/[promptId]', params: { promptId: 'draft', draftFor: sg.id } }, 'replace')} style={({ pressed }) => [s.recordButton, pressed && { opacity: 0.7 }]}>
           <RecordDotIcon color={colors.text} />
           <Text style={s.recordText}>Record the first response</Text>
         </Pressable>

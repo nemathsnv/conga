@@ -13,9 +13,11 @@ import { Spinner } from '@/ui/HomeStates';
 import { GearIcon } from '@/ui/Icons';
 import { ProfileBody, useProfile } from '@/ui/ProfileView';
 import { colors } from '@/ui/theme';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 export default function MeTab() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const { profile, responses, reload } = useProfile({});
 
@@ -29,7 +31,7 @@ export default function MeTab() {
     try {
       const prompts = await openPrompts();
       const tonight = prompts[0];
-      if (tonight) router.push({ pathname: '/record/[promptId]', params: { promptId: tonight.id } });
+      if (tonight) openRecord.open({ pathname: '/record/[promptId]', params: { promptId: tonight.id } });
     } catch (e) {
       console.error('open_prompts failed', e);
     }

@@ -2,38 +2,24 @@
 // Community guidelines and Help and feedback need Nemat's document and address
 // (docs/BLOCKERS.md, Gate 5 items). Those rows are drawn and inactive until then.
 import { useRouter } from 'expo-router';
-import { useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSession } from '@/lib/session';
-import { ActionSheet } from '@/ui/ActionSheet';
 import { ActivityTabIcon, ChevronLeft, ChevronRightIcon, PersonIcon, PlacePinIcon, PlusIcon } from '@/ui/Icons';
+import { useSignOutWarning } from '@/ui/SignOutWarning';
 import { colors, fontFamily, type } from '@/ui/theme';
-import { loadPendingPost } from '@/video/pendingPost';
-import { usePosting } from '@/video/posting';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, state, signOut } = useSession();
-  const posting = usePosting();
-  const [signOutAsk, setSignOutAsk] = useState<number | null>(null);
+  const { state } = useSession();
+  const signOutWarning = useSignOutWarning();
 
+  // LV-SignOut, revised (P9): the warning appears only with a recording waiting.
   const onSignOut = async () => {
-    // Only this member's own unposted recording counts.
-    const pending = await loadPendingPost(session?.user.id ?? null);
-    if (pending) {
-      setSignOutAsk(1);
-      return;
-    }
-    await signOut();
-  };
-  const signOutAnyway = async () => {
-    // Stops the upload if one is running, then deletes the recording from this phone.
-    await posting.deleteUnposted();
-    setSignOutAsk(null);
-    await signOut();
+    if (await signOutWarning.confirm()) await signOutWarning.signOut();
   };
 
   const row = (label: string, opts: { value?: string | null; icon?: ReactNode; iconColor?: string; onPress?: () => void; inset?: boolean }) => (
@@ -94,15 +80,7 @@ export default function SettingsScreen() {
         </Pressable>
       </ScrollView>
 
-      {/* Board LV-SignOut */}
-      <Modal visible={signOutAsk !== null} transparent animationType="fade" onRequestClose={() => setSignOutAsk(null)}>
-        <ActionSheet
-          title="Sign out?"
-          lines={[`You have ${signOutAsk ?? 1} recording that hasn't posted. Signing out deletes it from this phone.`]}
-          actions={[{ label: 'Sign out anyway', destructive: true, onPress: () => void signOutAnyway() }]}
-          onCancel={() => setSignOutAsk(null)}
-        />
-      </Modal>
+      {signOutWarning.sheet}
     </View>
   );
 }

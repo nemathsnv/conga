@@ -16,9 +16,11 @@ import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { formatTimer } from '@/video/limits';
 import { thumbnailUrl } from '@/video/playback';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 export default function RepliesScreen() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -43,7 +45,7 @@ export default function RepliesScreen() {
 
   const record = () => {
     if (!root) return;
-    router.replace({ pathname: '/record/[promptId]', params: { promptId: root.prompt_id, replyTo: root.id } });
+    openRecord.open({ pathname: '/record/[promptId]', params: { promptId: root.prompt_id, replyTo: root.id } }, 'replace');
   };
 
   return (

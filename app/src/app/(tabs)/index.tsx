@@ -3,7 +3,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View, useWindowDimensions, type ViewToken } from 'react-native';
+import { FlatList, Modal, StyleSheet, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInfo } from '@/ui/safeArea';
 
 import { followSuggestions, followUser, followingFeed, getNotificationState, homeFeed, type Conversation, type FollowSuggestion } from '@/lib/content';
@@ -11,7 +11,9 @@ import { track } from '@/lib/analytics';
 import { useOnline } from '@/lib/connectivity';
 import { shouldAsk } from '@/lib/notificationAsk';
 import { takeFeedDirty } from '@/ui/feedStore';
+import { ActionSheet } from '@/ui/ActionSheet';
 import { ConversationView } from '@/ui/ConversationView';
+import { DISCARD_SHEET, REACHED_SHORTCUT_SHEET, discardOutcome } from '@/ui/failedPost';
 import { FeedHeader } from '@/ui/dark';
 import { EmptyPrompt, FollowingEmpty, HomeLoading, OfflineBanner, PostingBanner } from '@/ui/HomeStates';
 import { usePosting } from '@/video/posting';
@@ -31,6 +33,12 @@ export default function HomeTab() {
   const [suggestions, setSuggestions] = useState<FollowSuggestion[]>([]);
   const seen = useRef<string[]>([]);
   const loading = useRef(false);
+  // P4 (Discard confirmation) and P6 (it already reached Shortcut). While a Discard runs ('running')
+  // the banner's buttons wait; once it has answered ('done') the posting state tells the outcome,
+  // for that recording only (a later recording that processes is not P6).
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [discard, setDiscard] = useState<{ status: 'idle' | 'running' | 'done'; recordingId: string | null }>({ status: 'idle', recordingId: null });
+  const reachedShortcut = discard.status === 'done' && discardOutcome(posting.state) === 'reached_shortcut' && posting.state.kind === 'processing' && posting.state.post.recording.id === discard.recordingId;
   const viewing = useRef<{ id: string; promptId: string; position: number; since: number; durationMs: number } | null>(null);
   const endView = useCallback(() => {
     const v = viewing.current;
@@ -39,6 +47,16 @@ export default function HomeTab() {
     const watchMs = Date.now() - v.since;
     track('response_viewed', { response_id: v.id, prompt_id: v.promptId, position: v.position, surface: 'home', watch_ms: watchMs, completed: v.durationMs > 0 && watchMs >= v.durationMs });
   }, []);
+
+  const runDiscard = () => {
+    setConfirmDiscard(false);
+    const recordingId = posting.state.kind === 'failed' ? posting.state.post.recording.id : null;
+    setDiscard({ status: 'running', recordingId });
+    posting
+      .discardFailed()
+      .catch((e) => console.error('discard failed', e))
+      .then(() => setDiscard({ status: 'done', recordingId }));
+  };
 
   const load = useCallback(async (which: Tab, reset: boolean) => {
     if (loading.current) return;
@@ -170,7 +188,22 @@ export default function HomeTab() {
       )}
       <FeedHeader tab={tab} onTab={switchTab} />
       {/* A-Offline takes the banner slot unless a post is in flight or waiting for Retry; a post that waits for the connection is A-Offline's own case. */}
-      {(!online && (posting.state.kind === 'idle' || posting.state.kind === 'live')) || posting.state.kind === 'waiting' ? <OfflineBanner topInset={top} /> : <PostingBanner state={posting.state} onRetry={() => void posting.retry()} topInset={top} />}
+      {(!online && (posting.state.kind === 'idle' || posting.state.kind === 'live')) || posting.state.kind === 'waiting' ? (
+        <OfflineBanner topInset={top} kind={posting.state.kind === 'waiting' ? posting.state.post.kind : null} />
+      ) : (
+        <PostingBanner state={posting.state} onRetry={() => {
+          setDiscard({ status: 'idle', recordingId: null });
+          void posting.retry();
+        }} onDiscard={() => setConfirmDiscard(true)} busy={discard.status === 'running'} topInset={top} />
+      )}
+      {/* P4 */}
+      <Modal visible={confirmDiscard} transparent animationType="fade" onRequestClose={() => setConfirmDiscard(false)}>
+        <ActionSheet title={DISCARD_SHEET.title} lines={[DISCARD_SHEET.line]} actions={[{ label: DISCARD_SHEET.discard, destructive: true, onPress: runDiscard }]} cancelLabel={DISCARD_SHEET.cancel} onCancel={() => setConfirmDiscard(false)} />
+      </Modal>
+      {/* P6 */}
+      <Modal visible={reachedShortcut} transparent animationType="fade" onRequestClose={() => setDiscard({ status: 'idle', recordingId: null })}>
+        <ActionSheet title={REACHED_SHORTCUT_SHEET.title} lines={[REACHED_SHORTCUT_SHEET.line]} actions={[]} cancelLabel={REACHED_SHORTCUT_SHEET.ok} onCancel={() => setDiscard({ status: 'idle', recordingId: null })} />
+      </Modal>
     </View>
   );
 }

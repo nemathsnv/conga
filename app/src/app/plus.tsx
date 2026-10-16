@@ -11,6 +11,7 @@ import { responsesLabel } from '@/lib/format';
 import { Separator } from '@/ui/components';
 import { ChevronRightIcon, PlacePinIcon, PromptBubbleIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 function isTonight(p: PromptCard): boolean {
   return !!p.featured_on && p.featured_on === new Date().toISOString().slice(0, 10);
@@ -18,6 +19,7 @@ function isTonight(p: PromptCard): boolean {
 
 export default function PlusSheet() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const [prompts, setPrompts] = useState<PromptCard[] | null>(null);
   const [inReview, setInReview] = useState<number | null>(null);
@@ -28,7 +30,7 @@ export default function PlusSheet() {
   }, []);
 
   const respond = (p: PromptCard) => {
-    router.replace({ pathname: '/record/[promptId]', params: { promptId: p.id } });
+    openRecord.open({ pathname: '/record/[promptId]', params: { promptId: p.id } }, 'replace');
   };
 
   return (

@@ -22,6 +22,7 @@ import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { thumbnailUrl } from '@/video/playback';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 type Page = { kind: 'response'; response: ResponseCard } | { kind: 'end' } | { kind: 'empty' } | { kind: 'unavailable' };
 
@@ -248,6 +249,7 @@ export default function PlayerScreen() {
 
 function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEnd, onNext }: { response: ResponseCard; prompt: PromptCard | null; active: boolean; chrome: boolean; next: ResponseCard | null; onProgress: (f: number) => void; onEnd: () => void; onNext: () => void }) {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const [following, setFollowing] = useState(response.following_author);
   const [liked, setLiked] = useState(response.liked);
@@ -336,11 +338,11 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
         {response.caption ? <Text style={s.caption}>{response.caption}</Text> : null}
       </View>
       <View style={[s.buttons, { bottom: 844 - 680 - 36 + Math.max(insets.bottom - 34, 0) }]}>
-        <GlassPillButton label={`Reply to ${firstName}`} onPress={() => prompt && router.push({ pathname: '/record/[promptId]', params: { promptId: prompt.id, replyTo: response.id } })}>
+        <GlassPillButton label={`Reply to ${firstName}`} onPress={() => prompt && openRecord.open({ pathname: '/record/[promptId]', params: { promptId: prompt.id, replyTo: response.id } })}>
           <VideoReplyIcon size={17} />
           <Text style={pillText}>Reply to {firstName}</Text>
         </GlassPillButton>
-        <GlassPillButton label="Respond" onPress={() => prompt && router.push({ pathname: '/record/[promptId]', params: { promptId: prompt.id } })}>
+        <GlassPillButton label="Respond" onPress={() => prompt && openRecord.open({ pathname: '/record/[promptId]', params: { promptId: prompt.id } })}>
           <RecordDotIcon />
           <Text style={pillText}>Respond</Text>
         </GlassPillButton>
@@ -362,7 +364,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
 }
 
 function EndCard({ prompt, total, faces, background, next, onWatchAgain, onNextConversation }: { prompt: PromptCard | null; total: number; faces: { id: string; photo_path: string | null }[]; background: string | null; next: Conversation | null; onWatchAgain: () => void; onNextConversation: () => void }) {
-  const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const lift = Math.max(insets.bottom - 34, 0);
   const nextThumb = next?.response?.playback_id ? thumbnailUrl(next.response.playback_id, { width: 80, height: 96 }) : null;
@@ -387,7 +389,7 @@ function EndCard({ prompt, total, faces, background, next, onWatchAgain, onNextC
         </View>
         <Text style={s.endTitle}>You&apos;ve seen all {total} responses.</Text>
         <Text style={s.endSub}>Add yours to the conversation.</Text>
-        <Pressable accessibilityRole="button" onPress={() => prompt && router.push({ pathname: '/record/[promptId]', params: { promptId: prompt.id } })} style={({ pressed }) => [s.endButton, pressed && { opacity: 0.8 }]}>
+        <Pressable accessibilityRole="button" onPress={() => prompt && openRecord.open({ pathname: '/record/[promptId]', params: { promptId: prompt.id } })} style={({ pressed }) => [s.endButton, pressed && { opacity: 0.8 }]}>
           <RecordDotIcon color={colors.black} />
           <Text style={s.endButtonText}>Add your response</Text>
         </Pressable>
