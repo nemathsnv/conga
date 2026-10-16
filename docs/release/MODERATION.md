@@ -223,31 +223,55 @@ Rollback: `supabase/rollback/20261016000301_admin_moderators.down.sql` and
 `20261016000300_response_slot_moderation.down.sql` (copy to a forward migration). Undeploy the
 function first: without its database side it answers 403 to everyone.
 
-## 7. Not covered
+## 7. What was verified, and what was not
 
-- **Not tested on the hosted project, a real device or a real email provider.** Local only.
-- **The browser UI was not driven.** Handlers, rendering, the sign-in script's syntax and the
-  server side were tested; the page was not clicked through in a browser (see section 8).
+Run on an isolated local stack (never the founder's, never hosted); exact commands are in the
+hand-off report of this work.
+
+| Check | Result |
+|---|---|
+| All migrations from scratch on a clean local database, both new ones included | applied |
+| `supabase test db`: the 13 existing files plus 0030, 0031, 0032 | 16 files, 1403 tests, all pass |
+| 0030 against the old behaviour (rollback applied) | fails where the bug was: a second response after a removal, restore refused with a raw unique violation, upload claimed by the refused post |
+| Slot migration's guard: a member with a removed and a processing response on one prompt | migration stops with the list and changes nothing (rolled back transaction) |
+| Both rollbacks, then both forward migrations again | clean |
+| Deno `admin_authz_test.ts` (mocked Auth and database) | 18 tests pass |
+| Deno `admin_integration_test.ts` (real Auth sessions, real `mod_*` functions, handler in-process) | 7 tests pass |
+| Deno `admin_http_test.ts` (the function served by the local Edge runtime, through the gateway) | 4 tests pass |
+| The page in a real browser (the app's built-in browser pane) against the local function: email code sign-in, report queue, open a report, remove with confirmation, queue and account views, sign out clears the session | worked |
+| `scripts/moderate.sh add-moderator`, `deactivate-moderator`, `moderators` (by id and username; hostile input refused) | worked on the local stack |
+
+Not covered or not run:
+
+- **The hosted project, a real device, a real email provider and real Mux.** Nothing was deployed
+  or pushed. The confirmation dialogs were stubbed in the browser run (the pane cannot drive
+  native dialogs), so what was exercised is that the form posts after the confirmation returns
+  true and that the confirmation text is the one the form carries.
+- **Safari and other browsers** (the inline HLS player in particular); the thumbnails and the
+  player were shown against fake playback ids, so they showed as empty boxes.
 - No scheduled alerts: nothing tells a moderator that a report is waiting. Check the queues.
 - No pagination beyond the oldest 100 per queue; no search of content; no filtering.
 - No add/remove of moderators or listing them in the admin (CLI only, by design).
-- No re-run of a video through Mux: the admin never calls Mux. Restoring and removing queue the
-  Mux clean-up as before (`mux-cleanup`), which stays off until Nemat switches it on
-  (`supabase/README.md`).
+- The admin never calls Mux. Removing and restoring queue the Mux clean-up as before
+  (`mux-cleanup`), which stays off until Nemat switches it on (`supabase/README.md`).
 - Block management, deleting an account on someone's behalf and any change of a person's
   profile are not available; they are not part of the moderator tools in SPEC.md Section 17.
-- Unchanged behaviour noted in passing: `report_item` accepts a report on any existing video,
-  comment or profile id, including content the reporter cannot see; this is the privacy audit's
-  (Agent C) to judge, not changed here.
 - No rate limit on the admin; access is limited to named moderators.
+- The local gateway adds `Access-Control-Allow-Origin: *` to function responses. It does not
+  matter here (nothing is authenticated by the browser's own credentials, so another site cannot
+  make a request that carries a token), and the function sets no CORS header itself.
+- Noticed in passing, not changed: `report_item` accepts a report on any existing video, comment or
+  profile id, including content the reporter cannot see (the privacy audit's to judge); and
+  `like_video` and `follow_user` have no suspension check of their own, relying on the API gate
+  (`pre_request`), which every request from the app and the Edge Functions passes.
 
 ## 8. Remaining rollout requirements
 
 1. Nemat's go-ahead to apply the two migrations and deploy `admin`; check the HTML-on-Supabase
    point in section 6 on the hosted project and decide on a custom domain if needed.
 2. Make the first moderator an email-code account (see section 3).
-3. Walk the admin once in a real browser against the local stack, and once on hosted with a test
-   report before the first outside tester.
+3. Walk the admin once on the hosted project with a test report before the first outside tester
+   (and in Safari, for the inline player).
 4. Decide whether the app should say something to a member whose recording was refused with
    `already_responded` (P2 awaits approval; section 5).
 5. The CLI remains available for emergencies; the admin does not replace the SQL editor for

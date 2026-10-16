@@ -33,10 +33,10 @@ const deps: Deps = {
 };
 const handler = createHandler(deps);
 
-async function http(path: string, opts: { method?: string; key?: string; token?: string; body?: unknown } = {}) {
+async function http(path: string, opts: { method?: string; key?: string; token?: string; body?: unknown; prefer?: string } = {}) {
   const res = await fetch(`${API}${path}`, {
     method: opts.method ?? "GET",
-    headers: { apikey: opts.key ?? SERVICE, Authorization: `Bearer ${opts.token ?? opts.key ?? SERVICE}`, "Content-Type": "application/json" },
+    headers: { apikey: opts.key ?? SERVICE, Authorization: `Bearer ${opts.token ?? opts.key ?? SERVICE}`, "Content-Type": "application/json", ...(opts.prefer ? { Prefer: opts.prefer } : {}) },
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
   const text = await res.text();
@@ -96,12 +96,12 @@ const live = (prompt: string, author: string, tag: string, caption: string) => (
 });
 const rows = await http("/rest/v1/responses?select=id,mux_upload_id", {
   method: "POST",
-  body: [live(p1, maya.id, "Maya1", "Maya's response"), live(p1, adam.id, "Adam1", "Adam's response"), live(p2, lena.id, "Lena2", "Lena's response")],
+  body: [live(p1, maya.id, "Maya1", "Maya response text"), live(p1, adam.id, "Adam1", "Adam response text"), live(p2, lena.id, "Lena2", "Lena response text")],
 });
 assertEquals(rows.status, 201, "responses");
 const rid = async (tag: string) => ((await http(`/rest/v1/responses?mux_upload_id=eq.up${tag}${run}&select=id`)).json as { id: string }[])[0].id;
 const mayaVideo = await rid("Maya1"), adamVideo = await rid("Adam1"), lenaVideo = await rid("Lena2");
-const cm = await http("/rest/v1/comments?select=id", { method: "POST", body: { response_id: adamVideo, author_id: maya.id, body: `Rude comment <b>${run}</b>` } });
+const cm = await http("/rest/v1/comments?select=id", { method: "POST", prefer: "return=representation", body: { response_id: adamVideo, author_id: maya.id, body: `Rude comment <b>${run}</b>` } });
 assertEquals(cm.status, 201, "comment");
 const mayaComment = ((cm.json as { id: string }[])[0]).id;
 
@@ -160,11 +160,11 @@ Deno.test("reports: the queue, the report with its reporter, remove, and the rem
   assert(queue.includes(`@${maya.username}`), "the queue names the author");
   assert(queue.includes("Spam or scam") && queue.includes("Harassment or bullying"), "with the reasons as the app words them");
   assert(queue.includes("Rude comment &lt;b&gt;"), "comment text is escaped, not rendered");
-  const reportId = ((await svc.rpc("mod_reports_queue", {})).data as { id: string; kind: string }[]).find((r) => r.kind === "video")!.id;
+  const reportId = ((await svc.rpc("mod_reports_queue", {})).data as { id: string; kind: string; target_id: string }[]).find((r) => r.target_id === mayaVideo)!.id;
 
   const detail = await (await call("GET", `/v/report/${reportId}`, { token: mod.token })).text();
   assert(detail.includes(`@${lena.username}`), "the report shows its reporter");
-  assert(detail.includes("Maya's response"), "and the reported response");
+  assert(detail.includes("Maya response text"), "and the reported response");
   assert(detail.includes(`https://stream.mux.com/pbMaya1${run}.m3u8`), "with its stream, while it is live");
   assert(detail.includes("Remove this response"), "and the action");
 
@@ -238,7 +238,7 @@ Deno.test("accounts: lookup, restrict, suspend, restore", async () => {
   const found = await (await call("GET", `/v/accounts?q=${encodeURIComponent(`@${adam.username.slice(0, 8)}`)}`, { token: mod.token })).text();
   assert(found.includes(`@${adam.username}`), "found by the beginning of a username");
   const page = await (await call("GET", `/v/account/${adam.id}`, { token: mod.token })).text();
-  assert(page.includes("Adam's response") && page.includes("Moderation log"), "the account page lists content and the log");
+  assert(page.includes("Adam response text") && page.includes("Moderation log"), "the account page lists content and the log");
   assert(!page.includes("@example.com"), "and never an email address");
 
   const past = await act(mod.token, "restrict", { account: adam.id, until: "2001-01-01", reason: "x" });
@@ -263,7 +263,7 @@ Deno.test("accounts: lookup, restrict, suspend, restore", async () => {
 });
 
 Deno.test("prompt suggestions: approve with keep-name false, decline with a fixed reason", async () => {
-  const ins = await http("/rest/v1/suggestions?select=id", { method: "POST", body: [
+  const ins = await http("/rest/v1/suggestions?select=id", { method: "POST", prefer: "return=representation", body: [
     { author_id: lena.id, text: `Suggestion A ${run}` }, { author_id: adam.id, text: `Suggestion B ${run}` },
   ] });
   assertEquals(ins.status, 201, "suggestions");

@@ -106,7 +106,7 @@ document.addEventListener('submit',function(e){
       save({access_token:j.access_token,refresh_token:j.refresh_token});f.reset();
       return api('/me').then(function(r){
         if(r.status!==200){signOut(true);say('This account does not have access to the admin.',true);return}
-        return r.json().then(function(me){$('who').textContent=me.identity||'';say('');if(!location.hash)location.hash='#/reports';return route()})})
+        return r.json().then(function(me){$('who').textContent=me.identity||'';say('');if(!location.hash){location.hash='#/reports';return}return route()})})
     }).catch(function(){say('Could not reach sign-in.',true)});return}
   if(f.hasAttribute('data-search')){e.preventDefault();location.hash='#/accounts?q='+encodeURIComponent(f.elements.q.value.trim());return}
   var action=f.getAttribute('data-action');if(!action)return;e.preventDefault();

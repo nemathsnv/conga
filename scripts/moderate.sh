@@ -57,8 +57,8 @@ case "$cmd" in
   suggestions)     q "select jsonb_pretty(public.mod_suggestions_queue())" ;;
   approve)         q "select public.mod_approve_suggestion('$1', '$(lit "$MOD")', ${2:-true}, $(note "${3:-}"))" ;;
   decline)         q "select public.mod_decline_suggestion('$1', '$2', '$(lit "$MOD")', $(note "${3:-}"))" ;;
-  add-moderator)        q "select jsonb_pretty(public.mod_add_moderator($(acct "$1"), '$(lit "$MOD")'))" ;;
-  deactivate-moderator) q "select public.mod_deactivate_moderator($(acct "$1"))" ;;
+  add-moderator)        A="$(acct "${1:-}")" || exit 1; q "select jsonb_pretty(public.mod_add_moderator($A, '$(lit "$MOD")'))" ;;
+  deactivate-moderator) A="$(acct "${1:-}")" || exit 1; q "select public.mod_deactivate_moderator($A)" ;;
   moderators)           q "select jsonb_pretty(public.mod_list_moderators())" ;;
   *) sed -n '2,26p' "$0"; exit 1 ;;
 esac
