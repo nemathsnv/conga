@@ -77,3 +77,42 @@ Nothing in the product flows above crashed.
 - **A true cold start from a link.** With the development build, a link that launches an ended app opens the Expo launcher first. Rows 19 and 21 need a Release build to be conclusive.
 - **Notification taps, VoiceOver and Android.** These are the other "walk" rows of UI-REVIEW, all marked "on devices" or "with VoiceOver".
 - **The sign-out cleanup's push-token and analytics steps.** No push token is registered on the simulator without an EAS project id, and the analytics flush wasn't measured. Only the session removal was checked.
+
+## Re-walk after Agent E's fixes (16 Oct 2026, evening)
+
+**Setup.** Code at `a181f0c`. No native change since the first walk (no package, config, plugin or
+module change), so the same simulator build was used, with a fresh Metro bundle. Stack `shortcut-b`
+was rebuilt from a new copy of `supabase/` (fresh database, seed applied; same ports) and stopped
+at the end. The account was signed up again the same way (email code from Mailpit, invite link).
+
+| Check | Seen | Result | Shot |
+| --- | --- | --- | --- |
+| `r/<response id>` (Sofia's response) | Response player, "Be honest about the place you live.", **1 of 4** on Sofia, Reply to Sofia, Respond | **B1 fixed** | [20](screenshots/20-r-link-response.png) |
+| `r/<video reply id>` (Sofia's reply to Adam) | Video reply player, "Replying to Adam Novak" card with his caption, "2 of 3", Adam's response, Reply to Sofia | works | [21](screenshots/21-r-link-reply.png) |
+| `p/<prompt id>` | Response player at **1 of 4** (Maya), captured 1.5 s after opening | works. **M1 from the first walk was my error**: I captured 7 s after opening, and by then Maya's 3.6 s clip had ended and the player had moved on to Adam ("2 of 4"). | [22](screenshots/22-p-link-first.png) |
+| `u/adamnovak` at launch, then Back | App ended; the link opened the development launcher; after the project loaded, Adam's profile with nothing under it. Back (two taps; the Replies tab responded to a tap) did nothing | **B2 not fixed** | [23](screenshots/23-back-still-stuck.png) |
+| `u/sofiamarin` from Home (app running), then Back | Back did nothing (two taps). This worked in the first walk. | **regression** | [25](screenshots/25-warm-back-stuck.png) |
+| `shortcut://nothing-here` from Home | Stayed on Home; no blank screen | **B3 fixed** (from Home) | [24](screenshots/24-unknown-link-home.png) |
+| `shortcut://nothing-here` from the stuck profile (row 4) | Nothing changed; the profile stayed | not conclusive (the screen was already stuck) | — |
+| A-Camera icons (camera revoked) | Centre icon: crossed-out video camera; flip control: two circular arrows | **matches A-Camera.jpg**. One small difference: the app draws the flip control dimmed (it's disabled there), the board draws it white. | [26](screenshots/26-a-camera.png) |
+| A-Mic icons (mic revoked) | Card icon: crossed-out microphone; flip: circular arrows | **matches A-Mic.jpg** | [27](screenshots/27-a-mic.png) |
+| R-Record flip icon (both allowed) | Circular arrows | **matches R-Record.jpg** | [28](screenshots/28-r-record-flip-icon.png) |
+
+**Why Back is stuck (B2).** A temporary log in `useGoBack`, not committed and reverted, printed this
+on the warm profile's Back:
+
+```
+goBack routeCount 1 ["__root"] canGoBack true
+```
+
+`useRootNavigationState().routes` is always the single wrapper route `__root`; the app's stack is
+nested inside it (`routes[0].state.routes`). So `hasScreenBeneath(routeCount)` is false on every
+screen, and Back always takes the `router.replace('/')` branch. From the profile, that call didn't
+visibly navigate (the profile stayed). Two things to fix in `app/src/ui/navigation.ts` /
+`hasScreenBeneath` (not my files):
+
+1. Count the routes of the nested stack, not the root wrapper.
+2. Find out why `replace('/')` from a pushed screen doesn't land on Home. `router.dismissTo('/')`
+   or `router.navigate('/(tabs)')` may be what's wanted; this needs checking.
+
+Test it with a link at launch in a Release build too, where there's no development launcher.
