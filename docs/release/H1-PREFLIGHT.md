@@ -1,7 +1,12 @@
 # H1: read-only hosted preflight (16 Oct 2026)
 
-Step H1 of `RELEASE-CHECKLIST.md` Part 1B, as a paste-and-report package for Nemat. Everything
-here only reads. Nothing is deployed or changed by it. Run the SQL blocks in the Supabase SQL
+Step H1 of `RELEASE-CHECKLIST.md` Part 1B. **One command does all of it:** from a folder linked to
+the project (`supabase link --project-ref picvoavfxnajfjkqawju`, which writes only local files),
+run `scripts/h1-preflight.sh`; it runs blocks 1 to 8 as single read-only SELECTs through
+`supabase db query --linked`, compares each with the expected value below, prints PASS/FAIL per
+block and writes `docs/release/h1-results-<timestamp>.txt` with no key, token, email or name in
+it (tested on a local 17-migration stack on 16 Oct). The blocks below are the same checks for the
+SQL editor, if you prefer to run them by hand. Everything here only reads. Nothing is deployed or changed by it. Run the SQL blocks in the Supabase SQL
 editor of project `picvoavfxnajfjkqawju` (it runs as `postgres`), each block as written: they
 open a `read only` transaction and roll it back. Paste each result back; the "expected" lines
 say what passes. **Stop at the first block that does not match** and report it; the H-sequence
