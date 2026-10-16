@@ -124,4 +124,5 @@ $function$;
 
 drop function public.avatar_write_allowed();
 drop function public.session_is_current();
+drop function public.session_started_at();
 drop function public.jwt_signed_in_at();

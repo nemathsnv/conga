@@ -4,7 +4,7 @@
 -- a current, active account. Sessions are rows in auth.sessions, as Auth writes them; the token's
 -- session_id and amr are what Auth puts in every access token.
 begin;
-select plan(43);
+select plan(46);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
   ('a1111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'lena@example.com', '{}', '{}', now(), now()),
@@ -46,8 +46,9 @@ select is(has_function_privilege('authenticated', 'public.session_is_current()',
 select is(has_function_privilege('anon', 'public.jwt_signed_in_at()', 'execute'), false, 'jwt_signed_in_at is not callable by anon');
 select is(has_function_privilege('authenticated', 'public.avatar_write_allowed()', 'execute'), true, 'avatar_write_allowed is callable by members (Storage policies run as them)');
 select is(has_function_privilege('anon', 'public.avatar_write_allowed()', 'execute'), false, 'but not by anon');
-select is((select count(*)::int from pg_proc where proname in ('session_is_current', 'jwt_signed_in_at', 'avatar_write_allowed') and prosecdef
-             and proconfig @> array['search_path=""'] and proowner = 'postgres'::regrole), 3, 'all three are SECURITY DEFINER, owned by postgres, with an empty search_path');
+select is((select count(*)::int from pg_proc where proname in ('session_is_current', 'jwt_signed_in_at', 'session_started_at', 'avatar_write_allowed') and prosecdef
+             and proconfig @> array['search_path=""'] and proowner = 'postgres'::regrole), 4, 'all four are SECURITY DEFINER, owned by postgres, with an empty search_path');
+select is(has_function_privilege('authenticated', 'public.session_started_at()', 'execute'), false, 'session_started_at is not callable by members');
 select ok(has_table_privilege('postgres', 'auth.sessions', 'select') and has_table_privilege('postgres', 'auth.sessions', 'delete'), 'postgres can read and delete auth.sessions');
 select is((select count(*)::int from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'avatars:%'
              and coalesce(with_check, '') like '%avatar_write_allowed%'), 2, 'both avatar write policies check avatar_write_allowed');
@@ -110,10 +111,18 @@ reset role;
 select ok((select deleted_at is not null from public.accounts where id = 'a1111111-1111-1111-1111-111111111111'), 'and does not cancel the deletion either');
 select is((select count(*)::int from public.mux_cleanup_jobs where owner_id = 'a1111111-1111-1111-1111-111111111111' and reason = 'account_restored'), 0, 'no playback restore was queued');
 
--- Signing in again: a new session, signed in after the deletion.
-insert into auth.sessions (id, user_id, created_at, updated_at) values ('51111111-0000-0000-0000-000000000003', 'a1111111-1111-1111-1111-111111111111', now(), now());
+-- Signing in again in the same second as the deletion: the session's own start time decides
+-- (amr has whole seconds only). A session that began just before the deletion does not restore.
+insert into auth.sessions (id, user_id, created_at, updated_at) values
+  ('51111111-0000-0000-0000-000000000004', 'a1111111-1111-1111-1111-111111111111', now() - interval '1 millisecond', now()),
+  ('51111111-0000-0000-0000-000000000003', 'a1111111-1111-1111-1111-111111111111', now() + interval '1 millisecond', now());
 set local role authenticated;
-select set_config('request.jwt.claims', format('{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated","session_id":"51111111-0000-0000-0000-000000000003","amr":[{"method":"otp","timestamp":%s}]}', extract(epoch from now())::bigint + 1), true);
+select set_config('request.jwt.claims', format('{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated","session_id":"51111111-0000-0000-0000-000000000004","amr":[{"method":"otp","timestamp":%s}]}', extract(epoch from now())::bigint), true);
+select is((public.get_onboarding_state())->>'has_profile', 'true', 'a session from a millisecond before the deletion reads its state');
+reset role;
+select ok((select deleted_at is not null from public.accounts where id = 'a1111111-1111-1111-1111-111111111111'), 'and does not restore');
+set local role authenticated;
+select set_config('request.jwt.claims', format('{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated","session_id":"51111111-0000-0000-0000-000000000003","amr":[{"method":"otp","timestamp":%s}]}', extract(epoch from now())::bigint), true);
 select is(pg_temp.gate('/rpc/get_onboarding_state'), 'allowed', 'the new session passes the gate');
 select is((public.get_onboarding_state())->>'has_profile', 'true', 'signing back in restores');
 reset role;

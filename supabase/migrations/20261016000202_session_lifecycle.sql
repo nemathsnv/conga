@@ -18,7 +18,7 @@
 -- Now:
 --   - delete_account needs a sign-in (the token's amr time, which a refresh keeps) from the last
 --     ten minutes, and ends every session of the account (auth.sessions; refresh tokens cascade).
---   - get_onboarding_state cancels a deletion only for a sign-in made after it.
+--   - get_onboarding_state cancels a deletion only for a session that began after it.
 --   - pre_request refuses a token whose session no longer exists ('session_revoked', 42501), so
 --     signing out everywhere, deleting the account and the purge take effect at once.
 --   - Avatar uploads need an account that is neither suspended nor deleted, on a current session.
@@ -62,7 +62,29 @@ begin
 end;
 $$;
 
+-- When this token's session began: auth.sessions.created_at (microseconds), else the amr time
+-- (whole seconds). Used to tell a sign-in after a deletion from one just before it, which can fall
+-- in the same second (the confirming sign-in, then Delete).
+create or replace function public.session_started_at()
+returns timestamptz
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_sid text := auth.jwt()->>'session_id';
+  v_at timestamptz;
+begin
+  if coalesce(v_sid, '') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' then
+    select s.created_at into v_at from auth.sessions s where s.id = v_sid::uuid and s.user_id = auth.uid();
+  end if;
+  return coalesce(v_at, public.jwt_signed_in_at());
+end;
+$$;
+
 revoke execute on function public.jwt_signed_in_at() from public, anon, authenticated;
+revoke execute on function public.session_started_at() from public, anon, authenticated;
 revoke execute on function public.session_is_current() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -148,9 +170,9 @@ begin
     insert into public.accounts (id) values (v_uid) returning * into v_account;
   end if;
   -- Signing back in during the window restores everything; a session from before the deletion
-  -- does not (its sign-in time is not after deleted_at).
+  -- does not (it began before deleted_at; deletion also ended it, so the API refuses it anyway).
   if v_account.deleted_at is not null and v_account.deleted_at > now() - interval '30 days'
-     and public.jwt_signed_in_at() > v_account.deleted_at then
+     and public.session_started_at() > v_account.deleted_at then
     update public.accounts set deleted_at = null where id = v_uid returning * into v_account;
     perform public.mux_sync_account_playback(v_uid, 'account_restored');
   end if;
