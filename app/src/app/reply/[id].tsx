@@ -15,13 +15,15 @@ import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } f
 import { Spinner } from '@/ui/HomeStates';
 import { ChevronLeft, HeartIcon, MoreIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { OrphanCard, ReplyCard } from '@/ui/ReplyCard';
+import { Unavailable } from '@/ui/Unavailable';
+import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 
 type Page = RoomReply & { context?: Video['context'] };
 
 export default function ReplyPlayerScreen() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -121,7 +123,7 @@ export default function ReplyPlayerScreen() {
         />
       )}
       <View style={[s.header, { top: insets.top + 3 }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={orphan ? 'Back' : 'Back to replies'} onPress={() => router.back()} style={s.back}>
+        <Pressable accessibilityRole="button" accessibilityLabel={orphan ? 'Back' : 'Back to video replies'} onPress={() => goBack()} style={s.back}>
           <ChevronLeft color={colors.white} />
         </Pressable>
         <Text style={s.headerTitle}>Video reply</Text>
@@ -147,6 +149,10 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
   const [likes, setLikes] = useState(reply.like_count);
   const [progress, setProgress] = useState(0);
   const [target, setTarget] = useState<Video | null>(null);
+  // A video that fails to load shows X-Unavailable with its Try again (SPEC.md Section 20).
+  const [failed, setFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const onFailed = useCallback(() => setFailed(true), []);
   const lift = Math.max(insets.bottom - 34, 0);
 
   // The card at the top: what this reply answers.
@@ -204,7 +210,7 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
 
   return (
     <View style={s.root}>
-      <VideoSurface playbackId={reply.playback_id} active={active} loop={false} onProgress={report} onEnd={onEnd} />
+      <VideoSurface playbackId={reply.playback_id} active={active && !failed} loop={false} onProgress={report} onEnd={onEnd} onFailed={onFailed} retryKey={retryKey} />
       <VideoGradients top={240} bottom={420} topAlpha={0.6} bottomAlpha={0.72} />
       <View style={[s.cardWrap, { top: insets.top + 57 }]}>
         {orphan ? (
@@ -220,7 +226,7 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
             sub={!replyToRoot && rootAuthor ? `In replies to ${rootAuthor.name}` : null}
             playbackId={target?.playback_id ?? null}
             onPress={openTarget}
-            label={target ? `Open ${target.author.name.split(' ')[0]}'s ${target.kind === 'reply' ? 'reply' : 'response'}` : undefined}
+            label={target ? `Open ${target.author.name.split(' ')[0]}'s ${target.kind === 'reply' ? 'video reply' : 'response'}` : undefined}
           />
         )}
       </View>
@@ -271,12 +277,23 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
       {orphan ? (
         <Text style={[s.footer, { bottom: Math.max(insets.bottom, 10) + 26 }]}>From {firstName}&apos;s profile</Text>
       ) : next ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Next reply: ${next.author.name}`} onPress={onNext} style={[s.next, { bottom: Math.max(insets.bottom, 10) + 26 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Next video reply: ${next.author.name}`} onPress={onNext} style={[s.next, { bottom: Math.max(insets.bottom, 10) + 26 }]}>
           <Avatar uri={avatarUrl(next.author.photo_path)} size={22} />
           <Text style={s.nextText}>
             Next reply · <Text style={{ fontWeight: '600', color: colors.white }}>{next.author.name}</Text>
           </Text>
         </Pressable>
+      ) : null}
+      {failed ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Unavailable
+            onNext={next ? onNext : undefined}
+            onRetry={() => {
+              setFailed(false);
+              setRetryKey((k) => k + 1);
+            }}
+          />
+        </View>
       ) : null}
     </View>
   );

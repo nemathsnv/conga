@@ -22,11 +22,11 @@ export function ActionSheet({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <Pressable style={s.dim} onPress={onCancel} accessibilityLabel={cancelLabel}>
-      <View style={[s.wrap, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
+    <Pressable style={s.dim} onPress={onCancel} accessible={false}>
+      <View accessibilityViewIsModal style={[s.wrap, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
         <View style={s.sheet}>
           <View style={s.head}>
-            <Text style={s.title}>{title}</Text>
+            <Text accessibilityRole="header" style={s.title}>{title}</Text>
             {lines?.map((line, i) => (
               <Text key={i} style={[s.sub, i > 0 && { marginTop: 6 }]}>
                 {line}
@@ -54,7 +54,7 @@ export function WhiteSheet({ children, onClose, top }: { children: ReactNode; on
   const insets = useSafeAreaInsets();
   return (
     <View style={s.dim}>
-      <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+      <Pressable accessibilityRole="button" style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
       <View style={[s.white, top !== undefined && { position: 'absolute', left: 0, right: 0, top, bottom: 0 }, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
         <View style={s.handle} />
         {children}
@@ -71,9 +71,9 @@ const s = StyleSheet.create({
   title: { ...type.caption13, fontWeight: '600', color: colors.textSecondary, fontFamily },
   sub: { ...type.caption13, lineHeight: 18, marginTop: 4, color: colors.textTertiary, textAlign: 'center', fontFamily },
   sep: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(60,60,67,0.29)' },
-  row: { height: 57, alignItems: 'center', justifyContent: 'center' },
+  row: { minHeight: 57, alignItems: 'center', justifyContent: 'center' },
   rowText: { fontSize: 20, color: colors.text, fontFamily },
-  cancel: { marginTop: 8, height: 57, borderRadius: 14, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
+  cancel: { marginTop: 8, minHeight: 57, borderRadius: 14, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   cancelText: { fontSize: 20, fontWeight: '600', color: '#007AFF', fontFamily },
   white: { backgroundColor: colors.white, borderTopLeftRadius: 14, borderTopRightRadius: 14, paddingTop: 6, paddingHorizontal: 16 },
   handle: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: colors.separator },

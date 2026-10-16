@@ -1,7 +1,7 @@
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { startAnalytics, track } from '@/lib/analytics';
 import { startConnectivity } from '@/lib/connectivity';
 import { onNotificationTap, registerTokenIfAllowed, syncTimezone } from '@/lib/notifications';
 import { SessionProvider, useSession } from '@/lib/session';
+import { resetAccountScopedUi } from '@/ui/accountScope';
 import { PostingProvider } from '@/video/posting';
 
 void SplashScreen.preventAutoHideAsync();
@@ -26,8 +27,18 @@ export default function RootLayout() {
 }
 
 function RootNavigator() {
-  const { ready, step } = useSession();
+  const { ready, step, session } = useSession();
   const router = useRouter();
+
+  // The signed-in account changes (sign out, or another account signs in): nothing in memory that
+  // belongs to the previous account may show for the next (accountScope.ts).
+  const accountId = session?.user.id ?? null;
+  const lastAccount = useRef(accountId);
+  useEffect(() => {
+    if (lastAccount.current === accountId) return;
+    lastAccount.current = accountId;
+    resetAccountScopedUi();
+  }, [accountId]);
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
@@ -82,6 +93,9 @@ function RootNavigator() {
           <Stack.Screen name="comments/[responseId]" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="replies/[rootId]" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="reply/[id]" options={{ animation: 'fade' }} />
+          <Stack.Screen name="r/[id]" options={{ animation: 'none' }} />
+          <Stack.Screen name="p/[id]" options={{ animation: 'none' }} />
+          <Stack.Screen name="u/[username]" options={{ animation: 'none' }} />
           <Stack.Screen name="notifications/prime" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="notifications/settings" />
           <Stack.Screen name="safety" options={{ presentation: 'transparentModal', animation: 'fade' }} />

@@ -12,12 +12,14 @@ import { Avatar } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { CloseIcon, VideoReplyIcon } from '@/ui/Icons';
 import { useOverlayWhileMounted } from '@/ui/playerOverlay';
+import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { formatTimer } from '@/video/limits';
 import { thumbnailUrl } from '@/video/playback';
 
 export default function RepliesScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { rootId } = useLocalSearchParams<{ rootId: string }>();
@@ -46,12 +48,12 @@ export default function RepliesScreen() {
 
   return (
     <View style={s.root}>
-      <Pressable style={[StyleSheet.absoluteFill, { bottom: height - sheetTop }]} onPress={() => router.back()} accessibilityLabel="Close" />
+      <Pressable style={[StyleSheet.absoluteFill, { bottom: height - sheetTop }]} onPress={() => goBack()} accessible={false} />
       <View style={[s.sheet, { top: sheetTop }]}>
         <View style={s.handle} />
         <View style={s.titleRow}>
           <Text style={s.title}>{room ? `${room.count} video ${room.count === 1 ? 'reply' : 'replies'}` : ''}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} style={s.close}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack()} style={s.close}>
             <CloseIcon size={20} color={colors.textTertiary} />
           </Pressable>
         </View>
@@ -62,7 +64,7 @@ export default function RepliesScreen() {
         ) : (
           <ScrollView contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 10) + 20 }}>
             {root ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`${root.author.name}'s response`} onPress={() => router.back()} style={({ pressed }) => [s.rootRow, pressed && { opacity: 0.8 }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${root.author.name}'s response`} onPress={() => goBack()} style={({ pressed }) => [s.rootRow, pressed && { opacity: 0.8 }]}>
                 <View style={s.rootThumb}>{root.playback_id ? <Image source={{ uri: thumbnailUrl(root.playback_id, { width: 88, height: 116 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}</View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={s.rootKicker}>

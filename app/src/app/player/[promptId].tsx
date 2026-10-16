@@ -17,6 +17,8 @@ import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } f
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
 import { useOverlay } from '@/ui/playerOverlay';
+import { Unavailable } from '@/ui/Unavailable';
+import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { thumbnailUrl } from '@/video/playback';
@@ -25,6 +27,7 @@ type Page = { kind: 'response'; response: ResponseCard } | { kind: 'end' } | { k
 
 export default function PlayerScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   // `visited`: prompts already passed through in this chain of end cards, so the next conversation
@@ -136,7 +139,7 @@ export default function PlayerScreen() {
 
   const header = (
     <View style={[s.header, { top: insets.top + 3 }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={s.back}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={s.back}>
         <ChevronLeft color={colors.white} />
       </Pressable>
       <Text style={s.headerPrompt} numberOfLines={2}>{prompt?.text ?? ''}</Text>
@@ -250,6 +253,10 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
   const [liked, setLiked] = useState(response.liked);
   const [likes, setLikes] = useState(response.like_count);
   const [progress, setProgress] = useState(0);
+  // A video that fails to load shows X-Unavailable with its Try again (SPEC.md Section 20).
+  const [failed, setFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const onFailed = useCallback(() => setFailed(true), []);
   const toggleLike = async () => {
     const nextValue = !liked;
     setLiked(nextValue);
@@ -278,8 +285,19 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
   const firstName = response.author.name.split(' ')[0];
   return (
     <View style={s.root}>
-      <VideoSurface playbackId={response.playback_id} active={active} loop={false} onProgress={report} onEnd={onEnd} />
-      {!chrome ? null : (
+      <VideoSurface playbackId={response.playback_id} active={active && !failed} loop={false} onProgress={report} onEnd={onEnd} onFailed={onFailed} retryKey={retryKey} />
+      {failed ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Unavailable
+            onNext={next ? onNext : undefined}
+            onRetry={() => {
+              setFailed(false);
+              setRetryKey((k) => k + 1);
+            }}
+          />
+        </View>
+      ) : null}
+      {!chrome || failed ? null : (
       <>
       <VideoGradients top={220} bottom={440} topAlpha={0.6} bottomAlpha={0.72} />
       <View style={[s.rail, { top: 392 }]}>
@@ -421,31 +439,6 @@ function SwipeUpToNext({ enabled, onNext, children }: { enabled: boolean; onNext
   );
 }
 
-function Unavailable({ onNext, onRetry }: { onNext: () => void; onRetry: () => void }) {
-  return (
-    <View style={[s.root, { backgroundColor: '#0E0E10' }]}>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,12,0.6)' }]} />
-      <View style={[s.endBlock, { left: 32, right: 32 }]}>
-        <Glass style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }} radius={28}>
-          <VideoReplyIcon size={26} />
-        </Glass>
-        <Text style={s.unavailableTitle}>This response isn&apos;t available</Text>
-        <Text style={s.unavailableText}>It was deleted or removed.</Text>
-        <GlassPillButton label="Next response" onPress={onNext} style={{ marginTop: 24, height: 44, borderRadius: 22 }}>
-          <Text style={[pillText, { fontSize: 15 }]}>Next response</Text>
-          <ChevronRightIcon />
-        </GlassPillButton>
-      </View>
-      <Text style={s.tryAgain}>
-        If it just didn&apos;t load:{' '}
-        <Text style={{ color: colors.white, fontWeight: '600' }} onPress={onRetry}>
-          Try again
-        </Text>
-      </Text>
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.black },
   header: { position: 'absolute', left: 6, right: 16, height: 44, flexDirection: 'row', alignItems: 'center', gap: 2 },
@@ -485,7 +478,4 @@ const s = StyleSheet.create({
   nextCardSub: { ...type.caption12, color: 'rgba(255,255,255,0.7)', fontFamily },
   nextCardTitle: { ...type.semi15, color: colors.white, fontFamily },
   swipeHint: { position: 'absolute', left: 0, right: 0, textAlign: 'center', ...type.caption12, color: colors.white62, fontFamily },
-  unavailableTitle: { marginTop: 18, fontSize: 22, lineHeight: 27, fontWeight: '600', letterSpacing: -0.4, color: colors.white, textAlign: 'center', fontFamily },
-  unavailableText: { marginTop: 8, ...type.label15, lineHeight: 21, color: 'rgba(255,255,255,0.75)', textAlign: 'center', fontFamily },
-  tryAgain: { position: 'absolute', left: 32, right: 32, top: 640, textAlign: 'center', ...type.caption13, color: colors.white62, fontFamily },
 });

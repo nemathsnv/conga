@@ -53,7 +53,7 @@ export function TabBar({ state, navigation }: TabBarProps) {
         };
         if (tab.name === 'create') {
           return (
-            <Pressable key={tab.name} accessibilityRole="button" accessibilityLabel="Record" onPress={press} style={s.tab}>
+            <Pressable key={tab.name} accessibilityRole="button" accessibilityLabel="Respond or suggest a prompt" onPress={press} style={s.tab}>
               <View style={[s.plus, { backgroundColor: dark ? colors.white : colors.text }]}>
                 <PlusIcon color={dark ? colors.black : colors.white} />
               </View>

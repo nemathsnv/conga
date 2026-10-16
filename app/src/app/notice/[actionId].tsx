@@ -12,6 +12,7 @@ import { timeAgo } from '@/lib/format';
 import { Button } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, PersonIcon, VideoReplyIcon } from '@/ui/Icons';
+import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
 
@@ -22,6 +23,7 @@ function untilLabel(iso: string): string {
 
 export default function NoticeScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { actionId } = useLocalSearchParams<{ actionId: string }>();
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -51,7 +53,7 @@ export default function NoticeScreen() {
 
   const header = (
     <View style={[s.header, { top: insets.top + 3 }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={s.back}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={s.back}>
         <ChevronLeft />
       </Pressable>
     </View>

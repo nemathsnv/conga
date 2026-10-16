@@ -126,7 +126,7 @@ export function Separator({ inset = 16 }: { inset?: number }) {
 /** Step bar with 3pt segments (O-Profile "Step 1 of 2", O-Photo "Step 2 of 2"). */
 export function StepBar({ step, total }: { step: number; total: number }) {
   return (
-    <View style={s.stepBar} accessibilityLabel={`Step ${step} of ${total}`}>
+    <View style={s.stepBar} accessible accessibilityLabel={`Step ${step} of ${total}`}>
       {Array.from({ length: total }, (_, i) => (
         <View key={i} style={[s.stepSegment, i < step && { backgroundColor: colors.text }]} />
       ))}
@@ -198,7 +198,7 @@ export function Glass({ children, style, radius = 16 }: { children: ReactNode; s
 
 const s = StyleSheet.create({
   button: {
-    height: layout.buttonHeight,
+    minHeight: layout.buttonHeight,
     borderRadius: layout.buttonRadius,
     alignItems: 'center',
     justifyContent: 'center',
@@ -209,7 +209,7 @@ const s = StyleSheet.create({
     borderColor: colors.glassBorder,
   },
   buttonText: { ...type.button16, fontFamily },
-  textButton: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  textButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   textButtonText: { ...type.medium15, color: colors.text, letterSpacing: 0 },
   header: {
     height: layout.headerHeight,
@@ -226,9 +226,9 @@ const s = StyleSheet.create({
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
   stepBar: { flex: 1, flexDirection: 'row', gap: 6 },
   stepSegment: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.fillStrong },
-  chip: { height: 34, paddingHorizontal: 13, borderRadius: 17, backgroundColor: colors.fill, justifyContent: 'center' },
+  chip: { minHeight: 34, paddingHorizontal: 13, borderRadius: 17, backgroundColor: colors.fill, justifyContent: 'center' },
   chipText: { ...type.medium14, color: colors.text, fontFamily },
-  pill: { height: 36, paddingHorizontal: 16, borderRadius: 18, backgroundColor: colors.fill, justifyContent: 'center' },
+  pill: { minHeight: 36, paddingHorizontal: 16, borderRadius: 18, backgroundColor: colors.fill, justifyContent: 'center' },
   pillText: { ...type.semi15, color: colors.text, fontFamily },
   glass: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.glassBorder },
 });

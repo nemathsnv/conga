@@ -42,12 +42,22 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
   const [following, setFollowing] = useState(profile.is_following);
   const [tab, setTab] = useState<'responses' | 'replies'>('responses');
   const [replies, setReplies] = useState<ProfileReply[] | null>(null);
+  // Replies load when the tab is first opened, and again whenever the profile is reloaded (Me
+  // reloads on every focus), so a video reply deleted from its player is gone when you come back.
+  const repliesLoaded = replies !== null;
   useEffect(() => {
-    if (tab !== 'replies' || replies !== null) return;
+    if (tab !== 'replies' && !repliesLoaded) return;
+    let cancelled = false;
     profileReplies(profile.id)
-      .then(setReplies)
+      .then((list) => {
+        if (!cancelled) setReplies(list);
+      })
       .catch((e) => console.error('profile_replies failed', e));
-  }, [tab, replies, profile.id]);
+    return () => {
+      cancelled = true;
+    };
+    // `responses` changes identity on each reload of the profile (useProfile).
+  }, [tab, responses, profile.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const empty = own && profile.response_count === 0 && (responses?.length ?? 0) === 0;
   const cell = (width - 4) / 3;
   const followedBy = followedByLabel(profile.followed_by.map((f) => f.name), profile.followed_by_count);

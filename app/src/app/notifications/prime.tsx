@@ -50,7 +50,7 @@ export default function NotificationPrimeScreen() {
 
   return (
     <View style={s.dim}>
-      <Pressable style={{ flex: 1 }} onPress={() => void notNow()} accessibilityLabel="Not now" />
+      <Pressable accessibilityRole="button" style={{ flex: 1 }} onPress={() => void notNow()} accessibilityLabel="Not now" />
       <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
         <View style={s.handle} />
         <Text style={s.exampleLabel}>EXAMPLE</Text>
