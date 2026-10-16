@@ -103,6 +103,12 @@ agents' stacks could not run it at once (`5d9fd61`).
 
 ## 4. Prerequisites for the rollout
 
+- **The test account T1 already exists.** Nemat created it at CP0 on 13 Oct
+  (`b0c14e38-4e89-4dbd-a9a3-8a8c01872a78`, username `test_t1`; `docs/BETA-READINESS.md` section 15),
+  with its response V. The 13 Oct row in `docs/DECISIONS.md` says T1 is "not to be created yet":
+  CP0 supersedes that wording. The row is not edited here (DECISIONS.md is Nemat's record). No
+  provider test creates another account.
+
 - Nemat's review of `be99363`, `4666545` and the earlier unreleased commits (`70f2a3b`, `ddd8e0f`,
   `b7a02ad`, `bc1e765`, `654c03c`), and separate approval of each hosted step below.
 - `supabase` CLI 2.119+ logged in to the account that owns `picvoavfxnajfjkqawju`; a clean
@@ -228,7 +234,7 @@ recorded decision; until then a deleted or removed video stays playable at Mux b
 | cleanup integration | `… cleanup_integration_test.ts` | 28/28 |
 | idempotency integration (`DB_CONTAINER` set) | `… idempotency_integration_test.ts` | 12/12, none ignored |
 | abandon integration | `… abandon_integration_test.ts` | 12/12 before, **16/16** after |
-| rollback check | `scripts/idempotency-rollback-check.sh <stack>` | passed at the baseline and after the changes (both rollbacks, old suite 1089, both builds post, forward again, all 1245). **One run in between failed** in its step 4 (the old suite, 1089 tests, result FAIL; the failing test was not captured) and left the stack rolled back; it was put forward by hand, the old suite then passed on its own in the rolled-back state, the full check passed again, and the full suite passed three more times. Not reproduced; unexplained (a pg_cron job writing during the run is the likeliest cause) |
+| rollback check | `scripts/idempotency-rollback-check.sh <stack>` | passed at the baseline and after the changes (both rollbacks, old suite 1089, both builds post, forward again, all 1245). One run in between failed in step 4; **cause found and fixed (follow-up, section 11)** |
 | scheduler | `FAKE_MUX_PORT=55711 scripts/scheduler-integration.sh <stack>` | 13/13 |
 | C1 rehearsal | `FAKE_MUX_PORT=55712 scripts/c1-rehearsal.sh <stack>` | passed, 29 checks |
 | provider rehearsal | `scripts/provider-rehearsal.sh <stack>` (fake Mux on 55713) | **8/8** in 5 min 40 s: C2w (dry run, then one cancel), C2a, C2e (assumed fake behaviour), E1, E2, E3, hosted guards, cleanup |
@@ -252,3 +258,41 @@ the hosted project or real Mux.
   recording for up to about 70 minutes instead of being cleared at once (the safer of the two).
 - **Monitoring:** no alerting path for `mux_cleanup_health()`.
 - **Spec:** the online master spec lacks the SPEC.md §19 revision (20.3).
+
+## 11. The rollback check's intermittent failure (follow-up, 16 Oct)
+
+`scripts/idempotency-rollback-check.sh` is the rehearsal of the deployment rollback (section 6), so
+its one unexplained failure (section 9) was chased down.
+
+**Reproduced:** 15 back-to-back runs of the unchanged script on `shortcut-a`, each run's output kept:
+**4 failed.** Three failed in step 4 (the old suite, after the rollback), one in step 5 (all files,
+after going forward again), so the rollback itself was not the cause.
+
+| Failing test | Why |
+|---|---|
+| `0005_places_suggestions.sql` 36, "the draft waits for Mux" (have NULL, want false), in all 4 | It read `my_suggestions()->'suggestions'->0`. The list is ordered by in-review first, then `updated_at`, and every suggestion in the test is written in one transaction, so all have the same `updated_at`: the first element is a tie, decided by where the rows happen to sit on disk. The rows the rollback check and earlier runs leave behind change that layout, so it flipped between runs. |
+| `0003_conversation.sql` 26 and 27, "a reply to a reply carries "Replying to Lena"" (found while checking the fix: 1 of 15 runs) | The same kind of tie: `reply_room(...)->'replies'->1` and `->0`, two replies with the same `created_at`. |
+
+Not the cause: pg_cron or pg_net (no failed cron run; the failing runs, 06:58:23 to 06:59:27 UTC, did not line up with the 10-minute jobs), wall-clock
+time (the one wall-clock test, 0003's evening time zone, is computed inside the transaction), or the
+script's ordering.
+
+**Fixed in the tests, not in any migration or product behaviour:** both now find the item by its
+text or author instead of its position (the ordering rule itself is unchanged). After the fix: 25
+consecutive rollback checks passed, then 30 full-suite runs passed.
+
+**The script itself, which had made things worse:** a failure left the stack rolled back and left
+its throwaway member and prompts behind (6 such members had accumulated). It now:
+- writes everything to a log (`ROLLBACK_CHECK_LOG`, default a new file under `$TMPDIR`) and prints
+  its path at the start and end;
+- on a failure, prints the failing pgTAP lines (with have/want) and the pg_cron runs since it
+  started;
+- puts the stack back to the forward state from the step it stopped at (re-applies 0300 only, or
+  both migrations), and removes its throwaway member and prompts.
+
+The restore was checked with a deliberately injected failure after the second rollback (stack back
+to forward, member removed) and in the real failure of run 14 (the next run passed).
+
+Files touched outside this effort's usual ownership, as the follow-up asked:
+`supabase/tests/0003_conversation.sql` and `supabase/tests/0005_places_suggestions.sql` (one
+assertion each, by name instead of position).

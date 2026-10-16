@@ -79,7 +79,9 @@ select is((public.edit_suggestion((select id from public.suggestions where text 
 -- A private draft while in review.
 select is((public.post_draft((select id from public.suggestions where text like 'What''s one thing%'), 'up-draft', 'My first take.', 9000))->>'status', 'draft', 'a draft is saved privately');
 select is(jsonb_array_length(public.profile_responses('a1111111-1111-1111-1111-111111111111')), 0, 'a draft is not on the profile');
-select is(((public.my_suggestions())->'suggestions'->0->'draft'->>'ready'), 'false', 'the draft waits for Mux');
+-- Found by name, not position: every suggestion here has the same updated_at (one transaction), so
+-- their order in the list is a tie and was not stable between runs.
+select is((select s->'draft'->>'ready' from jsonb_array_elements((public.my_suggestions())->'suggestions') s where s->>'text' like 'What''s one thing%'), 'false', 'the draft waits for Mux');
 select throws_ok($$ select public.publish_draft((select id from public.suggestions where text like 'What''s one thing%')) $$, 'P0001', 'prompt_not_live', 'a draft cannot be published before the prompt is live');
 select throws_ok($$ select public.mod_approve_suggestion((select id from public.suggestions where text like 'What''s one thing%'), 'nemat') $$, '42501', null, 'members cannot approve');
 reset role;

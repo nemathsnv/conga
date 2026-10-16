@@ -12,7 +12,7 @@ Postgres, Auth, Storage and Edge Functions for Shortcut. Everything here is repr
 | `seed.sql` | Local development seed only (test invite codes). Never applied to the hosted project. |
 | `tests/` | pgTAP tests. `supabase test db` runs them against the local stack. |
 | `functions/` | Edge Functions (Deno). `auth-signin-method` backs the E-Linked check; `mux-create-upload`, `mux-upload-status` and `mux-webhook` carry video; `mux-cleanup` deletes and revokes videos at Mux; `send-push` drains the push outbox. |
-| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts` (no network), `integration_test.ts`, `uploads_integration_test.ts`, `cleanup_integration_test.ts`, `idempotency_integration_test.ts` and `abandon_integration_test.ts` (local stack only; Mux is stubbed and never contacted). |
+| `functions/_tests/` | Deno tests for the Mux functions: `mux_test.ts`, `cleanup_unit_test.ts` and `abandon_unit_test.ts` (no network), `integration_test.ts`, `uploads_integration_test.ts`, `cleanup_integration_test.ts`, `idempotency_integration_test.ts` and `abandon_integration_test.ts` (local stack only; Mux is stubbed and never contacted); `scheduler_integration_test.ts` and `provider_rehearsal_test.ts` (local stack with the Edge runtime and a fake Mux over HTTP; run through their scripts below). |
 | `templates/` | Auth email templates. `sign_in_code.html` carries the 6-digit code and no link; it is used for the confirmation (new account), magic link (returning account) and recovery emails. |
 | `.env.example` | Names of the provider secrets the CLI needs. Copy to `.env` (git-ignored). |
 
@@ -33,6 +33,8 @@ supabase test db          # pgTAP tests
 supabase db reset         # rebuild the local database from migrations + seed
 scripts/create-invite.sh  # create a test invite code
 deno test --allow-env supabase/functions/_tests/mux_test.ts   # Mux helpers and webhook signatures
+deno test --allow-env supabase/functions/_tests/cleanup_unit_test.ts   # the clean-up worker's safety logic
+deno test --allow-env supabase/functions/_tests/abandon_unit_test.ts   # abandon-submission's decision from Mux's answer
 ```
 
 The integration tests need the local stack's URL and keys (from `supabase status -o env`) as
@@ -50,8 +52,21 @@ deno test --allow-env --allow-net supabase/functions/_tests/abandon_integration_
 
 Posting idempotency (`20261013000200`) and the Mux-checked abandonment (`20261013000300`, the
 `abandon-submission` function) have a rollback check, which applies both rollback files and both
-migrations again on a local stack: `scripts/idempotency-rollback-check.sh [stack folder]`.
+migrations again on a local stack: `scripts/idempotency-rollback-check.sh [stack folder]` (it logs to
+`ROLLBACK_CHECK_LOG` or a temporary file, and on a failure prints the failing tests and puts the stack
+forward again).
 Test C1 is rehearsed against a fake Mux with `scripts/c1-rehearsal.sh [stack folder]`.
+
+The real-provider tests C2, E1, E2 and E3 (`docs/release/PROVIDER-TESTS.md`) use
+`scripts/provider-member.mjs` (the test account's actions through the app's endpoints),
+`scripts/provider-sql.sh` (one statement through `supabase db query`), `scripts/provider-drain.sh`
+(one controlled clean-up drain, always back to `off`) and `scripts/provider-mux-read.mjs` (Mux `GET`s
+only). Each refuses the hosted project without explicit approval variables. They are rehearsed
+together against a fake Mux with `scripts/provider-rehearsal.sh [stack folder]`.
+
+`scripts/scheduler-integration.sh`, `scripts/c1-rehearsal.sh` and `scripts/provider-rehearsal.sh`
+serve a fake Mux on the host (defaults 55690, 55691, 55713); `FAKE_MUX_PORT=<port>` moves it, so two
+local stacks can run them at once.
 
 ## Video uploads
 
@@ -66,7 +81,11 @@ Mux refused (`fail_video_upload`). `post_response`, `post_reply`, `post_draft` a
 mints as it opens, so re-recording leaves unused URLs: at the 3-URL cap the oldest abandoned one
 (unclaimed, over 15 s old) is cancelled at Mux if Mux reports it `waiting`, and its slot is freed
 only once Mux confirms (`begin_upload_cancellation`, `finish_upload_cancellation`). Cancelled URLs
-still count towards the hour and the day. `mark_response_live` takes the
+still count towards the hour and the day. `abandon-submission` (a discard whose outcome the app
+does not know) retires a row only once Mux confirms nothing can arrive: a confirmed cancel of a
+`waiting` upload, or `cancelled` / `timed_out`; an `errored` upload, or a state Mux does not
+document, with no asset is kept (`unverified`) until 10 minutes after the URL's recorded expiry and
+retired only then (`docs/release/VIDEO-RELIABILITY.md` section 2). `mark_response_live` takes the
 asset's Mux `passthrough` and leaves the video unchanged unless it is the author (`owner_mismatch`).
 
 ## Deleting videos at Mux (security stage 3)
