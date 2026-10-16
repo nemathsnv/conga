@@ -220,6 +220,11 @@ async function main() {
     check('google account: no email identity was added', sql(`select count(*) from auth.identities where user_id = ${lit(g.json.id)} and provider = 'email'`) === '0');
   } else check('google account: email code SIGNS IN (one-method gap reproduced)', !!gVerify.json.access_token, `HTTP ${gVerify.status}`);
 
+  // 9. Sessions and the account lifecycle (20261016000202): signing out ends a token on the API,
+  //    deletion ends every session, only a new sign-in cancels it, suspension is enforced.
+  //    Sign-ins use the Admin API's one-time code (no email, so no 60 s wait).
+  if (expectFixed) await lifecycle();
+
   // 8. A password account and session from before the fix (made by PHASE=legacy-setup).
   if (expectFixed && LEGACY_FILE && existsSync(LEGACY_FILE)) {
     const legacy = JSON.parse(readFileSync(LEGACY_FILE, 'utf8'));
@@ -232,6 +237,69 @@ async function main() {
     const lp = await passwordLogin(legacy.email, legacy.password);
     check('old stored password cannot sign in (refused by the hook)', !lp.json.access_token && /password_sign_in_disabled/.test(JSON.stringify(lp.json)), `HTTP ${lp.status} ${lp.json.msg ?? lp.json.message ?? ''}`);
   }
+}
+
+async function signInWithAdminCode(email) {
+  const link = await auth('/admin/generate_link', { key: SERVICE, body: { type: 'magiclink', email } });
+  const otp = link.json.email_otp;
+  const v = await auth('/verify', { body: { type: 'email', email, token: otp } });
+  return v.json;
+}
+
+const accountRow = (id) => sql(`select coalesce(deleted_at::text, 'null') || '|' || moderation_status from public.accounts where id = ${lit(id)}`);
+
+async function lifecycle() {
+  const email = addr('lifecycle');
+  createdEmails.push(email);
+  const created = await auth('/admin/users', { key: SERVICE, body: { email, email_confirm: true } });
+  const id = created.json.id;
+  const phoneA = await signInWithAdminCode(email);
+  const phoneB = await signInWithAdminCode(email);
+  check('lifecycle: signed in on two phones', !!phoneA.access_token && !!phoneB.access_token);
+  if (!phoneA.access_token || !phoneB.access_token) return;
+  const claims = JSON.parse(Buffer.from(phoneA.access_token.split('.')[1], 'base64url').toString('utf8'));
+  check('lifecycle: the token carries session_id and a timestamped amr (what pre_request and delete_account read)',
+    typeof claims.session_id === 'string' && Array.isArray(claims.amr) && Number.isInteger(claims.amr[0]?.timestamp));
+  check('lifecycle: phone A reads its state', (await rest('/rpc/get_onboarding_state', phoneA.access_token)).status === 200);
+
+  // Phone B signs out (this phone only): its access token stops working at once.
+  const out = await auth('/logout?scope=local', { token: phoneB.access_token });
+  const bAfter = await rest('/rpc/get_onboarding_state', phoneB.access_token);
+  check('lifecycle: a signed-out token is refused by the product API', bAfter.status === 403 && /session_revoked/.test(JSON.stringify(bAfter.json)), `logout HTTP ${out.status}; API HTTP ${bAfter.status} ${bAfter.json.message ?? ''}`);
+  check('lifecycle: phone A is unaffected', (await rest('/rpc/get_onboarding_state', phoneA.access_token)).status === 200);
+
+  // Phone A deletes the account (signed in moments ago); phone C was signed in too.
+  const phoneC = await signInWithAdminCode(email);
+  const del = await rest('/rpc/delete_account', phoneA.access_token);
+  check('lifecycle: a fresh sign-in deletes the account', del.status === 204, `HTTP ${del.status} ${del.json.message ?? ''}`);
+  check('lifecycle: every session of the account is gone', sql(`select count(*) from auth.sessions where user_id = ${lit(id)}`) === '0');
+  const cAfter = await rest('/rpc/get_onboarding_state', phoneC.access_token);
+  check("lifecycle: another phone's token cannot cancel the deletion", cAfter.status === 403 && /session_revoked/.test(JSON.stringify(cAfter.json)), `HTTP ${cAfter.status}`);
+  const cRefresh = await auth('/token?grant_type=refresh_token', { body: { refresh_token: phoneC.refresh_token } });
+  check('lifecycle: nor refresh it', !cRefresh.json.access_token, `HTTP ${cRefresh.status}`);
+  check('lifecycle: the account stays deleted', !accountRow(id).startsWith('null'));
+
+  // Signing in again during the window restores it.
+  const back = await signInWithAdminCode(email);
+  const state = await rest('/rpc/get_onboarding_state', back.access_token);
+  check('lifecycle: signing back in cancels the deletion', state.status === 200 && accountRow(id).startsWith('null|'), `HTTP ${state.status} ${accountRow(id)}`);
+
+  // Suspension: the API refuses everything but the suspended paths; refresh still works so the
+  // person can see the notice.
+  sql(`update public.accounts set moderation_status = 'suspended' where id = ${lit(id)}`);
+  const feed = await rest('/rpc/home_feed', back.access_token);
+  check('lifecycle: a suspended account is refused on the product API', feed.status >= 400 && /suspended/.test(JSON.stringify(feed.json)), `HTTP ${feed.status}`);
+  const st = await rest('/rpc/get_onboarding_state', back.access_token);
+  check('lifecycle: and still reads its suspension state', st.status === 200 && st.json.suspended === true, `HTTP ${st.status}`);
+  const rf = await auth('/token?grant_type=refresh_token', { body: { refresh_token: back.refresh_token } });
+  check('lifecycle: a suspended session still refreshes (LV-Suspended needs it)', !!rf.json.access_token, `HTTP ${rf.status}`);
+  sql(`update public.accounts set moderation_status = 'active' where id = ${lit(id)}`);
+
+  // Signing out everywhere ends the remaining token too.
+  const token = rf.json.access_token ?? back.access_token;
+  const all = await auth('/logout', { token });
+  const after = await rest('/rpc/get_onboarding_state', token);
+  check('lifecycle: after signing out everywhere the last token is refused', after.status === 403, `logout HTTP ${all.status}; API HTTP ${after.status}`);
 }
 
 // Run with the access token hook switched OFF in config.toml (and Auth restarted): makes an account
