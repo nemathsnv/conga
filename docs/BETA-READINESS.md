@@ -4757,9 +4757,18 @@ effect: the first mint retiring U2, since T1's three C1 URLs still held its slot
 - **Nothing changed at Mux except the documented cancel of U2 and the four creates and one cancel
   of C1; no asset exists beyond the two; the founder's content is untouched.**
 
-*Next:* Nemat's choice: (a) drain the existing job to close it (`scripts/provider-c2w-c.sh
-e48cdb45-…`, expected `done` with an ended outcome, no Mux change), then (b) a fresh C2w-a and
-C2w-c within the hour, then C2a; or (b) alone, listing both jobs as expected in the drain.
+- **Decision (Nemat, 16 Oct 19:00 UTC): C2 stopped for the day; the job is left pending.** Where
+  things stand: job `e48cdb45…` (`cancel_upload`, U5) stays `pending` and due; with the database
+  switch `off` the scheduled worker never acts on it, and whenever a live or dry-run drain next
+  runs it resolves as `done` with outcome `timed_out` and no Mux call. T1's C1 URLs U3 and U4
+  have timed out at Mux the same way (their ledger rows stay `active` until the next mint
+  retires or expires them; they hold nothing). T1's session has expired; the private token and
+  address files were removed from the lead's machine. Nothing is live, nothing is scheduled to
+  change, and Mux holds the same two assets as before C1.
+
+*Next, when C2 resumes:* a new sign-in code for T1; either drain the old job first
+(`scripts/provider-c2w-c.sh e48cdb45-…`, expected `done`/`timed_out`) or list it alongside the
+new job as expected in the drain; a fresh C2w-a, then C2w-c within the hour, then C2a.
 
 ## Gates
 

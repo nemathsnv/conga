@@ -50,8 +50,8 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 | H7 admin | blocked by H5b: custom domain needed; options in docs/release/CUSTOM-DOMAIN.md (recommendation: the Supabase add-on, about $10/month on Pro, once the domain exists) |
 | H8 push sender | waits for EAS/APNs/FCM (B-2) |
 | H10 provider test C1 | passed 16 Oct 12:43 UTC on hosted and real Mux (BETA-READINESS section 27) |
-| H10 provider test C2w | C2w-a and C2w-b done 12:50 to 12:51 UTC (job e48cdb45 pending, plan: cancel U5); C2w-c not run: U5 timed out at Mux at 13:50 UTC before the live step; both switches off; Nemat to choose a fresh C2w-a or draining the ended job (BETA-READINESS section 28) |
-| H9 hosted auth smoke, H10 C2w/C2a/E1 to E3, H12 founder build | awaiting go-ahead |
+| H10 provider test C2w | C2w-a and C2w-b done 12:50 to 12:51 UTC (job e48cdb45 pending, plan: cancel U5); C2w-c not run: U5 timed out at Mux at 13:50 UTC before the live step; both switches off; stopped for the day by Nemat, job left pending, nothing live (BETA-READINESS section 28) |
+| H10 C2a, E1 to E3; H9 hosted auth smoke; H12 founder build | awaiting go-ahead |
 
 ## Not authorised in this effort (prepared only)
 
