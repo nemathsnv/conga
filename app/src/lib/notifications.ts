@@ -7,10 +7,25 @@ import { Platform } from 'react-native';
 
 import { registerPushToken, setTimezone } from './content';
 import { FOUNDER_BUILD } from './env';
+import { ANDROID_CHANNEL_ID, ANDROID_CHANNEL_NAME, hrefForPush, type PushData } from './pushRoutes';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
 });
+
+/**
+ * Android only: the channel pushes arrive on. Android 13 and later show the permission prompt only
+ * once a channel exists, and without one delivery falls back to a hidden default. Safe to call again.
+ * The ask timing is not touched: this only creates the channel, before the ask or a token request.
+ */
+export async function ensureNotificationChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, { name: ANDROID_CHANNEL_NAME, importance: Notifications.AndroidImportance.DEFAULT, sound: 'default' });
+  } catch (e) {
+    console.warn('notification channel failed', e);
+  }
+}
 
 export async function permissionGranted(): Promise<boolean> {
   const { status } = await Notifications.getPermissionsAsync();
@@ -19,6 +34,7 @@ export async function permissionGranted(): Promise<boolean> {
 
 /** N-Prime "Turn on notifications": the phone's permission prompt, then the token. */
 export async function requestPermissionAndRegister(): Promise<boolean> {
+  await ensureNotificationChannel();
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== 'granted') return false;
   await registerTokenIfAllowed();
@@ -31,6 +47,7 @@ export async function requestPermissionAndRegister(): Promise<boolean> {
  * no-op, logged once. Tracked as a blocker in docs/BLOCKERS.md.
  */
 export async function registerTokenIfAllowed(): Promise<void> {
+  await ensureNotificationChannel();
   // The founder build has no push entitlement (free Personal Team), so no token can exist.
   if (FOUNDER_BUILD) return;
   if (!(await permissionGranted())) return;
@@ -65,28 +82,25 @@ export async function syncTimezone(): Promise<void> {
   }
 }
 
-export type PushData = { kind?: string; video_id?: string | null; prompt_id?: string | null; activity_id?: string | null };
+export { hrefForPush, type PushData } from './pushRoutes';
 
-/** Where a tapped notification goes. Returns an expo-router href. */
-export function hrefForPush(data: PushData): string {
-  switch (data.kind) {
-    case 'video_reply':
-      return data.video_id ? `/reply/${data.video_id}` : '/(tabs)/activity';
-    case 'comment':
-    case 'comment_reply':
-      return data.video_id ? `/comments/${data.video_id}` : '/(tabs)/activity';
-    case 'tonight_prompt':
-    case 'place_prompt':
-    case 'followed_responded':
-      return data.prompt_id ? `/player/${data.prompt_id}` : '/(tabs)';
-    default:
-      return '/(tabs)/activity';
-  }
+/** A tapped notification: where it goes, and a stable id so a tap is handled once. */
+export type PushTap = { id: string | null; href: string; kind: string };
+
+function tapFrom(response: Notifications.NotificationResponse): PushTap {
+  const data = (response.notification.request.content.data ?? {}) as PushData;
+  return { id: response.notification.request.identifier ?? null, href: hrefForPush(data), kind: data.kind ?? 'unknown' };
 }
 
-export function onNotificationTap(handler: (href: string) => void): () => void {
-  const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-    handler(hrefForPush((response.notification.request.content.data ?? {}) as PushData));
-  });
+/** A tap while the app is running (in the foreground, or in the background and brought forward). */
+export function onNotificationTap(handler: (tap: PushTap) => void): () => void {
+  const sub = Notifications.addNotificationResponseReceivedListener((response) => handler(tapFrom(response)));
   return () => sub.remove();
+}
+
+/** The tap that launched the app from closed, if there was one. The tap listener above is not yet
+ *  registered when a closed app is opened by a tap, so the phone's last response is read instead. */
+export function launchTap(): PushTap | null {
+  const last = Notifications.getLastNotificationResponse();
+  return last ? tapFrom(last) : null;
 }
