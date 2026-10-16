@@ -28,10 +28,15 @@ insert into public.video_uploads (account_id, upload_id, status) values
   ('c1111111-1111-1111-1111-111111111111', 'upTia2', 'active'),
   ('c3333333-3333-3333-3333-333333333333', 'upMia1', 'active');
 
-create function pg_temp.act(p_account uuid) returns void language sql as $$
-  select set_config('request.jwt.claims', json_build_object('sub', p_account, 'role', 'authenticated', 'iat', extract(epoch from now())::bigint)::text, true);
+-- A token as Auth issues it: amr carries the sign-in time (delete_account needs one within ten
+-- minutes, 20261016000202), and session_id names the auth.sessions row when the test made one (a
+-- restore needs a session that began after the deletion, so the sign-back-in step creates one).
+create function pg_temp.act(p_account uuid, p_session uuid default null) returns void language sql as $$
+  select set_config('request.jwt.claims', (json_build_object('sub', p_account, 'role', 'authenticated', 'iat', extract(epoch from now())::bigint,
+    'amr', json_build_array(json_build_object('method', 'otp', 'timestamp', extract(epoch from now())::bigint)))::jsonb
+    || case when p_session is null then '{}'::jsonb else jsonb_build_object('session_id', p_session) end)::text, true);
 $$;
-grant execute on function pg_temp.act(uuid) to authenticated;
+grant execute on function pg_temp.act(uuid, uuid) to authenticated;
 create function pg_temp.err(p_sql text) returns text language plpgsql as $$
 declare m text;
 begin
@@ -73,7 +78,11 @@ select is((select count(*)::int from public.mux_cleanup_jobs where response_id =
   'her live video gets its playback switched off (sync_playback, account_deleted)');
 
 -- E2: she signs back in within 30 days: restored; the same submission replays her own row.
-select pg_temp.act('c1111111-1111-1111-1111-111111111111');
+-- Signing in makes a new session, which began after the deletion (clock_timestamp, not the
+-- transaction's now()); only such a session restores (20261016000202).
+insert into auth.sessions (id, user_id, created_at, updated_at)
+values ('5c111111-0000-4000-8000-000000000001', 'c1111111-1111-1111-1111-111111111111', clock_timestamp(), clock_timestamp());
+select pg_temp.act('c1111111-1111-1111-1111-111111111111', '5c111111-0000-4000-8000-000000000001');
 set local role authenticated;
 select lives_ok($$ select public.get_onboarding_state() $$, 'Tia signs back in');
 reset role;

@@ -14,7 +14,7 @@
 #   3. Edge runtime served with fake-only Mux settings; the Deno integration suites
 #   4. scripts/idempotency-rollback-check.sh
 #   5. scripts/scheduler-integration.sh   (replaces the Edge runtime; served again afterwards)
-#   6. scripts/c1-rehearsal.sh            (same)
+#   6. scripts/c1-rehearsal.sh and scripts/provider-rehearsal.sh (same)
 #   7. scripts/auth-integration.mjs       (needs the Edge runtime and Mailpit)
 #   8. app: npm run typecheck, npm run lint, npm test
 # Stops the stack at the end unless KEEP_STACK=1. Exit status is non-zero on the first failure
@@ -109,7 +109,7 @@ step "pgTAP" bash -c "cd '$STACK' && supabase test db"
 
 # --- 2. Deno unit ------------------------------------------------------------------------------
 for t in "$REPO"/supabase/functions/_tests/*_test.ts; do
-  case "$(basename "$t")" in *integration_test.ts) ;; *) step "deno unit $(basename "$t")" deno test --allow-env --allow-read "$t" ;; esac
+  case "$(basename "$t")" in *integration_test.ts|provider_rehearsal_test.ts) ;; *) step "deno unit $(basename "$t")" deno test --allow-env --allow-read "$t" ;; esac
 done
 
 # --- 3. Deno integration (served Edge runtime) ------------------------------------------------
@@ -123,6 +123,7 @@ stop_serve
 step "idempotency-rollback-check" "$REPO/scripts/idempotency-rollback-check.sh" "$STACK"
 step "scheduler-integration" "$REPO/scripts/scheduler-integration.sh" "$STACK"
 step "c1-rehearsal" "$REPO/scripts/c1-rehearsal.sh" "$STACK"
+step "provider-rehearsal" "$REPO/scripts/provider-rehearsal.sh" "$STACK"
 
 # --- 7. auth integration -----------------------------------------------------------------------
 step "serve edge runtime (auth)" serve
