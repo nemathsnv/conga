@@ -5,10 +5,11 @@
 export type CameraFacing = 'front' | 'back';
 
 /**
- * One continuous take from one camera. A recording is a list of segments so a camera flip
- * while recording records a new segment and the list is stitched into one clip before upload
- * (spike/REPORT.md Section 9; Nemat, 6 Oct). Stitching is tracked as docs/BLOCKERS.md B-1; until
- * it lands the recorder never produces more than one segment and upload refuses a longer list.
+ * One continuous stretch of a take from one camera. A recording is a list of segments because a
+ * camera flip while recording ends expo-camera's recording: the recorder keeps the segment and
+ * starts the next on the other camera (spike/REPORT.md Section 9; Nemat, 6 Oct; docs/BLOCKERS.md
+ * B-1). Post Review stitches several segments into one file (stitch.ts), so a recording handed to
+ * Post always has exactly one segment, and upload refuses a longer list (`stitching_required`).
  */
 export type RecordingSegment = {
   uri: string;

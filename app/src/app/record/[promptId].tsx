@@ -3,11 +3,13 @@
 // With ?replyTo=<video id>: board Record-Reply (recording a video reply), SPEC.md Section 7.
 // With ?draftFor=<suggestion id>: the private first response for a suggestion in review
 // (SPEC.md Section 12); the suggestion's text stands in for the prompt.
+// The flip works during a take (docs/BLOCKERS.md B-1): each camera records a segment, the timer and
+// the ring run on the total, and Post Review stitches the segments into one clip (video/stitch.ts).
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -18,9 +20,19 @@ import { Button, Glass } from '@/ui/components';
 import { GlassTool } from '@/ui/dark';
 import { CloseIcon, FlipIcon, LightIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
-import { formatTimer, isTooShort } from '@/video/limits';
-import { keepSegment, makeRecording } from '@/video/recorder';
-import { setCurrentRecording } from '@/video/recordingStore';
+import { formatTimer } from '@/video/limits';
+import {
+  CAMERA_SWITCH_TIMEOUT_MS,
+  createTake,
+  deleteFileQuietly,
+  finalizeTakeSegments,
+  keepTakeSegment,
+  makeRecording,
+  sweepTakeFolder,
+  type Take,
+  type TakeOutcome,
+} from '@/video/recorder';
+import { getCurrentRecording, setCurrentRecording } from '@/video/recordingStore';
 import { MAX_DURATION_MS, RECORDING_SETTINGS, type CameraFacing } from '@/video/types';
 
 const RING = 84;
@@ -40,13 +52,18 @@ export default function RecordScreen() {
   // expo-camera drops the torch when recording starts, so it is blinked off and on after start.
   const [torchBlink, setTorchBlink] = useState(false);
   const torch = light && facing === 'back' && !torchBlink;
+  // The take in progress (one segment per camera); null between takes.
+  const take = useRef<Take | null>(null);
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [shortToast, setShortToast] = useState(false);
   const [ready, setReady] = useState(false);
+  // iOS: expo-camera reports ready only when its view mounts, so a flip during a take mounts a
+  // fresh CameraView (as at the first segment) to know when the other camera can record.
+  const [cameraKey, setCameraKey] = useState(0);
   const cam = useRef<CameraView>(null);
-  const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cameraReadyWaiter = useRef<{ resolve: () => void; reject: (e: Error) => void; timeout: ReturnType<typeof setTimeout> } | null>(null);
 
   useEffect(() => {
     if (draftFor) {
@@ -79,50 +96,137 @@ export default function RecordScreen() {
     timer.current = null;
   };
 
-  const start = useCallback(async () => {
-    if (!cam.current || !ready || recording || !prompt || (replyTo && !target)) return;
-    setRecording(true);
-    startedAt.current = Date.now();
-    track('record_started', { kind: draftFor ? 'draft' : replyTo ? 'reply' : 'response' });
-    setElapsedMs(0);
-    timer.current = setInterval(() => setElapsedMs(Math.min(MAX_DURATION_MS, Date.now() - startedAt.current)), 100);
-    if (light && facing === 'back') {
-      setTimeout(() => {
-        setTorchBlink(true);
-        setTimeout(() => setTorchBlink(false), 50);
-      }, RECORDING_SETTINGS.torchReapplyMs);
+  // Read when each segment starts, so the light can be changed during a take.
+  const lightOn = useRef(light);
+  useEffect(() => {
+    lightOn.current = light;
+  }, [light]);
+  const blinkTorchIfBack = useCallback((segmentFacing: CameraFacing) => {
+    if (!lightOn.current || segmentFacing !== 'back') return;
+    setTimeout(() => {
+      setTorchBlink(true);
+      setTimeout(() => setTorchBlink(false), 50);
+    }, RECORDING_SETTINGS.torchReapplyMs);
+  }, []);
+
+  /** Switches camera mid-take; resolves on the other camera's onCameraReady. */
+  const switchCamera = useCallback((to: CameraFacing) => new Promise<void>((resolve, reject) => {
+    const previous = cameraReadyWaiter.current;
+    if (previous) {
+      clearTimeout(previous.timeout);
+      previous.reject(new Error('camera_switch_superseded'));
     }
-    try {
-      const result = await cam.current.recordAsync({ maxDuration: MAX_DURATION_MS / 1000, codec: RECORDING_SETTINGS.codec });
-      const durationMs = Math.min(MAX_DURATION_MS, Date.now() - startedAt.current);
+    const timeout = setTimeout(() => {
+      if (cameraReadyWaiter.current?.timeout === timeout) {
+        cameraReadyWaiter.current = null;
+        reject(new Error('camera_switch_timeout'));
+      }
+    }, CAMERA_SWITCH_TIMEOUT_MS);
+    cameraReadyWaiter.current = { resolve, reject, timeout };
+    setReady(false);
+    setFacing(to);
+    if (Platform.OS === 'ios') setCameraKey((k) => k + 1);
+  }), []);
+
+  const onCameraReady = () => {
+    setReady(true);
+    const waiter = cameraReadyWaiter.current;
+    if (waiter) {
+      cameraReadyWaiter.current = null;
+      clearTimeout(waiter.timeout);
+      waiter.resolve();
+    }
+  };
+
+  const start = useCallback(() => {
+    if (!cam.current || !ready || take.current || !prompt || (replyTo && !target)) return;
+    const kind = draftFor ? 'draft' : replyTo ? 'reply' : 'response';
+    // Files of a take the app was closed in the middle of belong to no recording.
+    sweepTakeFolder(getCurrentRecording()?.recording.segments.map((sg) => sg.uri) ?? []);
+    const finished = (outcome: TakeOutcome) => {
+      take.current = null;
       stopTimer();
       setRecording(false);
-      if (!result?.uri) return;
-      if (isTooShort(durationMs)) {
+      if (outcome.kind === 'short') {
         // PR-Short: the clip does not reach review.
         setShortToast(true);
         setTimeout(() => setShortToast(false), 2200);
         return;
       }
-      track('record_completed', { kind: draftFor ? 'draft' : replyTo ? 'reply' : 'response', duration_s: Math.round(durationMs / 1000) });
-      const segment = keepSegment(result.uri, facing, durationMs);
-      setCurrentRecording({ recording: makeRecording(prompt.id, [segment]), prompt, replyTo: target ?? undefined, draftFor: draftFor ?? undefined });
+      if (outcome.kind === 'failed') {
+        console.error('recordAsync failed', outcome.error);
+        return;
+      }
+      if (outcome.kind === 'cancelled') return;
+      track('record_completed', { kind, duration_s: Math.round(outcome.durationMs / 1000) });
+      let segments;
+      try {
+        segments = finalizeTakeSegments(outcome.segments);
+      } catch (e) {
+        console.error('keeping the recording failed', e);
+        outcome.segments.forEach((sg) => deleteFileQuietly(sg.uri));
+        return;
+      }
+      setCurrentRecording({ recording: makeRecording(prompt.id, segments), prompt, replyTo: target ?? undefined, draftFor: draftFor ?? undefined });
       router.replace('/record/review');
-    } catch (e) {
-      stopTimer();
-      setRecording(false);
-      console.error('recordAsync failed', e);
-    }
-  }, [ready, recording, prompt, light, facing, router, replyTo, target, draftFor]);
+    };
+    const t = createTake(facing, {
+      record: (maxDurationSeconds) => {
+        if (!cam.current) return Promise.reject(new Error('camera_unmounted'));
+        blinkTorchIfBack(t.facing);
+        return cam.current.recordAsync({ maxDuration: maxDurationSeconds, codec: RECORDING_SETTINGS.codec });
+      },
+      stopRecording: () => cam.current?.stopRecording(),
+      switchCamera,
+      keep: keepTakeSegment,
+      discard: deleteFileQuietly,
+      now: Date.now,
+      platform: Platform.OS,
+      onChange: () => setElapsedMs(t.elapsedMs()),
+      onFinish: finished,
+    });
+    take.current = t;
+    setRecording(true);
+    setElapsedMs(0);
+    track('record_started', { kind });
+    timer.current = setInterval(() => {
+      const ms = t.elapsedMs();
+      setElapsedMs(ms);
+      // The 30 seconds are the total across segments; the camera's own limit is the backstop.
+      if (ms >= MAX_DURATION_MS) t.stop('limit');
+    }, 100);
+    t.start();
+  }, [ready, prompt, facing, router, replyTo, target, draftFor, switchCamera, blinkTorchIfBack]);
 
   const stop = () => {
-    cam.current?.stopRecording();
+    take.current?.stop('stop');
+  };
+
+  const flip = () => {
+    const t = take.current;
+    if (t) t.flip();
+    else setFacing((f) => (f === 'front' ? 'back' : 'front'));
   };
 
   const cancel = () => {
-    if (recording) cam.current?.stopRecording();
+    take.current?.cancel();
     router.back();
   };
+
+  // Leaving the app ends the take with what it has (the camera stops anyway); closing the screen
+  // any other way discards it.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') take.current?.stop('interrupted');
+    });
+    return () => {
+      sub.remove();
+      take.current?.cancel();
+      stopTimer();
+      const waiter = cameraReadyWaiter.current;
+      if (waiter) clearTimeout(waiter.timeout);
+    };
+  }, []);
 
   const cameraOff = camera && !camera.granted && !camera.canAskAgain;
   const micOff = !!camera?.granted && !!mic && !mic.granted && !mic.canAskAgain;
@@ -168,10 +272,8 @@ export default function RecordScreen() {
       ) : (
         <View />
       )}
-      {/* Flip during a take is a locked requirement (SPEC.md Section 6; Nemat, 6 Oct). It needs
-          segment stitching, tracked as docs/BLOCKERS.md B-1. Until it lands the control is
-          disabled while recording, dimmed and announced as unavailable, so nothing pretends. */}
-      <GlassTool label={recording ? 'Flip camera, unavailable while recording' : 'Flip camera'} disabled={recording} onPress={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))}>
+      {/* Flip works during a take too (SPEC.md Section 6; Nemat, 6 Oct; docs/BLOCKERS.md B-1). */}
+      <GlassTool label="Flip camera" onPress={flip}>
         <FlipIcon />
       </GlassTool>
     </View>
@@ -210,6 +312,7 @@ export default function RecordScreen() {
       <StatusBar style="light" />
       {camera?.granted ? (
         <CameraView
+          key={cameraKey}
           ref={cam}
           style={StyleSheet.absoluteFill}
           facing={facing}
@@ -220,7 +323,7 @@ export default function RecordScreen() {
           enableTorch={torch}
           mute={false}
           mirror={facing === 'front'}
-          onCameraReady={() => setReady(true)}
+          onCameraReady={onCameraReady}
         />
       ) : null}
       {/* Front "light": a screen-fill treatment (phase 1 condition). */}
@@ -262,8 +365,8 @@ export default function RecordScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={recording ? `Stop recording, ${Math.round(elapsedMs / 1000)} of 30 seconds` : micOff ? 'Record, unavailable' : 'Record'}
-          disabled={micOff || !ready}
-          onPress={recording ? stop : () => void start()}
+          disabled={recording ? false : micOff || !ready}
+          onPress={recording ? stop : start}
           style={s.recordButton}
         >
           <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
