@@ -7,6 +7,7 @@
 //   /u/{name} profiles have no web page in v1: the sign-in sheet
 // Pages are noindex during the beta and carry link previews (Open Graph). Every interaction
 // opens the sign-in sheet. Blocking works only in the app; a visitor can watch public content.
+import { clientIp } from "../_shared/client.ts";
 import { adminClient } from "../_shared/supabase.ts";
 import { APP_SCHEME, appLink, hlsScriptTag, type LinkKind, parseWebPath } from "./links.ts";
 
@@ -203,8 +204,12 @@ function html(body: string, status = 200): Response {
 
 // Web events (SPEC.md Section 21): web_link_opened and web_signin_sheet_shown. A visitor has
 // no account, so the id is random per request (unlike the app's pseudonymous per-account id).
-async function logWebEvent(admin: ReturnType<typeof adminClient>, name: string, props: Record<string, unknown>): Promise<void> {
+// At most web_event events per client IP per window (rate_limit_rules, migration 20261016000204):
+// an anonymous beacon cannot fill the table. Over the limit the event is dropped; the page is the same.
+async function logWebEvent(admin: ReturnType<typeof adminClient>, req: Request, name: string, props: Record<string, unknown>): Promise<void> {
   try {
+    const { data: allowed } = await admin.rpc("web_event_allowed", { p_client: clientIp(req) });
+    if (allowed !== true) return;
     await admin.from("analytics_events").insert({ anon_id: crypto.randomUUID(), platform: "web", name, props, client_ts: new Date().toISOString() });
   } catch {
     // Analytics never break a page.
@@ -218,11 +223,11 @@ Deno.serve(async (req) => {
   const { kind, id } = route;
   const admin = adminClient();
   if (kind === "e") {
-    if (id === "signin") await logWebEvent(admin, "web_signin_sheet_shown", { logged_in: false });
+    if (id === "signin") await logWebEvent(admin, req, "web_signin_sheet_shown", { logged_in: false });
     return new Response(null, { status: 204 });
   }
   const link = appLink(kind as LinkKind, id);
-  void logWebEvent(admin, "web_link_opened", { target: kind === "r" ? "video" : kind === "p" ? "prompt" : kind === "i" ? "invite" : "profile", logged_in: false });
+  void logWebEvent(admin, req, "web_link_opened", { target: kind === "r" ? "video" : kind === "p" ? "prompt" : kind === "i" ? "invite" : "profile", logged_in: false });
   if (kind === "i") return html(invitePage(id, url.toString()));
   if (kind === "u") return html(unavailablePage(url.toString(), link));
   const rpc = kind === "r" ? "web_video" : "web_prompt";

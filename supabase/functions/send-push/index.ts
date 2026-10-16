@@ -2,6 +2,7 @@
 // Called by pg_cron through pg_net every minute (public.run_push_sender) with the key stored
 // in Vault as push_function_key; the same value is this function's PUSH_SENDER_KEY secret.
 // No user JWT. Dead tokens reported by Expo are dropped.
+import { bearerMatches } from "../_shared/client.ts";
 import { json } from "../_shared/mux.ts";
 import { adminClient } from "../_shared/supabase.ts";
 
@@ -21,7 +22,8 @@ const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   const key = Deno.env.get("PUSH_SENDER_KEY");
-  if (!key || req.headers.get("Authorization") !== `Bearer ${key}`) return json({ error: "unauthorized" }, 401);
+  // Constant-time comparison (a plain !== leaks how much of the key matched through timing).
+  if (!bearerMatches(req.headers.get("Authorization"), key)) return json({ error: "unauthorized" }, 401);
 
   const admin = adminClient();
   const { data, error } = await admin.rpc("push_due", { p_limit: 100 });
