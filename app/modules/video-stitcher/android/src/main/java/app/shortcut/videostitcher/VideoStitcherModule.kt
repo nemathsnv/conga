@@ -98,10 +98,11 @@ private class VideoStitcher(private val context: Context) {
           .setEffects(Effects(listOf(), listOf(frame)))
           .build()
       }
+      // Audio and video declared for the whole sequence: one continuous audio track, with silence
+      // for a segment that has no sound. (Media3 1.9's replacement for experimentalSetForceAudioTrack,
+      // which throws when the track types are given.)
       val sequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO))
         .addItems(items)
-        // A segment without sound gets silence, so the sequence still has one continuous audio track.
-        .experimentalSetForceAudioTrack(true)
         .build()
       composition = Composition.Builder(sequence).build()
       val dir = File(context.cacheDir, "VideoStitcher").apply { mkdirs() }
