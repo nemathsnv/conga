@@ -4476,6 +4476,33 @@ The behaviour these boards describe is built and tested.
 3. Then, each separately: build the boards; the rollout in section 19.5 (migrations, the
    abandon-submission function, the founder build, device checks, C1 on hosted).
 
+## 21. H1 read-only hosted preflight passed (16 Oct 11:44 UTC; nothing deployed)
+
+The 16 Oct multi-agent integration (`docs/release/FINAL-REPORT.md`) ends in one ordered hosted
+sequence, H0 to H13 (`docs/release/RELEASE-CHECKLIST.md` Part 1B). H1, the read-only preflight,
+was run by the lead with `scripts/h1-preflight.sh` under a permission rule Nemat added for the
+read-only CLI commands (`supabase db query --linked`, `functions list`, `secrets list`,
+`migration list`); the package had been reviewed independently the same day. Result:
+`docs/release/H1-REPORT.md`; evidence `docs/release/h1-results-20261016T114442Z.txt`.
+
+- 17 migrations, latest `20261013000100`; fingerprint 759 objects, line for line equal to a local
+  stack built from the same 17 migrations.
+- `postgres` can SELECT and DELETE `auth.sessions` (needed by `20261016000202`); no `pg_graphql`;
+  the 4 avatar policies.
+- No member with two primary responses on one prompt (needed by `20261016000300`).
+- Clean-up `off`, health `ok`, no open job, 0 purge failures, the 8 cron jobs; finished jobs
+  `done=3`, `skipped=1` as Tests 4B, A1 and B1 left them.
+- Founder response and ledger hashes unchanged since stage 2; V `live` on P2 with asset a, author
+  T1; T1 active; 0 deleted accounts; 1 deleted video, the 12 Oct canary video reply.
+- Functions: the same five, all `ACTIVE`, none of the new ones; 11 secrets by name, no
+  `MUX_CLEANUP_MODE`, `PUSH_SENDER_KEY` or `AVATAR_CLEANUP_KEY`; 9 migrations local-only.
+- One package expectation was wrong on the first run (it expected 0 deleted videos, from the 12 Oct
+  preflight taken before the canary); corrected, re-run, all PASS. The hosted project was not
+  changed between the runs.
+
+*Next:* H2 (batch A: `20261013000200`, `20261013000300`, then `abandon-submission`), each step on
+Nemat's go-ahead; package `docs/release/H2-DEPLOY.md`.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

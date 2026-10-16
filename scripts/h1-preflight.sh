@@ -108,7 +108,12 @@ verdict "7 V status|playback|asset|author" "live|tu8ooWH201axyHzgonRLCnDhETAgeWw
 r="$(q "select (a.deleted_at is null) || '|' || coalesce(a.moderation_status, 'none') as v from public.accounts a where a.id = 'b0c14e38-4e89-4dbd-a9a3-8a8c01872a78'" | tail -1)"
 verdict "7 T1 active|moderation" "true|active" "$r"
 r="$(q "select (select count(*) from public.accounts where deleted_at is not null) || '|' || (select count(*) from public.responses where status in ('removed', 'deleted')) as v" | tail -1)"
-verdict "7 deleted accounts|removed or deleted videos" "0|0" "$r"
+# One deleted video is expected: the stage 3 step 4B canary, a video reply (6f600f9e-…) deleted by
+# its author on 12 Oct 16:53 UTC, whose Mux asset was the first real deletion (BETA-READINESS 15).
+verdict "7 deleted accounts|removed or deleted videos" "0|1" "$r"
+r="$(q "select r.id::text || '|' || r.kind || '|' || r.status || '|' || coalesce(r.deleted_at::text, '') as v from public.responses r where r.status in ('removed', 'deleted') order by r.created_at" | tail -1)"
+verdict "7 the one deleted video is the 12 Oct canary" "6f600f9e-3559-4911-9ebf-13d9d3df509d|reply|deleted|2026-10-12 16:53:19.162388+00" "$r"
+say "6 job statuses expected: done=3 (canary deletion 12 Oct; A1 revoke and B1 restore of V, 13 Oct), skipped=1 (A1's retention deletion, skipped by the restore)"
 
 # 8. functions and secrets (names only)
 if [ "$MODE" = "linked" ]; then
