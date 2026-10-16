@@ -19,7 +19,7 @@ branch listed by `git worktree list` on 16 Oct is an ancestor of that commit.
 | C | Opus | Auth hardening verification, privacy audit, account lifecycle, hosted config checklist | in progress |
 | D | Sonnet | Moderator removal keeps the response slot; internal moderation admin (`admin` Edge Function) | in progress |
 | E | Sonnet | Failed-post review package (P1 to P9), approved-UI audit and fixes, P1 to P9 prepared on a holding branch | implemented locally; integrated (becd7fa); P1 to P9 on `hold/failed-post-ui` (9c32722) awaiting Nemat's approval; simulator walk-through pending. Follow-up in progress: notification tap handling, Android channel, push route tests |
-| F | Sonnet | Lockfile and reproducible build, release configuration, iOS/Android/notification readiness, policy drafts, gate checklist, spec sync | implemented locally; integrated (dd69fe4). Follow-up in progress: web player app link and pinned hls.js, Android blocked permissions |
+| F | Sonnet | Lockfile and reproducible build, release configuration, iOS/Android/notification readiness, policy drafts, gate checklist, spec sync | implemented locally; integrated (dd69fe4). Follow-up integrated (f8fcee2): web player app links, pinned hls.js with SRI, Android blocked permissions |
 
 ## Conventions fixed for this effort
 
