@@ -15,10 +15,12 @@ import { ActionSheet } from '@/ui/ActionSheet';
 import { Avatar } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { ChevronLeft, PlacePinIcon, ShareIcon } from '@/ui/Icons';
+import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 export default function PlaceScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [data, setData] = useState<PlacePage | null>(null);
@@ -75,7 +77,7 @@ export default function PlaceScreen() {
         {place?.image_path ? <Image source={{ uri: place.image_path }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.35)' }]} />
         <View style={[s.header, { top: insets.top + 3 }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={s.back}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={s.back}>
             <ChevronLeft color={colors.white} />
           </Pressable>
         </View>

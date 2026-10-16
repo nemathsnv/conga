@@ -12,6 +12,10 @@ export function setUnread(n: number): void {
   listeners.forEach((l) => l());
 }
 
+export function getUnread(): number {
+  return unread;
+}
+
 export async function refreshUnread(): Promise<void> {
   try {
     setUnread(await activityUnreadCount());

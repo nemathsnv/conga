@@ -3,11 +3,13 @@
 // person's own first response.
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { track } from '@/lib/analytics';
 import { avatarUrl } from '@/lib/api';
 import { followUser, likeVideo, unfollowUser, unlikeVideo, type Conversation } from '@/lib/content';
+import { promptLink } from '@/lib/links';
 import { moreResponsesLabel, responsesLabel, timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, PromptLabel, RailAction, VideoGradients } from '@/ui/dark';
@@ -36,6 +38,11 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
   const openShare = () =>
     router.push({ pathname: '/safety', params: { flow: 'share', kind: 'video', id: response.id, authorId: response.author.id, authorName: response.author.name, authorUsername: response.author.username, authorPhoto: response.author.photo_path ?? '', title: `${response.author.name} · ${prompt.text}` } });
   const openDelete = () => router.push({ pathname: '/safety', params: { flow: 'delete', kind: 'video', id: response.id, title: 'response' } });
+
+  const askSomeone = () => {
+    track('share_tapped', { target: 'prompt', method: 'share', logged_in: true });
+    void Share.share({ url: promptLink(prompt.id), message: promptLink(prompt.id) }).catch(() => undefined);
+  };
 
   const toggleLike = useCallback(async () => {
     const next = !liked;
@@ -111,10 +118,10 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
               <Text style={s.firstTitle}>You&apos;re the first response.</Text>
               <Text style={s.firstSub}>We&apos;ll let you know when people respond.</Text>
             </View>
-            {/* "Ask someone" shares the prompt link: sharing arrives with phase 5. */}
-            <View style={s.askButton}>
+            {/* "Ask someone" opens the phone's share sheet with the prompt's link (as the suggestion screen does). */}
+            <Pressable accessibilityRole="button" onPress={askSomeone} style={({ pressed }) => [s.askButton, pressed && { opacity: 0.7 }]}>
               <Text style={s.askText}>Ask someone</Text>
-            </View>
+            </Pressable>
           </View>
         </Glass>
       ) : (

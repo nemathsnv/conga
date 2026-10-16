@@ -17,6 +17,7 @@ import { Avatar } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { CloseIcon, HeartIcon, VideoReplyIcon } from '@/ui/Icons';
 import { useOverlayWhileMounted } from '@/ui/playerOverlay';
+import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
 
@@ -34,6 +35,7 @@ function ago(iso: string): string {
 
 export default function CommentsScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { responseId } = useLocalSearchParams<{ responseId: string }>();
@@ -133,25 +135,36 @@ export default function CommentsScreen() {
       );
     }
     const author = c.author;
+    // Long-press opens the comment's actions (LV-CommentActions, LV-CommentOwn); a screen reader gets
+    // the same through a custom action on the comment text.
+    const openActions = () =>
+      c.is_own
+        ? setOwn(c)
+        : router.push({ pathname: '/safety', params: { flow: 'comment', kind: 'comment', id: c.id, authorId: author.id, authorName: author.name, authorUsername: author.username, authorPhoto: author.photo_path ?? '', body: c.body ?? '' } });
     return (
     <Pressable
       key={c.id}
-      onLongPress={() =>
-        c.is_own
-          ? setOwn(c)
-          : router.push({ pathname: '/safety', params: { flow: 'comment', kind: 'comment', id: c.id, authorId: author.id, authorName: author.name, authorUsername: author.username, authorPhoto: author.photo_path ?? '', body: c.body ?? '' } })
-      }
+      accessible={false}
+      onLongPress={openActions}
       delayLongPress={350}
       style={[s.cm, thread && s.cmReply]}
     >
       <Avatar uri={avatarUrl(author.photo_path)} size={thread ? 26 : 34} />
       <View style={{ flex: 1 }}>
-        <Text style={s.nameLine}>
-          <Text style={s.name}>{author.name}</Text>
-          {c.is_author ? <Text style={s.authorTag}> Author</Text> : null}
-          <Text style={s.time}> · {ago(c.created_at)}</Text>
-        </Text>
-        <Text style={s.body}>{c.body}</Text>
+        <View
+          accessible
+          accessibilityActions={[{ name: 'comment_actions', label: c.is_own ? 'Delete comment' : 'Report comment or block' }]}
+          onAccessibilityAction={(e) => {
+            if (e.nativeEvent.actionName === 'comment_actions') openActions();
+          }}
+        >
+          <Text style={s.nameLine}>
+            <Text style={s.name}>{author.name}</Text>
+            {c.is_author ? <Text style={s.authorTag}> Author</Text> : null}
+            <Text style={s.time}> · {ago(c.created_at)}</Text>
+          </Text>
+          <Text style={s.body}>{c.body}</Text>
+        </View>
         <View style={s.actions}>
           <Pressable
             accessibilityRole="button"
@@ -180,7 +193,7 @@ export default function CommentsScreen() {
   return (
     <View style={s.root}>
       {/* Over the playing video: who and what (the player hides its own chrome meanwhile). */}
-      <Pressable style={[StyleSheet.absoluteFill, { bottom: height - sheetTop }]} onPress={() => router.back()} accessibilityLabel="Close comments" />
+      <Pressable style={[StyleSheet.absoluteFill, { bottom: height - sheetTop }]} onPress={() => goBack()} accessible={false} />
       {author ? (
         <View pointerEvents="none" style={[s.topLine, { top: insets.top + 8 }]}>
           <Avatar uri={avatarUrl(author.photo_path)} size={22} />
@@ -195,7 +208,7 @@ export default function CommentsScreen() {
         <View style={s.handle} />
         <View style={s.titleRow}>
           <Text style={s.title}>{sheet ? `${sheet.count} ${sheet.count === 1 ? 'comment' : 'comments'}` : ''}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close comments" onPress={() => router.back()} style={s.close}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close comments" onPress={() => goBack()} style={s.close}>
             <CloseIcon size={20} color={colors.textTertiary} />
           </Pressable>
         </View>
@@ -248,7 +261,7 @@ export default function CommentsScreen() {
             accessibilityLabel="Add a comment"
             editable={!sending}
           />
-          <Pressable accessibilityRole="button" accessibilityLabel={author ? `Reply to ${author.name.split(' ')[0]} with video` : 'Video'} onPress={() => sheet && videoReply(sheet.response.id)} style={({ pressed }) => [s.videoButton, pressed && { opacity: 0.8 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={author ? `Record a video reply to ${author.name.split(' ')[0]}` : 'Video'} onPress={() => sheet && videoReply(sheet.response.id)} style={({ pressed }) => [s.videoButton, pressed && { opacity: 0.8 }]}>
             <VideoReplyIcon size={16} />
             <Text style={s.videoText}>Video</Text>
           </Pressable>
@@ -257,7 +270,7 @@ export default function CommentsScreen() {
 
       {/* Board LV-CommentOwn */}
       <Modal visible={own !== null} transparent animationType="fade" onRequestClose={() => setOwn(null)}>
-        <Pressable style={s.dim} onPress={() => setOwn(null)}>
+        <Pressable style={s.dim} onPress={() => setOwn(null)} accessible={false}>
           <View style={[s.sheetWrap, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
             <View style={s.actionSheet}>
               <View style={s.actionHead}>

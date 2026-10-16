@@ -2,6 +2,7 @@
 // buttons, the feed header, the prompt label, the rail, the progress bar and gradients.
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,6 +49,7 @@ export function VideoGradients({ top = 200, bottom = 420, bottomAlpha = 0.62, to
 /** "Following · For you" header with the search icon (Main). */
 export function FeedHeader({ tab, onTab }: { tab: 'following' | 'foryou'; onTab: (t: 'following' | 'foryou') => void }) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   return (
     <View style={[s.feedHeader, { top: insets.top + 7 }]}>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'following' }} onPress={() => onTab('following')} hitSlop={8}>
@@ -58,10 +60,10 @@ export function FeedHeader({ tab, onTab }: { tab: 'following' | 'foryou'; onTab:
         <Text style={[s.feedTab, tab === 'foryou' && s.feedTabOn]}>For you</Text>
         {tab === 'foryou' ? <View style={s.feedTabLine} /> : null}
       </Pressable>
-      {/* Search opens in phase 6 (R-Discover / SR-*). */}
-      <View style={s.searchButton} accessibilityLabel="Search">
+      {/* Search icon, top right (board Main, SPEC.md Section 4): opens SR-Recent. */}
+      <Pressable accessibilityRole="button" accessibilityLabel="Search" onPress={() => router.push('/search')} style={s.searchButton}>
         <SearchIcon />
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -111,7 +113,7 @@ export function ProgressLine({ fraction, style }: { fraction: number; style?: St
 
 const s = StyleSheet.create({
   tool: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.glassBorder },
-  pill: { height: 36, borderRadius: 18, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.glassBorder },
+  pill: { minHeight: 36, borderRadius: 18, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.glassBorder },
   pillContent: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14 },
   gradient: { position: 'absolute', left: 0, right: 0 },
   feedHeader: { position: 'absolute', left: 0, right: 0, height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22 },

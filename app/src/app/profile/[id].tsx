@@ -7,10 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Spinner } from '@/ui/HomeStates';
 import { ChevronLeft, MoreIcon } from '@/ui/Icons';
 import { ProfileBody, useProfile } from '@/ui/ProfileView';
+import { useGoBack } from '@/ui/navigation';
 import { colors } from '@/ui/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, responses } = useProfile({ id });
@@ -18,7 +20,7 @@ export default function ProfileScreen() {
     <View style={s.root}>
       <StatusBar style="dark" />
       <View style={[s.header, { marginTop: insets.top + 3 }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={s.headerButton}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={s.headerButton}>
           <ChevronLeft />
         </Pressable>
         <Pressable

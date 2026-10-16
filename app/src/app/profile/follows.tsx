@@ -10,12 +10,14 @@ import { followList, followUser, unfollowUser, type FollowRow } from '@/lib/cont
 import { Avatar, Separator } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { ChevronLeft } from '@/ui/Icons';
+import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 type Kind = 'followers' | 'following';
 
 export default function FollowsScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id: string; kind?: string; username?: string }>();
   const [kind, setKind] = useState<Kind>(params.kind === 'following' ? 'following' : 'followers');
@@ -48,7 +50,7 @@ export default function FollowsScreen() {
     <View style={s.root}>
       <StatusBar style="dark" />
       <View style={[s.header, { marginTop: insets.top + 3 }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={s.headerButton}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={s.headerButton}>
           <ChevronLeft />
         </Pressable>
         <Text style={s.headerTitle} numberOfLines={1}>{params.username ?? ''}</Text>

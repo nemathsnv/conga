@@ -24,3 +24,16 @@ export function profileLink(username: string): string {
 export function inviteLink(code: string): string {
   return `${base()}/i/${code}`;
 }
+
+/** Where an opened link to a video goes in the app (SPEC.md Section 4, "Links"): a response opens in
+ *  the response player at that response, a video reply opens in its own player. A video that cannot
+ *  be read (deleted, removed, not found) goes to the video reply player, whose unavailable state
+ *  says one neutral message and never the reason. */
+export type VideoLinkTarget =
+  | { pathname: '/player/[promptId]'; params: { promptId: string; entry: string } }
+  | { pathname: '/reply/[id]'; params: { id: string } };
+
+export function videoLinkTarget(id: string, video: { kind: 'response' | 'reply'; prompt_id: string } | null): VideoLinkTarget {
+  if (video && video.kind === 'response') return { pathname: '/player/[promptId]', params: { promptId: video.prompt_id, entry: id } };
+  return { pathname: '/reply/[id]', params: { id } };
+}
