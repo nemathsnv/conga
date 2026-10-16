@@ -47,9 +47,31 @@ describe('systemPathRedirect (unknown links go Home)', () => {
 });
 
 describe('hasScreenBeneath (Back from a screen a link opened)', () => {
-  it('goes back when there is a screen under it, and Home when it is the only one', () => {
-    expect(hasScreenBeneath(2)).toBe(true);
-    expect(hasScreenBeneath(1)).toBe(false);
-    expect(hasScreenBeneath(0)).toBe(false);
+  // Shapes logged from useRootNavigationState() on the iOS simulator (16 Oct 2026).
+  const pushedFromHome = { type: 'stack', index: 0, routes: [{ name: '__root', state: { type: 'stack', index: 1, routes: [{ name: '(tabs)' }, { name: 'profile/[id]' }] } }] };
+  const openedByLinkAtLaunch = { type: 'stack', index: 0, routes: [{ name: '__root', state: { type: 'stack', index: 0, routes: [{ name: 'profile/[id]' }] } }] };
+
+  it('sees the screen beneath a pushed screen, though the root wrapper has one route', () => {
+    expect(hasScreenBeneath(pushedFromHome)).toBe(true);
+  });
+  it('sees nothing beneath a screen a link opened at launch: Back goes Home', () => {
+    expect(hasScreenBeneath(openedByLinkAtLaunch)).toBe(false);
+  });
+  it('a push chain inside the stack (player, then comments) still pops one', () => {
+    const chain = { type: 'stack', index: 0, routes: [{ name: '__root', state: { type: 'stack', index: 2, routes: [{ name: '(tabs)' }, { name: 'player/[promptId]' }, { name: 'comments/[responseId]' }] } }] };
+    expect(hasScreenBeneath(chain)).toBe(true);
+  });
+  it('a link-opened screen with a second screen pushed on it has one beneath', () => {
+    const linkThenPush = { type: 'stack', index: 0, routes: [{ name: '__root', state: { type: 'stack', index: 1, routes: [{ name: 'profile/[id]' }, { name: 'player/[promptId]' }] } }] };
+    expect(hasScreenBeneath(linkThenPush)).toBe(true);
+  });
+  it('tabs do not count as screens beneath (Back does not switch tabs)', () => {
+    const onSecondTab = { type: 'stack', index: 0, routes: [{ name: '__root', state: { type: 'stack', index: 0, routes: [{ name: '(tabs)', state: { type: 'tab', index: 3, routes: [{ name: 'index' }, { name: 'discover' }, { name: 'activity' }, { name: 'me' }] } }] } }] };
+    expect(hasScreenBeneath(onSecondTab)).toBe(false);
+  });
+  it('no state yet (before the navigator mounts) is nothing beneath', () => {
+    expect(hasScreenBeneath(undefined)).toBe(false);
+    expect(hasScreenBeneath(null)).toBe(false);
+    expect(hasScreenBeneath({ type: 'stack', routes: [] })).toBe(false);
   });
 });

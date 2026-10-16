@@ -76,8 +76,27 @@ export function systemPathRedirect(path: string): string {
   return '/';
 }
 
-/** Whether a screen has another screen under it in the app's stack. A link or a notification that
- *  opened the app leaves exactly one; Back then goes Home instead of doing nothing. */
-export function hasScreenBeneath(rootRouteCount: number): boolean {
-  return rootRouteCount > 1;
+/** The parts of a React Navigation state that decide Back (useRootNavigationState()). */
+export type NavStateLike = {
+  type?: string;
+  index?: number;
+  routes?: { name?: string; state?: NavStateLike }[];
+};
+
+/**
+ * Whether the focused screen has another screen under it in the app's stack. Walks the focused path
+ * from the root (root -> routes[index].state -> ...): expo-router's root is a one-route wrapper
+ * ("__root") with the app's stack inside it, so its own route count says nothing. Any stack level
+ * whose focused route is not its first has a screen beneath; tab navigators do not count (Back does
+ * not switch tabs). A link or a notification that opened the app leaves none, and Back then goes Home.
+ */
+export function hasScreenBeneath(state: NavStateLike | null | undefined): boolean {
+  let level: NavStateLike | undefined = state ?? undefined;
+  for (let depth = 0; level && depth < 20; depth++) {
+    const routes = level.routes ?? [];
+    const index = level.index ?? routes.length - 1;
+    if (level.type !== 'tab' && index > 0) return true;
+    level = routes[index]?.state;
+  }
+  return false;
 }
