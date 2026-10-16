@@ -68,10 +68,9 @@ Apple access, or by hand):
 - **Associated Domains, when the domain exists** (B-3): add to `app.config.ts`
   `ios.associatedDomains: ['applinks:<domain>']`, serve
   `https://<domain>/.well-known/apple-app-site-association` (JSON, no extension, `application/json`,
-  no redirect) listing `<TEAMID>.<bundle id>` with paths `/r/*`, `/p/*`, `/i/*`. **Gap in the app:** only
-  `app/i/[code]` exists as a route; `/r/{id}`, `/p/{id}` and `/u/{name}` have no route in `src/app`, so a
-  universal link to a response or prompt would open the app on an unmatched route. The routes must exist (or
-  the paths be mapped) before associated domains are switched on. Not this role's code.
+  no redirect) listing `<TEAMID>.<bundle id>` with paths `/r/*`, `/p/*`, `/i/*`. **Routes (updated 16 Oct):** the app now has
+  `r/[id]`, `p/[id]`, `u/[username]` and `i/[code]` in `src/app` (Agent E, integration branch); they were missing when
+  this was first written. Opening them from an https link is still unverified on a device and needs the domain.
 
 ## 4. Signing with EAS
 
