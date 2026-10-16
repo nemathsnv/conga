@@ -4,6 +4,7 @@
 #
 #   scripts/scheduler-integration.sh [stack folder]     (default: the repository; the folder whose
 #                                                        supabase/config.toml names the stack)
+#   FAKE_MUX_PORT=<port> (default 55690) moves the fake Mux, so two local stacks can run it at once.
 #
 # The Edge runtime is served with fake-only settings (no real Mux credentials exist in it) and kept
 # in a restart loop, so the test can kill it mid-call the way a platform restart would. It replaces
@@ -21,10 +22,11 @@ case "$API_URL" in
   *) echo "refusing: API_URL '$API_URL' is not a local stack" >&2; exit 1 ;;
 esac
 PROJECT="$(sed -n 's/^project_id = "\(.*\)"$/\1/p' "$STACK/supabase/config.toml" | head -1)"
+PORT="${FAKE_MUX_PORT:-55690}"
 ENV_FILE="$(mktemp)"
 LOG="$(mktemp)"
-cat > "$ENV_FILE" <<'EOF'
-MUX_API_BASE=http://host.docker.internal:55690
+cat > "$ENV_FILE" <<EOF
+MUX_API_BASE=http://host.docker.internal:$PORT
 MUX_TOKEN_ID=sched-test-id
 MUX_TOKEN_SECRET=sched-test-secret
 MUX_WEBHOOK_SECRET=sched-test-webhook
@@ -50,5 +52,5 @@ done
 [ "$code" = "405" ] || { echo "the Edge runtime did not come up; log: $LOG" >&2; exit 1; }
 
 eval "$(sed -n -e 's/^API_URL=/export SUPABASE_URL=/p' -e 's/^ANON_KEY=/export SUPABASE_ANON_KEY=/p' -e 's/^SERVICE_ROLE_KEY=/export SUPABASE_SERVICE_ROLE_KEY=/p' <<<"$STATUS")"
-export DB_CONTAINER="supabase_db_$PROJECT" EDGE_CONTAINER="supabase_edge_runtime_$PROJECT"
+export DB_CONTAINER="supabase_db_$PROJECT" EDGE_CONTAINER="supabase_edge_runtime_$PROJECT" FAKE_MUX_PORT="$PORT"
 deno test --allow-env --allow-net --allow-run "$REPO/supabase/functions/_tests/scheduler_integration_test.ts"
