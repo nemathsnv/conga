@@ -46,6 +46,7 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 | Stage 4 credentials checklist, release-build prep | done (452baf6): docs/release/STAGE-4-SETUP.md (63 items, required vs optional, iPhone-only path), BUILD.md section 7, RELEASE-CHECKLIST state after 16 Oct; the domain rows wait for the Cloudflare comparison |
 | Notion | connector not authorised in this session; this file is the record |
 | Cycle 2 report | docs/release/CYCLE-2-REPORT.md |
+| Pages rollout | six approvals prepared in docs/release/PAGES-ROLLOUT.md; waiting for the domain name and Cloudflare login (Nemat) |
 
 ## Hosted sequence (each step on Nemat's approval)
 
