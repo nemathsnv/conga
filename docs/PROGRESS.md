@@ -40,11 +40,12 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 
 | Item | State |
 |---|---|
-| Failed-post UI P1 to P9 | approved by Nemat; merged from hold/failed-post-ui (3908825); typecheck, lint clean, Jest 347/347; simulator verification and screenshot review in progress (Agent B); the 14 boards added to the approved set, four boards updated, decision recorded (ed854d7) |
+| Failed-post UI P1 to P9 | approved by Nemat; merged from hold/failed-post-ui (3908825); typecheck, lint clean, Jest 347/347; simulator review done: every reachable state matches the approved copy (docs/release/FAILED-POST-REVIEW-SIMULATOR.md, 18 screenshots); three defects found and fixed (banner still, confirm-email keyboard, P3 at launch); the 14 boards added to the approved set, four boards updated, decision recorded (ed854d7) |
 | Domain architecture | done: docs/release/WEB-HOSTING.md recommends Cloudflare Pages with Pages Functions; prepared in web/ (vitest 21/21, bundle builds, local end-to-end 31/31 against an isolated stack); nothing deployed, no DNS, no purchase; Stage 4 and the checklist follow it (3412d7b) |
 | Provider testing | deferred by Nemat; one coordinated session plan ready: docs/release/PROVIDER-SESSION.md (C2w fresh, C2a, E1, E2, E3a in one window, E3b on day 31; 2 secret windows in all) |
 | Stage 4 credentials checklist, release-build prep | done (452baf6): docs/release/STAGE-4-SETUP.md (63 items, required vs optional, iPhone-only path), BUILD.md section 7, RELEASE-CHECKLIST state after 16 Oct; the domain rows wait for the Cloudflare comparison |
 | Notion | connector not authorised in this session; this file is the record |
+| Cycle 2 report | docs/release/CYCLE-2-REPORT.md |
 
 ## Hosted sequence (each step on Nemat's approval)
 
