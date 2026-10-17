@@ -16,6 +16,7 @@ import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
+import { sheetOverPage } from '@/ui/playbackRules';
 import { useOverlay } from '@/ui/playerOverlay';
 import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
@@ -114,6 +115,8 @@ export default function PlayerScreen() {
   const total = prompt?.response_count ?? responses.length;
   const current = pages?.[index];
   const currentNumber = current?.kind === 'response' ? responses.findIndex((r) => r.response.id === current.response.id) + 1 : 0;
+  // Comments keeps the response playing with its chrome hidden; Replies pauses and dims it.
+  const sheet = sheetOverPage(overlay, current?.kind === 'response' ? current.response.id : null);
 
   const onViewable = useCallback(({ viewableItems }: { viewableItems: ViewToken<Page>[] }) => {
     const first = viewableItems.find((v) => v.isViewable);
@@ -206,8 +209,8 @@ export default function PlayerScreen() {
                 <ResponsePage
                   response={item.response}
                   prompt={prompt}
-                  active={i === index && overlay !== 'replies'}
-                  chrome={overlay !== 'comments'}
+                  active={i === index && sheet !== 'replies'}
+                  chrome={!(i === index && sheet === 'comments')}
                   next={pages[i + 1]?.kind === 'response' ? (pages[i + 1] as Extract<Page, { kind: 'response' }>).response : null}
                   onProgress={setProgress}
                   onEnd={advance}
@@ -240,9 +243,9 @@ export default function PlayerScreen() {
           getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
         />
       )}
-      {overlay === 'comments' ? null : header}
-      {pages && current?.kind !== 'empty' && overlay !== 'comments' ? strip : null}
-      {overlay === 'replies' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} /> : null}
+      {sheet === 'comments' ? null : header}
+      {pages && current?.kind !== 'empty' && sheet !== 'comments' ? strip : null}
+      {sheet === 'replies' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} /> : null}
     </View>
   );
 }

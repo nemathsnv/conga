@@ -4,10 +4,10 @@
 // would see the previous person's bell, or a feed reload they did not cause.
 import { setUnread } from './activityStore';
 import { takeFeedDirty } from './feedStore';
-import { setOverlay } from './playerOverlay';
+import { playerOverlays } from './overlayStack';
 
 export function resetAccountScopedUi(): void {
   setUnread(0);
   takeFeedDirty();
-  setOverlay('none');
+  playerOverlays.clear();
 }

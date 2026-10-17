@@ -1,34 +1,28 @@
 // Sheets that open over the response player (Comments, Replies) tell it what to do with the
 // video underneath: keep playing with its chrome hidden (Comments: "the response keeps
-// playing in the top third"), or pause (Replies: "paused"). In memory, one player at a time.
+// playing in the top third"), or pause (Replies: "paused"). The stack itself is overlayStack.ts.
 import { useEffect, useState } from 'react';
 
-export type OverlayMode = 'none' | 'comments' | 'replies';
+import { playerOverlays, type OverlayEntry, type OverlayMode } from './overlayStack';
 
-let mode: OverlayMode = 'none';
-const listeners = new Set<() => void>();
+export type { OverlayEntry, OverlayMode } from './overlayStack';
 
-export function setOverlay(next: OverlayMode): void {
-  mode = next;
-  listeners.forEach((l) => l());
-}
-
-export function useOverlay(): OverlayMode {
-  const [value, setValue] = useState(mode);
+/** The sheet on top of the stack, or null. */
+export function useOverlay(): OverlayEntry | null {
+  const [value, setValue] = useState(playerOverlays.top);
   useEffect(() => {
-    const l = () => setValue(mode);
-    listeners.add(l);
-    return () => {
-      listeners.delete(l);
-    };
+    const l = () => setValue(playerOverlays.top());
+    l();
+    return playerOverlays.subscribe(l);
   }, []);
   return value;
 }
 
-/** Call from a sheet: sets the mode while mounted. */
-export function useOverlayWhileMounted(next: OverlayMode): void {
+/** Call from a sheet: its entry is on the stack while the sheet is mounted. */
+export function useOverlayWhileMounted(mode: OverlayMode, responseId: string | undefined): void {
   useEffect(() => {
-    setOverlay(next);
-    return () => setOverlay('none');
-  }, [next]);
+    if (!responseId) return undefined;
+    const token = playerOverlays.push({ mode, responseId });
+    return () => playerOverlays.pop(token);
+  }, [mode, responseId]);
 }

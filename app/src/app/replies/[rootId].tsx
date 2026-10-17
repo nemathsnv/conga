@@ -26,7 +26,7 @@ export default function RepliesScreen() {
   const { width, height } = useWindowDimensions();
   const { rootId } = useLocalSearchParams<{ rootId: string }>();
   const [room, setRoom] = useState<ReplyRoom | null>(null);
-  useOverlayWhileMounted('replies');
+  useOverlayWhileMounted('replies', rootId);
 
   const load = useCallback(() => {
     if (!rootId) return Promise.resolve();

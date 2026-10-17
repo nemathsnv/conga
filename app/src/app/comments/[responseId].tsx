@@ -49,7 +49,7 @@ export default function CommentsScreen() {
   const [own, setOwn] = useState<CommentCard | null>(null);
   const [sending, setSending] = useState(false);
   const input = useRef<TextInput>(null);
-  useOverlayWhileMounted('comments');
+  useOverlayWhileMounted('comments', responseId);
 
   const load = useCallback(() => {
     if (!responseId) return Promise.resolve();
