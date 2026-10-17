@@ -4770,6 +4770,55 @@ effect: the first mint retiring U2, since T1's three C1 URLs still held its slot
 (`scripts/provider-c2w-c.sh e48cdb45-…`, expected `done`/`timed_out`) or list it alongside the
 new job as expected in the drain; a fresh C2w-a, then C2w-c within the hour, then C2a.
 
+## 29. Conga Pages proxy: Cloudflare `conga-web` configured, `web` v4 deployed (17 Oct 07:26 UTC; Nemat approved)
+
+PAGES-ROLLOUT approvals 1 to 4. Nemat did the Cloudflare and Supabase dashboard steps; the lead ran
+the preflight, the one deploy and the checks. No other function, secret, migration, DNS record or Mux
+object was touched.
+
+- *Cloudflare (Nemat, dashboard):* Pages project `conga-web` by Direct Upload of
+  `conga-web-dashboard.zip` (SHA-256 `0260dfae…4d41`); production variables `SUPABASE_URL`,
+  `ADMIN_HOST`, `WEB_BASE_URL` and encrypted `SUPABASE_ANON_KEY`, `WEB_PROXY_KEY`; redeployed.
+  Before configuration it served 503 everywhere except the two association files (read 17 Oct).
+- *Supabase secret (Nemat):* `WEB_PROXY_KEY` added (13 secrets). Its digest equals the SHA-256 of
+  `~/.conga-provider/web-proxy.key` (64 hex, no newline, mode 600); no value printed.
+- *Preflight (lead):* `web` v3 downloaded and byte-identical to 4602169. New bundle `web/index.ts`,
+  `links.ts`, `render.ts`, `_shared/client.ts`, `mux.ts`, `supabase.ts` from a79ef08; `deno check`
+  clean. Local spoof test of the exact `web/index.ts` against a fake PostgREST, 17/17: forged
+  `x-conga-client-ip` with no key, a wrong key, a key prefix, the key plus one character, the old
+  `x-shortcut-*` names, a duplicated key header, a malformed address, and an unset, empty or
+  31-character `WEB_PROXY_KEY` are all ignored; link-opened events are logged only with the key.
+  Pages side (vitest, throwaway): visitor-supplied `x-conga-*`, `x-forwarded-for`, `Authorization`
+  and cookies are never forwarded.
+- *Deploy:* `supabase functions deploy web --no-verify-jwt --project-ref picvoavfxnajfjkqawju` from the
+  integration worktree at a79ef08, clean tree. `web` v3 to **v4** ACTIVE, `verify_jwt` false; the
+  other eight functions unchanged (version, bundle hash, time); 13 secrets, names and digests
+  unchanged. v4 downloaded: all six files byte-identical to a79ef08.
+- *End to end (read-only SQL counts of `analytics_events` and hashed `rate_limit_counters`; every
+  request over IPv4 from the lead's Mac):* a page via Pages logged `web_link_opened`, so the
+  Cloudflare key equals the Supabase key. A direct beacon to the function and one via Pages landed
+  in the **same** bucket: Pages passes the visitor's real address, not Cloudflare's. Direct
+  link-opened with a forged address and a wrong key: 204, not logged. Forged `x-conga-client-ip`,
+  `x-forwarded-for`, `x-real-ip`, `true-client-ip`, direct and via Pages: counted in the real
+  bucket, no new bucket. A client-supplied `cf-connecting-ip` is refused with 403 by Cloudflare at
+  both `supabase.co` and `pages.dev`, so the header the function trusts first cannot be forged from
+  outside (H9, from the outside). 19 test events in all (invite 6, video 7, prompt 1, profile 1,
+  sign-in sheet 4), all in one bucket (19 of 60 for 07:00 to 08:00 UTC); the limit itself was not
+  exhausted on hosted (covered by `web_beacon_integration_test`, PASS 17 Oct).
+- *Routes via `conga-web.pages.dev`:* `/r/<live>` 200 `text/html` with `x-robots-tag: noindex`,
+  `og:title` "… on Conga", app link `shortcut://r/<id>`, no old name; unknown `/r` and `/p` 404;
+  `/i/TEST`, `/u/someone` 200; unknown path 404; `/admin` and `/admin/me` 404 (not the admin host);
+  both association files 200 `application/json`. Forged header values are not echoed. The function
+  URL still answers (text/plain, the platform rewrite) with the Conga wording. `admin` is not
+  deployed (`/functions/v1/admin/me` 404).
+- *Finding (minor, unchanged behaviour):* `/r/not-a-uuid` answers 500 with the unavailable page, as
+  v3 did: the RPC rejects a malformed id. Harmless; a 404 would be cleaner.
+- *Rollback:* redeploy `web` from 4602169 (a copy of that source is staged); remove the Supabase
+  secret to stop trusting the proxy.
+- *Next:* approval 5, the custom domains `conga.churntech.com` and `admin.conga.churntech.com`
+  (`CLOUDFLARE-DASHBOARD.md` part 5); the hosted sign-in email still says Shortcut
+  (`CONGA-RENAME.md` section 5).
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

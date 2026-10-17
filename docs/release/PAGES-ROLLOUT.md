@@ -3,7 +3,7 @@
 The rollout of `web/` (option B of `WEB-HOSTING.md`) as six separate go-aheads, in order. Revised on
 17 Oct for the rename (`CONGA-RENAME.md`) and for a **dashboard-only** Cloudflare deployment: Nemat
 does every Cloudflare step in the dashboard, with no `wrangler login`, API token or account access for
-anyone else. The click-by-click steps, settings and checks are in `CLOUDFLARE-DASHBOARD.md`; this file
+anyone else. **Approvals 1 to 4 done on 17 Oct** (BETA-READINESS section 29); next is 5. The click-by-click steps, settings and checks are in `CLOUDFLARE-DASHBOARD.md`; this file
 is the approval sequence. Nothing below has been executed.
 
 | | |
