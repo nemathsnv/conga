@@ -4,7 +4,7 @@
 // on someone else's comment does nothing yet.
 import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,6 +51,8 @@ export default function CommentsScreen() {
   const [sending, setSending] = useState(false);
   const input = useRef<TextInput>(null);
   useOverlayWhileMounted('comments', responseId);
+  // Replies (or any screen) over this sheet: its line above the sheet goes too (board Replies).
+  const focused = useIsFocused();
 
   const load = useCallback(() => {
     if (!responseId) return Promise.resolve();
@@ -206,7 +208,7 @@ export default function CommentsScreen() {
     <View style={s.root}>
       {/* Over the playing video: who and what (the player hides its own chrome meanwhile). */}
       <Pressable style={[StyleSheet.absoluteFill, { bottom: height - sheetTop }]} onPress={() => goBack()} accessible={false} />
-      {author ? (
+      {author && focused ? (
         <View pointerEvents="none" style={[s.topLine, { top: insets.top + 8 }]}>
           <Avatar uri={avatarUrl(author.photo_path)} size={22} />
           <Text style={s.topName} numberOfLines={1}>

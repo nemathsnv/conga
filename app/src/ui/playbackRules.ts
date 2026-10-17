@@ -54,3 +54,10 @@ export function playerPageActive({ isCurrentPage, screenFocused, overlay, respon
 export function endsToNext(chrome: boolean): boolean {
   return chrome;
 }
+
+/** Whether a player page draws its own chrome (the prompt header, the "N of M" strip, the author and
+ *  the rail). Not under a sheet opened for it: under Comments the sheet shows who and what above itself,
+ *  and under Replies the board shows only the dimmed video. */
+export function pageShowsChrome(isCurrentPage: boolean, sheet: OverlayEntry['mode'] | null): boolean {
+  return !(isCurrentPage && sheet !== null);
+}

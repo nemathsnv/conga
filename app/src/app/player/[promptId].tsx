@@ -16,7 +16,7 @@ import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
-import { autoSheet, endsToNext, playerPageActive, sheetOverPage } from '@/ui/playbackRules';
+import { autoSheet, endsToNext, pageShowsChrome, playerPageActive, sheetOverPage } from '@/ui/playbackRules';
 import { useOverlay } from '@/ui/playerOverlay';
 import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
@@ -210,7 +210,7 @@ export default function PlayerScreen() {
                   response={item.response}
                   prompt={prompt}
                   active={playerPageActive({ isCurrentPage: i === index, screenFocused: focused, overlay, responseId: item.response.id })}
-                  chrome={!(i === index && sheet === 'comments')}
+                  chrome={pageShowsChrome(i === index, sheet)}
                   next={pages[i + 1]?.kind === 'response' ? (pages[i + 1] as Extract<Page, { kind: 'response' }>).response : null}
                   onProgress={setProgress}
                   onEnd={advance}
@@ -243,8 +243,8 @@ export default function PlayerScreen() {
           getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
         />
       )}
-      {sheet === 'comments' ? null : header}
-      {pages && current?.kind !== 'empty' && sheet !== 'comments' ? strip : null}
+      {sheet ? null : header}
+      {pages && current?.kind !== 'empty' && !sheet ? strip : null}
       {sheet === 'replies' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} /> : null}
     </View>
   );

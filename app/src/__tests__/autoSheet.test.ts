@@ -1,4 +1,4 @@
-import { autoSheet, endsToNext } from '@/ui/playbackRules';
+import { autoSheet, endsToNext, pageShowsChrome } from '@/ui/playbackRules';
 
 const live = { kind: 'response', responseId: 'v1' };
 
@@ -33,5 +33,14 @@ describe('endsToNext', () => {
   it('moves on at the end only while no Comments sheet is over the response', () => {
     expect(endsToNext(true)).toBe(true);
     expect(endsToNext(false)).toBe(false);
+  });
+});
+
+describe('pageShowsChrome', () => {
+  it('hides the chrome of the page a sheet was opened for, Comments or Replies', () => {
+    expect(pageShowsChrome(true, null)).toBe(true);
+    expect(pageShowsChrome(true, 'comments')).toBe(false);
+    expect(pageShowsChrome(true, 'replies')).toBe(false);
+    expect(pageShowsChrome(false, 'replies')).toBe(true);
   });
 });
