@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { avatarUrl } from '@/lib/api';
 import { actorNames } from '@/lib/activityLabels';
 import { commentsList, deleteComment, likeComment, postComment, unlikeComment, type CommentCard, type CommentsSheet, type CommentThread } from '@/lib/content';
+import { isPostingRestriction, restrictionTarget } from '@/lib/restriction';
 import { useSession } from '@/lib/session';
 import { Avatar } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
@@ -41,7 +42,7 @@ export default function CommentsScreen() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { responseId } = useLocalSearchParams<{ responseId: string }>();
-  const { state } = useSession();
+  const { state, refresh } = useSession();
   const [sheet, setSheet] = useState<CommentsSheet | null>(null);
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<CommentCard | null>(null);
@@ -77,6 +78,15 @@ export default function CommentsScreen() {
       });
       if (card.thread_id) setExpanded((e) => new Set(e).add(card.thread_id as string));
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (isPostingRestriction(message)) {
+        // A-Restricted / LV-Suspended, as Post Review does: show the notice instead of nothing.
+        const fresh = await refresh();
+        const target = restrictionTarget(fresh?.restriction?.action_id ?? state?.restriction?.action_id);
+        if (target === '/(tabs)') router.dismissTo(target);
+        else router.replace(target);
+        return;
+      }
       console.error('post_comment failed', e);
     } finally {
       setSending(false);

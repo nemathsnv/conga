@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
 import { acknowledgeDisclosure, disclosureAcknowledged } from '@/lib/content';
+import { isPostingRestriction, restrictionTarget } from '@/lib/restriction';
 import { useSession } from '@/lib/session';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool, ProgressLine, VideoGradients } from '@/ui/dark';
@@ -117,12 +118,12 @@ export default function ReviewScreen() {
       else router.dismissTo('/(tabs)');
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      if (message.includes('posting_paused') || message.includes('suspended')) {
+      if (isPostingRestriction(message)) {
         // A-Restricted / LV-Suspended: the server refused; show the notice, keep the recording.
         const fresh = await refresh();
-        const actionId = fresh?.restriction?.action_id ?? sessionState?.restriction?.action_id;
-        if (actionId) router.replace({ pathname: '/notice/[actionId]', params: { actionId } });
-        else router.dismissTo('/(tabs)');
+        const target = restrictionTarget(fresh?.restriction?.action_id ?? sessionState?.restriction?.action_id);
+        if (target === '/(tabs)') router.dismissTo(target);
+        else router.replace(target);
         return;
       }
       // P7 / P8: another recording of this member is waiting or posting; Post refuses to replace it.
