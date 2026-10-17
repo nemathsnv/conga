@@ -59,3 +59,14 @@ script (not committed), and all of them are in it word for word. The repo's
 ## Checks
 
 Typecheck and lint clean; Jest 347/347 on `3908825`. No app code was changed for this review.
+
+## Re-check of M1 and M2 after Agent E's fix (17 Oct 2026)
+
+Code at `6383b0f`. Same simulator build (no native change), fresh Metro bundle, stack `shortcut-b`
+brought up fresh with the loopback fake Mux and stopped afterwards. A waiting recording was planted as
+above, with the same H.264 file the review used (a moving blue-and-white checkerboard).
+
+| | Seen | Result | Screenshot |
+| --- | --- | --- | --- |
+| **M1** banner still (`ui/RecordingStill.tsx`) | X-Upload-Failed (P1): the thumbnail shows the clip's first frame (the checkerboard), with no play call. PR-Posting after Retry (upload held open by the fake Mux): the same frame. | **fixed** | [still-P1](screenshots/failed-post/still-P1.png), [still-PR-Posting](screenshots/failed-post/still-PR-Posting.png) |
+| **M2** confirm-email footer | With the number pad up, **Delete account** and Cancel sit above it. Tapping Delete account by touch submitted the code; P9 opened. Cancel deleted nothing (`accounts.deleted_at` still null). | **fixed** | [confirm-email-keyboard](screenshots/failed-post/confirm-email-keyboard.png) |
