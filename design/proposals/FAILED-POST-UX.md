@@ -1,10 +1,9 @@
-# Failed-post boards: for final visual review (revised 14 Oct)
+# Failed-post boards (approved and built 16 Oct)
 
-**Status: proposal boards, revised with Nemat's five decisions and the final copy for P4, P6 and P9 (14 Oct). Awaiting final visual approval; not approved boards yet.**
-- `design/boards/`, `design/html/` and `design/BOARDS.md` are unchanged.
-- No UI is built.
-- The rendered boards are in `failed-post-ux.html`.
-- SPEC.md §19 is revised to match (14 Oct).
+**Status: approved and built 16 Oct 2026.** Nemat approved P1 to P9 as drawn, with the five decisions and the final copy for P4, P6 and P9. They are now approved boards: `design/html/<ID>.html`, `design/boards/<ID>.jpg` and `design/BOARDS.md` (section "Failed posts"). This folder is kept as the history of how they were reviewed.
+- The UI is built (merged 16 Oct, `3908825`); see `docs/release/FAILED-POST-UI-HOLD.md`.
+- The rendered proposal page is `failed-post-ux.html`.
+- SPEC.md §19 matches (14 Oct, status note updated 16 Oct).
 
 Copy marks below:
 - **bold**: new or revised copy, approved 14 Oct (the five decisions, and the final P4, P6 and P9

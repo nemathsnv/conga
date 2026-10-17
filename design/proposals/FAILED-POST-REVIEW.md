@@ -1,6 +1,6 @@
 # Failed-post boards P1 to P9: one-page approval package (16 Oct 2026)
 
-**Status: proposals, not approved boards.** Nothing in `design/boards/`, `design/html/` or `design/BOARDS.md` has been changed. No P1 to P9 UI is on any integrated branch. The built behaviour behind these states exists and is tested (`app/src/video/memberPosting.ts`, `docs/BETA-READINESS.md` section 20); only the screens are missing.
+**Status: approved and built 16 Oct 2026.** Nemat approved P1 to P9 as drawn. The ready-to-apply update in section 6 was applied: the 14 boards are in `design/html/`, `design/boards/` and `design/BOARDS.md`, the four changed boards (X-Upload-Failed, LV-SignOut, PR-Posting, A-Offline) are updated, and the UI is merged (`3908825`). This page is kept as the history of the review; the sections below are as they stood before approval.
 
 Open `failed-post-ux.html` to see every board rendered (it is the source), or the PNGs listed below.
 

@@ -8,13 +8,13 @@ Status of the work behind this list: the failed-post UI is built and tested on b
 
 ---
 
-## A. Failed-post boards P1 to P9, as drawn
+## A. Failed-post boards P1 to P9, as drawn: A1 answered yes (16 Oct); A2 to A4 still open
 
 Full page with every board, its copy, the screenshots and the prepared board-set updates: `design/proposals/FAILED-POST-REVIEW.md`. Open `design/proposals/failed-post-ux.html` to see all boards.
 
 | # | What | Where in the app | Recommended | Answer |
 |---|---|---|---|---|
-| A1 | Approve P1, P1-R, P2, P2-R, P3, P3-R, P4, P5, P5-R, P6, P7, P8, P8-R and P9 as drawn (14 boards), and add them to the approved set (`design/BOARDS.md`, 86 to 100 boards, and the four changed boards X-Upload-Failed, LV-SignOut, PR-Posting, A-Offline). | Home banner (Discard beside Retry, P2/P3/P5 states), the Discard and "already reached Shortcut" sheets, the camera-entry sheets, the sign-out warning on every route. Built on `hold/failed-post-ui`. | Yes. | yes / no, or the board to change |
+| A1 | Approve P1, P1-R, P2, P2-R, P3, P3-R, P4, P5, P5-R, P6, P7, P8, P8-R and P9 as drawn (14 boards), and add them to the approved set (`design/BOARDS.md`, 86 to 100 boards, and the four changed boards X-Upload-Failed, LV-SignOut, PR-Posting, A-Offline). | Home banner (Discard beside Retry, P2/P3/P5 states), the Discard and "already reached Shortcut" sheets, the camera-entry sheets, the sign-out warning on every route. Built on `hold/failed-post-ui`. | Yes. | **yes, 16 Oct 2026** (approved as drawn, built, boards added to the approved set) |
 | A2 | A variant of P6 for a first-response draft of a suggested prompt (it never appears on a profile, so "you can delete it there" does not apply). | Discarding a draft that Mux already has. | No. Keep deleting it from its suggestion ("Delete draft"). | yes (draw one) / no |
 | A3 | Keep the board IDs P1 to P9, beside P-Place, P-Places, P-Unfollow. | `design/BOARDS.md` | Keep. | keep / rename (F1 to F9) |
 | A4 | Five choices made while building, each only visible on the built branch (details in `docs/release/FAILED-POST-UI-HOLD.md`): (a) the sign-out warning for Delete account is asked after you confirm who you are and before anything is deleted, so Cancel really cancels; (b) the "Your last recording hasn't posted yet" sheet also shows while a discard is waiting for Shortcut (its line "Retry or discard it first." then points at buttons that are not on screen); (c) A-Offline for a video reply is the existing sentence with the noun changed: "Your video reply stays saved on this phone. Post when you're back online."; (d) discarding a draft says "Discarding your draft"; (e) Discard and Retry are disabled while a discard is running. | Home banner, camera entry, Delete account, Settings. | Yes to all five. | yes / no for each of a to e |
