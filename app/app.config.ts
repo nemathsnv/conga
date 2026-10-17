@@ -23,6 +23,11 @@ if (founderBuild) {
   }
 }
 
+// The EAS project @nemathsnv/conga (created with `eas init` on 17 Oct 2026; docs/release/OTA-UPDATES.md).
+// Not a secret: it names the project for builds, updates and push tokens. EAS_PROJECT_ID overrides it.
+const EAS_OWNER = 'nemathsnv';
+const EAS_PROJECT = '89a7bb41-ee22-4358-9ab1-75299a5ae2f9';
+
 /**
  * Why a build or an over-the-air update that will reach a phone must not be made with these values
  * (empty when it may). `founder`: the founder build's rules (app.config.ts top, scripts/founder-ios.sh);
@@ -35,7 +40,7 @@ export function releaseProblems(env: Record<string, string | undefined>, opts: {
   if (!/^https:\/\/[a-z0-9.-]+$/.test(env.EXPO_PUBLIC_WEB_BASE_URL ?? '')) problems.push('EXPO_PUBLIC_WEB_BASE_URL must be the links domain, https://<host> with no path');
   if (env.EXPO_PUBLIC_DEV_TOOLS === '1') problems.push('EXPO_PUBLIC_DEV_TOOLS must not be 1');
   if (opts.founder !== (env.EXPO_PUBLIC_FOUNDER_BUILD === '1')) problems.push(`EXPO_PUBLIC_FOUNDER_BUILD must ${opts.founder ? '' : 'not '}be 1`);
-  if (opts.update && !/^[0-9a-f-]{36}$/.test(env.EAS_PROJECT_ID ?? '')) problems.push('EAS_PROJECT_ID must be the EAS project id');
+  if (opts.update && !/^[0-9a-f-]{36}$/.test(env.EAS_PROJECT_ID || EAS_PROJECT)) problems.push('EAS_PROJECT_ID must be the EAS project id');
   return problems;
 }
 
@@ -62,22 +67,19 @@ if (updateChannel !== undefined) {
   if (problems.length > 0) throw new Error(`Update for ${updateChannel} refused: ${problems.join('; ')}.`);
 }
 
-// EAS Update is on only once the EAS project exists (`eas init`, EAS_PROJECT_ID); until then a build
-// runs the JavaScript it was built with and never asks for an update. The runtime version is the
+// Every build asks EAS Update for a newer JavaScript bundle at launch. The runtime version is the
 // fingerprint of the native project (dependencies, config plugins, this config), computed at build
 // time and again when an update is published: an update only reaches builds with the same native
 // code, so any native change needs a new build. EAS builds get their channel from eas.json; the
-// founder build, built on this Mac, asks for the `founder` channel.
-const easProjectId = process.env.EAS_PROJECT_ID;
-const updates: ExpoConfig['updates'] = easProjectId
-  ? {
-      enabled: true,
-      url: `https://u.expo.dev/${easProjectId}`,
-      checkAutomatically: 'ON_LOAD',
-      fallbackToCacheTimeout: 0,
-      ...(founderBuild ? { requestHeaders: { 'expo-channel-name': 'founder' } } : {}),
-    }
-  : { enabled: false };
+// founder build, built on this Mac, asks for the `founder` channel. Debug builds load from Metro.
+const easProjectId = process.env.EAS_PROJECT_ID || EAS_PROJECT;
+const updates: ExpoConfig['updates'] = {
+  enabled: true,
+  url: `https://u.expo.dev/${easProjectId}`,
+  checkAutomatically: 'ON_LOAD',
+  fallbackToCacheTimeout: 0,
+  ...(founderBuild ? { requestHeaders: { 'expo-channel-name': 'founder' } } : {}),
+};
 
 const CAMERA_USAGE = 'Conga uses the camera to record your video responses and video replies, and to take your profile photo.';
 const MICROPHONE_USAGE = 'Conga uses the microphone to record the sound of your video responses and video replies.';
@@ -86,6 +88,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Conga',
   slug: 'conga',
+  owner: EAS_OWNER,
   scheme: 'shortcut',
   version: '0.1.0',
   orientation: 'portrait',
@@ -158,6 +161,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     typedRoutes: true,
   },
   extra: {
-    ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
+    eas: { projectId: easProjectId },
   },
 });

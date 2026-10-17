@@ -59,10 +59,10 @@ describe('releaseProblems', () => {
     expect(releaseProblems({ ...FOUNDER, EXPO_PUBLIC_FOUNDER_BUILD: '0' }, { founder: true, update: true }).join()).toMatch(/must be 1/);
   });
 
-  it('an update needs the EAS project; a build does not', () => {
-    const { EAS_PROJECT_ID: _omit, ...noProject } = FOUNDER;
-    expect(releaseProblems(noProject, { founder: true, update: true }).join()).toMatch(/EAS_PROJECT_ID/);
-    expect(releaseProblems(noProject, { founder: true, update: false })).toEqual([]);
+  it('uses the committed EAS project unless EAS_PROJECT_ID overrides it, and refuses a malformed override', () => {
+    const { EAS_PROJECT_ID: _omit, ...noOverride } = FOUNDER;
+    expect(releaseProblems(noOverride, { founder: true, update: true })).toEqual([]);
+    expect(releaseProblems({ ...FOUNDER, EAS_PROJECT_ID: 'not-a-project' }, { founder: true, update: true }).join()).toMatch(/EAS_PROJECT_ID/);
   });
 });
 
@@ -96,10 +96,13 @@ describe('EAS Update settings', () => {
     expect(loadConfig(FOUNDER).runtimeVersion).toEqual({ policy: 'fingerprint' });
   });
 
-  it('without the EAS project no build asks for updates', () => {
+  it('every build names the EAS project @nemathsnv/conga and asks it for updates', () => {
     const config = loadConfig({ ...FOUNDER, EAS_PROJECT_ID: '' });
-    expect(config.updates).toEqual({ enabled: false });
-    expect(config.extra?.eas).toBeUndefined();
+    expect(config.owner).toBe('nemathsnv');
+    expect(config.extra?.eas).toEqual({ projectId: '89a7bb41-ee22-4358-9ab1-75299a5ae2f9' });
+    expect(config.updates).toMatchObject({ enabled: true, url: 'https://u.expo.dev/89a7bb41-ee22-4358-9ab1-75299a5ae2f9', requestHeaders: { 'expo-channel-name': 'founder' } });
+    expect(loadConfig({}).updates).toMatchObject({ enabled: true, url: 'https://u.expo.dev/89a7bb41-ee22-4358-9ab1-75299a5ae2f9' });
+    expect(loadConfig({}).updates?.requestHeaders).toBeUndefined();
   });
 
   it('the store and tester profiles each have their own channel', () => {

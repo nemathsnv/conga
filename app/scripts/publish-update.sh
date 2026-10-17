@@ -54,7 +54,6 @@ case "$CHANNEL" in
   *) usage ;;
 esac
 
-[[ ${EAS_PROJECT_ID:-} =~ ^[0-9a-f-]{36}$ ]] || { echo "EAS_PROJECT_ID is not set (eas init; docs/release/OTA-UPDATES.md)" >&2; exit 1; }
 
 EAS="npx --yes eas-cli@25.1.1"
 UPDATE_ARGS=(--channel "$CHANNEL" --environment "$ENVIRONMENT" --platform "$PLATFORM" --message "$MESSAGE ($REVISION)" --non-interactive)

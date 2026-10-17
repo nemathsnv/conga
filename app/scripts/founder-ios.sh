@@ -45,9 +45,6 @@ if [[ $CONFIGURATION == Release ]]; then
   export EXPO_PUBLIC_DEV_TOOLS=0
   export EXPO_PUBLIC_WEB_BASE_URL="${EXPO_PUBLIC_WEB_BASE_URL:-https://conga.churntech.com}"
   [[ $EXPO_PUBLIC_WEB_BASE_URL =~ ^https://[a-z0-9.-]+$ ]] || { echo "EXPO_PUBLIC_WEB_BASE_URL must be https://<host>" >&2; exit 1; }
-  if [[ -z ${EAS_PROJECT_ID:-} ]]; then
-    echo "note: EAS_PROJECT_ID is not in .env.founder, so this build will not receive over-the-air updates (docs/release/OTA-UPDATES.md)" >&2
-  fi
 fi
 
 npx expo prebuild --platform ios --clean
