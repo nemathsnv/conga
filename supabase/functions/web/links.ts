@@ -39,3 +39,15 @@ export const HLS_JS_INTEGRITY = "sha384-cciJ0zi8d1uMKC2zJd7jvPY4HQt7W4ByUI/FlMkl
 export function hlsScriptTag(): string {
   return `<script src="${HLS_JS_URL}" integrity="${HLS_JS_INTEGRITY}" crossorigin="anonymous"></script>`;
 }
+
+export type LinkTarget = "video" | "prompt" | "invite" | "profile";
+
+/** The `target` of web_link_opened for each page kind (SPEC.md Section 21). */
+export const LINK_TARGETS: Record<LinkKind, LinkTarget> = { r: "video", p: "prompt", i: "invite", u: "profile" };
+
+/** A link-opened event forwarded by the Pages host (web/, docs/release/WEB-HOSTING.md) arrives
+ *  at /e/link-<target>. The target it names, or null for anything else. */
+export function linkEventTarget(id: string): LinkTarget | null {
+  const m = /^link-(video|prompt|invite|profile)$/.exec(id);
+  return m ? (m[1] as LinkTarget) : null;
+}

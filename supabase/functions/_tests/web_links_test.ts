@@ -2,7 +2,7 @@
 // No network, no stack:
 //   deno test --allow-read supabase/functions/_tests/web_links_test.ts
 import { assert, assertEquals } from "./assert.ts";
-import { APP_SCHEME, appLink, HLS_JS_INTEGRITY, HLS_JS_URL, HLS_JS_VERSION, hlsScriptTag, parseWebPath } from "../web/links.ts";
+import { APP_SCHEME, appLink, HLS_JS_INTEGRITY, HLS_JS_URL, HLS_JS_VERSION, hlsScriptTag, LINK_TARGETS, linkEventTarget, parseWebPath } from "../web/links.ts";
 
 const UUID = "5b321c24-1e1e-4393-9ae1-e6503903430d";
 
@@ -46,10 +46,20 @@ Deno.test("hls.js is pinned to an exact version with an integrity hash and cross
   assert(tag.includes(`src="${HLS_JS_URL}"`) && tag.includes(`integrity="${HLS_JS_INTEGRITY}"`) && tag.includes('crossorigin="anonymous"'), tag);
 });
 
-Deno.test("index.ts builds its links and script tag only through links.ts", async () => {
-  const src = await Deno.readTextFile(new URL("../web/index.ts", import.meta.url));
-  assert(!/hls\.js@1\//.test(src) && !src.includes("cdn.jsdelivr.net"), "no unpinned or hard-coded script URL in index.ts");
-  assert(src.includes("${hlsScriptTag()}"), "uses the pinned tag");
-  assert(!src.includes('href="${APP_SCHEME}"'), "the sheet's Open in the app link is per page");
-  assert(!/\$\{APP_SCHEME\}i\//.test(src), "no hand-built invite link");
+Deno.test("index.ts and render.ts build their links and script tag only through links.ts", async () => {
+  const index = await Deno.readTextFile(new URL("../web/index.ts", import.meta.url));
+  const src = await Deno.readTextFile(new URL("../web/render.ts", import.meta.url));
+  for (const s of [index, src]) {
+    assert(!/hls\.js@1\//.test(s) && !s.includes("cdn.jsdelivr.net"), "no unpinned or hard-coded script URL");
+    assert(!s.includes('href="${APP_SCHEME}"'), "the sheet's Open in the app link is per page");
+    assert(!/\$\{APP_SCHEME\}i\//.test(s), "no hand-built invite link");
+  }
+  assert(src.includes("${hlsScriptTag()}"), "the player uses the pinned tag");
+  assert(!src.includes("Deno.env") && !/(href="|sendBeacon\(')\/functions\//.test(src), "render.ts is pure: no environment, no hard-coded function path");
+});
+
+Deno.test("linkEventTarget accepts only the four link-opened targets", () => {
+  assertEquals(LINK_TARGETS, { r: "video", p: "prompt", i: "invite", u: "profile" });
+  for (const t of ["video", "prompt", "invite", "profile"]) assertEquals(linkEventTarget(`link-${t}`), t);
+  for (const bad of ["signin", "link-", "link-video2", "xlink-video", "link-Video", "video"]) assertEquals(linkEventTarget(bad), null, bad);
 });
