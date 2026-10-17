@@ -290,9 +290,41 @@ do {
   } catch VideoStitcherError.input(let detail) {
     check(true, "unreadable segment rejected as an input error (\(detail))")
   }
+
+  // Failure mid-encode: the writer runs out of space part-way (as when iOS invalidates the encoder after
+  // the app goes to the background). The stitch must end with an export error, not hang
+  // (VideoStitcherModule.swift deletes the partial file on any error).
+  // STITCH_FULL_DISK names a small mounted volume (run.sh makes one).
+  if let full = ProcessInfo.processInfo.environment["STITCH_FULL_DISK"] {
+    let target = URL(fileURLWithPath: full).appendingPathComponent("full.mp4")
+    let settled = Atomic()
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30) {
+      if !settled.isSet {
+        print("FAIL a writer that fails mid-encode leaves the stitch hanging (no result after 30 s)")
+        exit(1)
+      }
+    }
+    do {
+      try await VideoStitcher.stitch(noisyUrls + noisyUrls + noisyUrls, to: target)
+      settled.set()
+      check(false, "a full disk fails the stitch")
+    } catch VideoStitcherError.export(let detail) {
+      settled.set()
+      check(true, "a writer failing mid-encode ends the stitch with an export error (\(detail))")
+    }
+  } else {
+    print("skipped: full-disk check (STITCH_FULL_DISK not set)")
+  }
 } catch {
   print("ERROR", error)
   failures += 1
 }
+final class Atomic: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value = false
+  var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
+  func set() { lock.lock(); value = true; lock.unlock() }
+}
+
 print(failures == 0 ? "ALL PASS" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)

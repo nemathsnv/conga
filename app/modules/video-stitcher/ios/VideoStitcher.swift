@@ -233,7 +233,7 @@ enum VideoStitcher {
     if let audioOutput, let audioInput {
       pairs.append((audioOutput, audioInput, "audio"))
     }
-    await pumpAll(pairs)
+    await pumpAll(pairs, reader: reader, writer: writer)
 
     if reader.status == .failed || writer.status == .failed {
       let message = reader.error?.localizedDescription ?? writer.error?.localizedDescription ?? "reading or writing failed"
@@ -250,13 +250,23 @@ enum VideoStitcher {
 
   /// Copies each reader output into its writer input until every output is drained (or fails).
   /// The inputs are fed side by side: the writer interleaves them and stalls if one runs alone.
-  static func pumpAll(_ pairs: [(AVAssetReaderOutput, AVAssetWriterInput, String)]) async {
+  /// When one copy fails (the writer failed, for example a hardware encoder invalidated after the
+  /// app went to the background, or the reader failed), the others are ended too: a failed writer
+  /// never asks the other input for more data, and without this the stitch would never settle.
+  static func pumpAll(_ pairs: [(AVAssetReaderOutput, AVAssetWriterInput, String)], reader: AVAssetReader, writer: AVAssetWriter) async {
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
       let group = DispatchGroup()
-      for (output, input, label) in pairs {
+      let pumps = pairs.map { output, input, label in
+        Pump(output: output, input: input, writer: writer, group: group, queue: DispatchQueue(label: "app.shortcut.videostitcher.\(label)"))
+      }
+      let abortAll = {
+        reader.cancelReading()
+        for pump in pumps { pump.queue.async { pump.finish() } }
+      }
+      for pump in pumps {
         group.enter()
-        let pump = Pump(output: output, input: input, group: group)
-        input.requestMediaDataWhenReady(on: DispatchQueue(label: "app.shortcut.videostitcher.\(label)")) {
+        pump.onFailure = abortAll
+        pump.input.requestMediaDataWhenReady(on: pump.queue) {
           pump.drain()
         }
       }
@@ -271,24 +281,43 @@ enum VideoStitcher {
 private final class Pump: @unchecked Sendable {
   let output: AVAssetReaderOutput
   let input: AVAssetWriterInput
+  let writer: AVAssetWriter
   let group: DispatchGroup
+  let queue: DispatchQueue
+  /// Ends every copy, this one included. Set before the first `drain`.
+  var onFailure: (() -> Void)?
   private var finished = false
 
-  init(output: AVAssetReaderOutput, input: AVAssetWriterInput, group: DispatchGroup) {
+  init(output: AVAssetReaderOutput, input: AVAssetWriterInput, writer: AVAssetWriter, group: DispatchGroup, queue: DispatchQueue) {
     self.output = output
     self.input = input
+    self.writer = writer
     self.group = group
+    self.queue = queue
   }
 
   func drain() {
     guard !finished else { return }
     while input.isReadyForMoreMediaData {
-      guard let buffer = output.copyNextSampleBuffer(), input.append(buffer) else {
-        finished = true
-        input.markAsFinished()
-        group.leave()
+      guard let buffer = output.copyNextSampleBuffer() else {
+        // nil is the end of this track, or a reader that failed or was cancelled.
+        finish()
+        if writer.status != .writing { onFailure?() }
+        return
+      }
+      guard input.append(buffer) else {
+        finish()
+        onFailure?()
         return
       }
     }
+  }
+
+  /// Leaves the group once. Marks the input finished only while the writer is still writing.
+  func finish() {
+    guard !finished else { return }
+    finished = true
+    if writer.status == .writing { input.markAsFinished() }
+    group.leave()
   }
 }
