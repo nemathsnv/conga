@@ -4870,7 +4870,15 @@ Base `4b2fe3f`; 23 commits to `c12724e`. Nothing pushed, deployed, installed on 
   `edf83d3d73556f1c00acd0a131ff609ebb31e158` equal to the publish-time one). The **signed** build stopped
   at signing: Xcode has no Apple ID signed in ("No Accounts"), so the free profile for
   `app.shortcut.founder` cannot be created; Nemat signs in to Xcode (Settings > Accounts), then
-  `INSTALL=0 DEVICE=<udid> app/scripts/founder-ios.sh release`. Not installed.
+  `INSTALL=0 DEVICE=<udid> app/scripts/founder-ios.sh release`.
+- *Founder build installed (17 Oct, Nemat approved):* after Nemat signed in to Xcode, the signed build:
+  `codesign --verify` valid, team `BP7TM32HCQ`, `app.shortcut.founder`, entitlements only
+  `application-identifier`, `team-identifier`, `get-task-allow`; the free profile lists the iPhone and
+  expires 24 Oct 2026 16:19 UTC; fingerprint `edf83d3d…`. Installed over the existing app with `devicectl`
+  (the home-screen name is now Conga). The app's data container is intact (AsyncStorage files from 13 Oct,
+  preferences from 10 Oct; `Documents/recordings` empty, so no waiting recording). The first launch was
+  refused by iOS until the new development certificate is trusted on the phone (Settings > General > VPN &
+  Device Management); not yet opened on the device.
 - *Still open from this pass:* D-C (hidden responses still counted; server side, section 1), the end card's one-response copy (section 1); M2 fixed (`7c6276c`); failed
   recording start shows nothing (no board); "Send a new code" failures silent (no board); unreferenced
   files in `Documents/recordings/` never swept; sign-out scope global vs local (Nemat). Android still never
