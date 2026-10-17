@@ -1,4 +1,4 @@
-import { agoLabel, followedByLabel, moreResponsesLabel, responsesLabel, timeAgo } from '@/lib/format';
+import { agoLabel, countNoun, followedByLabel, moreResponsesLabel, responsesLabel, timeAgo } from '@/lib/format';
 import { formatTimer, isTooShort } from '@/video/limits';
 import { resumeState, type PendingPost } from '@/video/pendingPostState';
 
@@ -61,5 +61,28 @@ describe('agoLabel', () => {
     const now = Date.parse('2026-10-07T12:00:00Z');
     expect(agoLabel('2026-10-07T11:59:40Z', now)).toBe('just now');
     expect(agoLabel('2026-10-07T11:45:00Z', now)).toBe('15m ago');
+  });
+});
+
+// Node's fs and path, without Node's type definitions (as in failedPost.test.ts).
+declare const __dirname: string;
+/* eslint-disable @typescript-eslint/no-require-imports */
+const nodeFs = require('fs') as { readFileSync: (path: string, encoding: string) => string };
+const nodePath = require('path') as { join: (...parts: string[]) => string };
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+describe('countNoun (profile stats: "1 response", "1 follower")', () => {
+  it('is singular for exactly one and plural otherwise', () => {
+    expect(countNoun(1, 'response', 'responses')).toBe('response');
+    expect(countNoun(0, 'response', 'responses')).toBe('responses');
+    expect(countNoun(2, 'follower', 'followers')).toBe('followers');
+  });
+
+  it('the profile screen uses it for responses and followers', () => {
+    const src = nodeFs.readFileSync(nodePath.join(__dirname, '../ui/ProfileView.tsx'), 'utf8');
+    expect(src).not.toMatch(/<\/Text> responses<\/Text>/);
+    expect(src).not.toMatch(/<\/Text> followers<\/Text>/);
+    expect(src).toMatch(/countNoun\(profile\.response_count, 'response', 'responses'\)/);
+    expect(src).toMatch(/countNoun\(profile\.follower_count, 'follower', 'followers'\)/);
   });
 });

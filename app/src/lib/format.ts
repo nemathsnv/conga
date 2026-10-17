@@ -22,9 +22,14 @@ export function timeAgo(iso: string | null, now: number = Date.now()): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** The noun after a count: "1 response", "2 responses". */
+export function countNoun(count: number, one: string, many: string): string {
+  return count === 1 ? one : many;
+}
+
 /** "23 responses", "1 response". */
 export function responsesLabel(count: number): string {
-  return count === 1 ? '1 response' : `${count} responses`;
+  return `${count} ${countNoun(count, 'response', 'responses')}`;
 }
 
 /** "22 more responses" under the face strip on Home. */

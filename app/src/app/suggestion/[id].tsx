@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
 import { acknowledgeDisclosure, disclosureAcknowledged, discardDraft, getSuggestion, publishDraft, type Suggestion } from '@/lib/content';
+import { responsesLabel } from '@/lib/format';
 import { promptLink } from '@/lib/links';
 import { Button, Glass } from '@/ui/components';
 import { CheckIcon, CloseIcon, PlacePinIcon, PlayIcon, PlusSlotIcon, RecordDotIcon } from '@/ui/Icons';
@@ -87,7 +88,7 @@ export default function SuggestionOutcomeScreen() {
             {prompt.place ? <PlacePinIcon size={11} color="rgba(255,255,255,0.72)" /> : null}
             <Text style={s.cardSub}>
               {prompt.place ? `${prompt.place.name} · ` : ''}
-              {prompt.response_count === 0 ? 'no responses yet' : `${prompt.response_count} responses`}
+              {prompt.response_count === 0 ? 'no responses yet' : responsesLabel(prompt.response_count)}
             </Text>
           </View>
         </Glass>

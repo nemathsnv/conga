@@ -7,7 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 
 import { avatarUrl } from '@/lib/api';
 import { followUser, getProfile, profileReplies, profileResponses, unfollowUser, type Profile, type ProfileReply, type ProfileResponse } from '@/lib/content';
-import { followedByLabel, formatCount } from '@/lib/format';
+import { countNoun, followedByLabel, formatCount } from '@/lib/format';
 import { Avatar, Separator } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { PinIcon, PlusSlotIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
@@ -82,9 +82,9 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
         <Text style={s.username}>@{profile.username}</Text>
         {profile.bio ? <Text style={[s.bio, own && !empty && { fontSize: 14, lineHeight: 19, marginTop: 6 }]}>{profile.bio}</Text> : null}
         <View style={[s.stats, own && !empty && { marginTop: 10 }]}>
-          <Text style={s.stat}><Text style={s.statNum}>{formatCount(profile.response_count)}</Text> responses</Text>
+          <Text style={s.stat}><Text style={s.statNum}>{formatCount(profile.response_count)}</Text> {countNoun(profile.response_count, 'response', 'responses')}</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/profile/follows', params: { id: profile.id, kind: 'followers', username: profile.username } })}>
-            <Text style={s.stat}><Text style={s.statNum}>{formatCount(profile.follower_count)}</Text> followers</Text>
+            <Text style={s.stat}><Text style={s.statNum}>{formatCount(profile.follower_count)}</Text> {countNoun(profile.follower_count, 'follower', 'followers')}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/profile/follows', params: { id: profile.id, kind: 'following', username: profile.username } })}>
             <Text style={s.stat}><Text style={s.statNum}>{formatCount(profile.following_count)}</Text> following</Text>
