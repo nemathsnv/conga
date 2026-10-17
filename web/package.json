@@ -1,0 +1,16 @@
+{
+  "name": "shortcut-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Shared-link pages and the moderation admin on Cloudflare Pages (docs/release/WEB-HOSTING.md). Not deployed.",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "wrangler pages dev --port 8788",
+    "build:check": "wrangler pages functions build --outdir .wrangler/functions-check"
+  },
+  "devDependencies": {
+    "vitest": "5.0.2",
+    "wrangler": "4.146.0"
+  }
+}

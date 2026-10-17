@@ -1,0 +1,7 @@
+# Copy to web/.dev.vars (git-ignored) for `wrangler pages dev`. Local values only.
+# SUPABASE_URL and SUPABASE_ANON_KEY come from `supabase status -o env` of a LOCAL stack.
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=
+# Any random value of 32+ characters, the same as WEB_PROXY_KEY in the env file given to
+# `supabase functions serve` (optional locally): openssl rand -hex 32
+WEB_PROXY_KEY=

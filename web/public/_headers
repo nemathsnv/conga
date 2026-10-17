@@ -1,0 +1,10 @@
+# Static files only (Functions set their own headers). Apple and Google fetch these two files
+# for universal links and Android app links; both must be served as JSON, without a redirect.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+  X-Content-Type-Options: nosniff
+  X-Robots-Tag: noindex
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  X-Content-Type-Options: nosniff
+  X-Robots-Tag: noindex
