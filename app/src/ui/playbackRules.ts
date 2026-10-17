@@ -47,3 +47,10 @@ export function playerPageActive({ isCurrentPage, screenFocused, overlay, respon
   if (screenFocused) return true;
   return !!overlay && !overlay.covered && sheetOverPage(overlay, responseId, screenFocused) === 'comments';
 }
+
+/** Whether a response page moves on to the next response when it ends. Not while Comments is over it
+ *  (its chrome hidden): the comments belong to this response, which "keeps playing in the top third"
+ *  (SPEC.md Section 8), so it loops there instead. */
+export function endsToNext(chrome: boolean): boolean {
+  return chrome;
+}

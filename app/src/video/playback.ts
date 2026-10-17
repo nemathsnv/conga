@@ -31,3 +31,12 @@ export function rewind(player: VideoPlayer): void {
     // The player may already be released.
   }
 }
+
+/** Whether the player starts again at the end. A prop can change it while the player lives. */
+export function setLooping(player: VideoPlayer, loop: boolean): void {
+  try {
+    player.loop = loop;
+  } catch {
+    // The player may already be released.
+  }
+}

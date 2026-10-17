@@ -9,7 +9,7 @@ import { AppState, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 
 import { isPlaybackFailure, shouldResumeOnForeground } from '@/ui/playbackRules';
-import { applyPlaybackSettings, hlsUrl, rewind, thumbnailUrl } from '@/video/playback';
+import { applyPlaybackSettings, hlsUrl, rewind, setLooping, thumbnailUrl } from '@/video/playback';
 
 export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFailed, retryKey = 0, localUri }: {
   playbackId: string | null;
@@ -31,6 +31,10 @@ export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFa
     p.loop = loop;
     p.muted = false;
   });
+  // `loop` can change while the player lives (the response player loops while Comments is over it).
+  useEffect(() => {
+    setLooping(player, loop);
+  }, [player, loop]);
   const [firstFrame, setFirstFrame] = useState(false);
   // The latest `active`, for the AppState and retry callbacks (they outlive a render).
   const activeNow = useRef(active);

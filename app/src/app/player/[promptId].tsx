@@ -16,7 +16,7 @@ import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
-import { autoSheet, playerPageActive, sheetOverPage } from '@/ui/playbackRules';
+import { autoSheet, endsToNext, playerPageActive, sheetOverPage } from '@/ui/playbackRules';
 import { useOverlay } from '@/ui/playerOverlay';
 import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
@@ -290,7 +290,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
   const firstName = response.author.name.split(' ')[0];
   return (
     <View style={s.root}>
-      <VideoSurface playbackId={response.playback_id} active={active && !failed} loop={false} onProgress={report} onEnd={onEnd} onFailed={onFailed} retryKey={retryKey} />
+      <VideoSurface playbackId={response.playback_id} active={active && !failed} loop={!chrome} onProgress={report} onEnd={endsToNext(chrome) ? onEnd : undefined} onFailed={onFailed} retryKey={retryKey} />
       {failed ? (
         <View style={StyleSheet.absoluteFill}>
           <Unavailable

@@ -1,4 +1,4 @@
-import { autoSheet } from '@/ui/playbackRules';
+import { autoSheet, endsToNext } from '@/ui/playbackRules';
 
 const live = { kind: 'response', responseId: 'v1' };
 
@@ -26,5 +26,12 @@ describe('autoSheet (the sheet the player opens by itself over its entry)', () =
   it('opens nothing without an entry or without a sheet asked for', () => {
     expect(autoSheet({ entry: undefined, openComments: '1', openReplies: undefined, firstPage: live })).toBeNull();
     expect(autoSheet({ entry: 'v1', openComments: undefined, openReplies: undefined, firstPage: live })).toBeNull();
+  });
+});
+
+describe('endsToNext', () => {
+  it('moves on at the end only while no Comments sheet is over the response', () => {
+    expect(endsToNext(true)).toBe(true);
+    expect(endsToNext(false)).toBe(false);
   });
 });
