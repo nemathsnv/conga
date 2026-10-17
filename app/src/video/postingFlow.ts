@@ -169,14 +169,19 @@ export async function ensureUploadRow<Post extends { responseId: string | null; 
   }
 }
 
+export type Gate = ((fn: () => Promise<void>) => Promise<void>) & {
+  /** Whether a run is in progress, read at the moment of a tap (before any re-render). */
+  running: () => boolean;
+};
+
 /**
  * One run at a time: while a run is in progress, further calls get that run's promise instead of
  * starting another. Post Review's Post and the disclosure sheet's Post share one, so taps that
  * land before the screen re-renders cannot submit twice.
  */
-export function createGate(): (fn: () => Promise<void>) => Promise<void> {
+export function createGate(): Gate {
   let running: Promise<void> | null = null;
-  return (fn) => {
+  const gate = (fn: () => Promise<void>) => {
     if (running) return running;
     const run = (async () => {
       try {
@@ -188,6 +193,16 @@ export function createGate(): (fn: () => Promise<void>) => Promise<void> {
     running = run;
     return run;
   };
+  return Object.assign(gate, { running: () => running !== null });
+}
+
+/**
+ * Whether Post Review's Re-record and Discard may act. Both delete the recording's files, so never
+ * once Post is tapped (its disclosure check, the stitch, the post itself), nor after a Post that
+ * succeeded while the screen closes: the files then belong to the post.
+ */
+export function reviewEditable(state: { busy: boolean; posting: boolean }): boolean {
+  return !state.busy && !state.posting;
 }
 
 /**

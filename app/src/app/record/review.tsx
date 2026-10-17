@@ -21,7 +21,7 @@ import { ReplyCard } from '@/ui/ReplyCard';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { usePosting } from '@/video/posting';
-import { createGate } from '@/video/postingFlow';
+import { createGate, reviewEditable } from '@/video/postingFlow';
 import { getCurrentRecording, setCurrentRecording } from '@/video/recordingStore';
 import { abandonStitch, ensureStitched, needsStitching } from '@/video/stitch';
 import type { Recording } from '@/video/types';
@@ -74,7 +74,11 @@ export default function ReviewScreen() {
   const { recording, prompt, replyTo, draftFor } = current;
   const rootName = replyTo?.context.kind === 'reply' ? replyTo.context.root?.author.name ?? null : null;
 
+  // Re-record and Discard delete the recording's files: nothing while Post runs or after it.
+  const editable = () => reviewEditable({ busy, posting: gate.running() });
+
   const discard = () => {
+    if (!editable()) return;
     abandonStitch(recording);
     deleteRecordingFiles(recording);
     setCurrentRecording(null);
@@ -83,6 +87,7 @@ export default function ReviewScreen() {
   };
 
   const rerecord = () => {
+    if (!editable()) return;
     abandonStitch(recording);
     deleteRecordingFiles(recording);
     setCurrentRecording(null);
@@ -162,7 +167,7 @@ export default function ReviewScreen() {
       <VideoGradients top={240} bottom={330} topAlpha={0.55} bottomAlpha={0.7} />
 
       <View style={[s.header, { top: insets.top + 3 }]}>
-        <GlassTool label="Discard" onPress={() => setDiscardAsk(true)}>
+        <GlassTool label="Discard" onPress={() => { if (editable()) setDiscardAsk(true); }}>
           <CloseIcon />
         </GlassTool>
         {replyTo || draftFor ? (
@@ -218,7 +223,7 @@ export default function ReviewScreen() {
           {draftFor && !editing ? <Text style={s.draftNote}>Saved privately. When your prompt goes live, you choose whether to publish it.</Text> : null}
           {!editing ? (
             <View style={s.buttons}>
-              <Pressable accessibilityRole="button" onPress={rerecord} style={({ pressed }) => [s.rerecord, pressed && { opacity: 0.7 }]}>
+              <Pressable accessibilityRole="button" onPress={rerecord} disabled={busy} style={({ pressed }) => [s.rerecord, pressed && { opacity: 0.7 }]}>
                 <Glass style={StyleSheet.absoluteFill} radius={26}>{null}</Glass>
                 <RecordDotIcon />
                 <Text style={s.rerecordText}>Re-record</Text>
