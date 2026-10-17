@@ -167,3 +167,41 @@ distribution, Android APK, dev tools off) and `production` (store distribution).
 `ANDROID.md`. The repository root also holds `design/` and `spike/`; they upload with the project archive
 unless an ignore file is added (the project archive honours `.gitignore`; adding a root `.easignore` replaces
 those rules, so copy them into it first).
+
+## 7. Release build dry run (17 Oct 2026; no EAS call, no native build)
+
+What was checked on the merged tip (`3908825`: Agents A to E, the failed-post UI and the camera flip are in), with no
+account and nothing built:
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Clean install | `rm -rf node_modules && npm ci` in `app/` | succeeded (1045 packages added; 677 top-level entries) |
+| Types, lint, tests | `npm run typecheck`, `npm run lint`, `npm test` | exit 0, exit 0, **25 suites, 347 of 347** |
+| Native projects generate for both platforms | `EXPO_NO_DOTENV=1 LANG=en_US.UTF-8 npx expo prebuild --no-install --platform all` in a throwaway copy of `app/` (deleted afterwards) | **succeeded**. Android app manifest: `CAMERA`, `INTERNET`, `RECORD_AUDIO`, `VIBRATE`, and `SYSTEM_ALERT_WINDOW`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` as `tools:node="remove"`. iOS entitlements `aps-environment` (`development` locally) and `com.apple.developer.applesignin`. The `video-stitcher` module needs no config plugin: its `expo-module.config.json` is autolinked from `app/modules`; its registration in `ExpoModulesProvider.swift` and Gradle only appears at `pod install` and Gradle time, which were not run |
+| EAS-only guard | `EAS_BUILD=true EAS_BUILD_PROFILE=<p> npx expo config --type public` | empty values for `preview`: refused; `production` with `http://localhost:54321` and dev tools on: refused; valid hosted values: accepted. Unchanged since 16 Oct |
+| `eas.json` against the new code | read | **nothing to change.** The merged routes (`r`, `p`, `u`, `a`) and the failed-post UI read no new environment variable; the only `process.env` names in `app/src` and `app.config.ts` are the ones already in `.env.example` and the profiles (`EXPO_PUBLIC_SUPABASE_URL`, `_ANON_KEY`, `_GOOGLE_WEB_CLIENT_ID`, `_GOOGLE_IOS_CLIENT_ID`, `_DEV_TOOLS`, `_FOUNDER_BUILD`, `_WEB_BASE_URL`, `GOOGLE_IOS_URL_SCHEME`, `APPLE_TEAM_ID`, `EAS_PROJECT_ID`, `GOOGLE_SERVICES_JSON`). `app.config.ts` changed only by the Android `blockedPermissions` block since the first release-configuration commit |
+| Founder script against the config | `EXPO_PUBLIC_FOUNDER_BUILD=1` with dummy hosted values, `npx expo config` | bundle id `app.shortcut.founder`, `usesAppleSignIn: false`, `withoutPersonalTeamCapabilities` plugin present, team id read from `APPLE_TEAM_ID`; `founder-ios.sh` still names workspace `ios/Shortcut.xcworkspace`, scheme `Shortcut` and launches `app.shortcut.founder`. The script's checks (hosted URL pattern, `sb_publishable_` key, device UDID, team id) match `app.config.ts` and `src/lib/env.ts` |
+
+Not done: a native build, `pod install`, Gradle, any `eas` command, and the install of the stitcher module on a
+phone (`CAMERA-FLIP.md`).
+
+### The commands, per profile (run only when `STAGE-4-SETUP.md` says its items exist; each is Nemat's call)
+
+All from `app/`. `npx eas-cli login` first (item S1). Never pass a secret on the command line; values come from the EAS
+environment of the profile or from the credential prompts.
+
+| Profile | Command | Output | What it needs from `STAGE-4-SETUP.md` |
+| --- | --- | --- | --- |
+| `development` (dev client, iOS simulator) | `npx eas-cli build --platform ios --profile development` | simulator `.app` | S1, P1. No Apple account needed for a simulator build. EAS `development` environment values are optional (the profile sets only `EXPO_PUBLIC_DEV_TOOLS=1`); point it at a hosted or LAN project through EAS variables |
+| `development`, Android | `npx eas-cli build --platform android --profile development` | APK with the dev client | S1, P1. EAS generates an Android keystore (no Google account needed) |
+| `preview`, iPhone | `npx eas-cli device:create` once, then `npx eas-cli build --platform ios --profile preview` | **ad hoc** build installed from an EAS link on registered devices | S1, P1, S2/A1, A2, A3, A5, V1; EAS `preview` environment: `EXPO_PUBLIC_SUPABASE_ANON_KEY` (the `sb_publishable_` key), `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `GOOGLE_IOS_URL_SCHEME` (G2, G3, or leave unset to leave Google out), `APPLE_TEAM_ID`, `EAS_PROJECT_ID`; later `EXPO_PUBLIC_WEB_BASE_URL` (W7). The URL, dev tools and founder switch come from `eas.json` |
+| `preview`, Android | `npx eas-cli build --platform android --profile preview` | APK | S1, P1; the same environment values (without the Apple and iOS Google ones); `GOOGLE_SERVICES_JSON` as a file variable only for push (P4); the keystore's SHA-1 then goes to G4 |
+| `production`, iPhone | `npx eas-cli build --platform ios --profile production` then `npx eas-cli submit --platform ios --profile production` | store build, TestFlight | everything for `preview` except A3 (no UDIDs), plus A9, A10 (`ascAppId` in `eas.json` `submit.production`), App Store Connect access |
+| `production`, Android | `npx eas-cli build --platform android --profile production` | app bundle (`.aab`) | S3 and the preview Android items; a Play service-account key for `eas submit` is a further credential (**verify**; the first upload to a new Play app is normally done by hand in the console) |
+
+Reading what a build will do before it runs: `npx eas-cli build:inspect` and `npx eas-cli config --profile <p> --platform <os>`
+show the resolved profile and environment **(verify availability in the installed eas-cli version)**. The build server
+re-runs `npm ci` in `app/` (so `app/.npmrc` applies), evaluates `app.config.ts` with `EAS_BUILD=true` (so the guard runs:
+a wrong URL, key, dev-tools or founder value stops the build before it compiles), and uploads tracked files only (so `.env`
+never reaches it; section 3). The repository root also holds `design/` and `spike/`; they upload with the archive.
+
