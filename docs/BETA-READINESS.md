@@ -4858,8 +4858,10 @@ Base `4b2fe3f`; 23 commits to `c12724e`. Nothing pushed, deployed, installed on 
   "Shortcut" (built before the rename). The new build has the same bundle id and team, so installing it is
   an upgrade: the app's data (sign-in, waiting recordings) is kept. The auth storage key is now pinned to
   the supabase-js default, so the session survives.
-- *Still open from this pass:* D-B (Replies opened from Comments draws the header over the author line),
-  D-C (hidden responses still counted), D-D (an unknown link from a pushed screen stays put), M2; failed
+- *Re-walk (same day):* D-A, D-B (Replies from Comments drew the header over the author line) and D-D (an
+  unknown link from a pushed screen stayed put) fixed (`c12724e`, `dbc149e`, `45b44ab`) and seen fixed on
+  the simulator (SIMULATOR-WALK-17OCT, Re-walk).
+- *Still open from this pass:* D-C (hidden responses still counted), M2; failed
   recording start shows nothing (no board); "Send a new code" failures silent (no board); unreferenced
   files in `Documents/recordings/` never swept; sign-out scope global vs local (Nemat). Android still never
   run.
