@@ -236,7 +236,14 @@ export function createMemberPosting(deps: MemberPostingDeps) {
       awaitingConfirmation = true;
       void reconcile('launch');
     } else if (resumed.state === 'processing') void run(resumed);
-    else show({ kind: 'failed', post: resumed });
+    else if (!deps.fileExists(resumed.recording)) {
+      // The file is gone (P3): say so at once, with the reason a Retry would end in, instead of
+      // offering a Retry that can only fail. Nothing is asked of the server here; Discard still
+      // asks it (a row Mux already has is then carried on, not lost).
+      const gone: PendingPost = { ...resumed, state: 'failed', failedReason: 'recording_missing' };
+      await deps.save(gone).catch(() => undefined);
+      show({ kind: 'failed', post: gone });
+    } else show({ kind: 'failed', post: resumed });
   }
 
   /** Retry (X-Upload-Failed). Offline: waits for the connection (A-Offline). Never during a discard. */
