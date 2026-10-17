@@ -23,14 +23,14 @@ Yellow in the html means new or revised copy, approved 14 Oct. Everything else i
 | P2-R | The same, video reply | Your video reply didn't post | This recording can't be posted. | Discard |
 | P3 | The file is gone from the phone | Your response didn't post | This recording is no longer on this phone. | Discard |
 | P3-R | The same, video reply | Your video reply didn't post | This recording is no longer on this phone. | Discard |
-| P4 | Discard tapped (confirmation sheet) | Discard this recording? | Shortcut will try to stop it from posting. If it has already uploaded, it may still appear. | Discard (destructive) · Cancel |
-| P5 | Discard not confirmed yet (offline, or Shortcut cannot verify) | Discarding your response | It stays on this phone until Shortcut confirms. | none |
-| P5-R | The same, video reply | Discarding your video reply | It stays on this phone until Shortcut confirms. | none |
-| P6 | Discard found it already at Shortcut | This recording already reached Shortcut | It may finish processing. If it appears on your profile, you can delete it there. | OK |
+| P4 | Discard tapped (confirmation sheet) | Discard this recording? | Conga will try to stop it from posting. If it has already uploaded, it may still appear. | Discard (destructive) · Cancel |
+| P5 | Discard not confirmed yet (offline, or Conga cannot verify) | Discarding your response | It stays on this phone until Conga confirms. | none |
+| P5-R | The same, video reply | Discarding your video reply | It stays on this phone until Conga confirms. | none |
+| P6 | Discard found it already at Conga | This recording already reached Conga | It may finish processing. If it appears on your profile, you can delete it there. | OK |
 | P7 | Respond, Reply or Record while one waits (failed or offline) | Your last recording hasn't posted yet | Retry or discard it first. | OK |
-| P8 | The same while it is posting | Your last recording is still posting | Keep Shortcut open until it's done. | OK |
-| P8-R | PR-Posting banner, video reply | Posting your video reply | Keep Shortcut open until it's done. | none |
-| P9 | Every sign-out with a recording waiting: Settings, LV-Suspended, end of Delete account, confirm email | Sign out? | You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account. | Sign out anyway · Cancel |
+| P8 | The same while it is posting | Your last recording is still posting | Keep Conga open until it's done. | OK |
+| P8-R | PR-Posting banner, video reply | Posting your video reply | Keep Conga open until it's done. | none |
+| P9 | Every sign-out with a recording waiting: Settings, LV-Suspended, end of Delete account, confirm email | Sign out? | You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account. | Sign out anyway · Cancel |
 
 Also decided, not drawn separately: A-Offline for a video reply reads "Your video reply stays saved on this phone." Drafts keep "Your draft didn't save" and "Saving your draft".
 
@@ -41,9 +41,9 @@ Also decided, not drawn separately: A-Offline for a video reply reads "Your vide
 ## 4. Decisions already applied (14 Oct)
 
 The three final copy decisions, as recorded in `docs/DECISIONS.md` (14 Oct rows) and applied to the html, `FAILED-POST-UX.md`, SPEC.md section 19 and `docs/DECISIONS.md`:
-1. **P4**: "Discard this recording?" / "Shortcut will try to stop it from posting. If it has already uploaded, it may still appear." / Discard, Cancel.
-2. **P6**: "This recording already reached Shortcut" / "It may finish processing. If it appears on your profile, you can delete it there."
-3. **P9**: "Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account."
+1. **P4**: "Discard this recording?" / "Conga will try to stop it from posting. If it has already uploaded, it may still appear." / Discard, Cancel.
+2. **P6**: "This recording already reached Conga" / "It may finish processing. If it appears on your profile, you can delete it there."
+3. **P9**: "Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account."
 
 They complete the five design decisions of 14 Oct: Discard beside Retry (P1); a second recording blocked at camera entry (P7, P8); an unconfirmed Discard keeps the recording and retries safely (P5); "may finish processing", not "will post" (P4, P6, P9); "video reply" for replies (the -R boards).
 

@@ -1,4 +1,4 @@
-// Link to a response or video reply: shortcut://r/<id> (and shortcut.app/r/<id> once the domain
+// Link to a response or video reply: shortcut://r/<id> (and conga.churntech.com/r/<id> once the domain
 // exists). No screen of its own: it finds what the id is and goes to the player (SPEC.md Section 4).
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';

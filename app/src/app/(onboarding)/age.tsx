@@ -49,7 +49,7 @@ export default function AgeScreen() {
           <PersonIcon />
         </IconCircle>
         <Title style={{ marginTop: 20 }}>Are you 18 or older?</Title>
-        <Lead>The Shortcut beta is for adults only, because people here talk with strangers on camera.</Lead>
+        <Lead>The Conga beta is for adults only, because people here talk with strangers on camera.</Lead>
       </View>
       <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, layout.bottomButton) }]}>
         <Button title="Yes, I'm 18 or older" onPress={() => void yes()} disabled={busy} />

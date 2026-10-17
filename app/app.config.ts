@@ -40,13 +40,13 @@ if (easProfile === 'preview' || easProfile === 'production') {
   if (problems.length > 0) throw new Error(`EAS ${easProfile} build refused: ${problems.join('; ')}.`);
 }
 
-const CAMERA_USAGE = 'Shortcut uses the camera to record your video responses and video replies, and to take your profile photo.';
-const MICROPHONE_USAGE = 'Shortcut uses the microphone to record the sound of your video responses and video replies.';
+const CAMERA_USAGE = 'Conga uses the camera to record your video responses and video replies, and to take your profile photo.';
+const MICROPHONE_USAGE = 'Conga uses the microphone to record the sound of your video responses and video replies.';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'Shortcut',
-  slug: 'shortcut',
+  name: 'Conga',
+  slug: 'conga',
   scheme: 'shortcut',
   version: '0.1.0',
   orientation: 'portrait',
@@ -94,7 +94,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-image-picker',
       {
-        photosPermission: 'Shortcut uses your photo library when you choose a profile photo.',
+        photosPermission: 'Conga uses your photo library when you choose a profile photo.',
         cameraPermission: CAMERA_USAGE,
       },
     ],

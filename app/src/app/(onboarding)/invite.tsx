@@ -116,7 +116,7 @@ export default function InviteScreen() {
         <View style={s.betaPill}>
           <Text style={s.betaPillText}>Closed beta</Text>
         </View>
-        <Title style={{ marginTop: 10 }}>Shortcut is in closed beta.</Title>
+        <Title style={{ marginTop: 10 }}>Conga is in closed beta.</Title>
         <Lead style={{ marginTop: 12 }}>Access is limited while we&apos;re testing. Use an invite if you have one, or join the waitlist.</Lead>
       </View>
 
@@ -137,7 +137,7 @@ export default function InviteScreen() {
           <View style={s.invitedBy}>
             <Avatar uri={avatarUrl(check?.inviter_photo_path)} size={18} />
             <Text style={s.invitedByText}>
-              Invited by <Text style={{ fontWeight: '600' }}>{check?.inviter_name ?? 'the Shortcut team'}</Text>
+              Invited by <Text style={{ fontWeight: '600' }}>{check?.inviter_name ?? 'the Conga team'}</Text>
             </Text>
           </View>
         ) : error ? (

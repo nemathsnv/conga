@@ -22,8 +22,8 @@ export function clientIp(req: Request): string {
  *  Pages Functions in web/ (docs/release/WEB-HOSTING.md). On a Worker's request to another zone,
  *  Cloudflare sets cf-connecting-ip to one fixed Worker address, so without this every visitor
  *  of the proxy would share one rate-limit bucket. */
-export const PROXY_KEY_HEADER = "x-shortcut-proxy-key";
-export const PROXY_CLIENT_HEADER = "x-shortcut-client-ip";
+export const PROXY_KEY_HEADER = "x-conga-proxy-key";
+export const PROXY_CLIENT_HEADER = "x-conga-client-ip";
 
 /** The proxy's shared key (WEB_PROXY_KEY), compared in constant time. False when no key, or a key
  *  shorter than 32 characters, is configured: an unset key trusts nobody. */

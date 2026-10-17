@@ -37,7 +37,7 @@ Apple Developer Program (paid) ─► App ID capabilities ─┬─► APNs key 
                                    │                   └─► App Store Connect record ─► eas submit ─► TestFlight
                                    ├─► Sign in with Apple, native (bundle id only) ─► Supabase Apple provider
                                    └─► [Android web flow only] Services ID ─► key ─► client-secret JWT ─► supabase/.env
-Domain (bought) ─► Cloudflare account (free) + the domain's DNS on Cloudflare ─► Pages project `shortcut-web` ─► Pages secrets
+Domain (bought) ─► Cloudflare account (free) + the domain's DNS on Cloudflare ─► Pages project `conga-web` ─► Pages secrets
    (SUPABASE_ANON_KEY, WEB_PROXY_KEY) ──┐                                    └─► custom domains `<domain>` and `admin.<domain>` ─► EXPO_PUBLIC_WEB_BASE_URL
    Supabase: same WEB_PROXY_KEY as a function secret ─► redeploy `web` ◄─┘
    Auth stays on `picvoavfxnajfjkqawju.supabase.co`, so the Services ID return URL and Google redirect URI do NOT wait for the domain
@@ -107,7 +107,7 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 | **Domain and web** | | | | | | | | |
 | W1 | Buy the domain | paid account | REQUIRED | yes | Nemat | registrar | D2 | W2 |
 | W2 | DNS on Cloudflare: bought through Cloudflare Registrar, or nameservers moved (up to a day), or a CNAME for a subdomain only | provider setting | REQUIRED | yes | Nemat | Cloudflare dashboard | W1, S10 | W6 |
-| W3 | Pages project `shortcut-web` (`wrangler pages project create`) | provider setting | REQUIRED | yes | Nemat, Lead | Cloudflare Pages | S10 | W4 |
+| W3 | Pages project `conga-web` (`wrangler pages project create`) | provider setting | REQUIRED | yes | Nemat, Lead | Cloudflare Pages | S10 | W4 |
 | W4 | Pages configuration: secrets `SUPABASE_ANON_KEY` (the publishable key, set as a Pages environment variable/secret binding, never in git) and `WEB_PROXY_KEY` (32+ random characters); variables `ADMIN_HOST=admin.<domain>`, `WEB_BASE_URL=https://<domain>` in `web/wrangler.toml` `[env.production.vars]` (committed, not secret), optional `STORE_URL`/`WAITLIST_URL` | credential, config | REQUIRED | yes | Nemat sets the secrets; Lead commits the vars | Cloudflare Pages secrets (`wrangler pages secret put`); `web/wrangler.toml` | W3, D2 (domain), D4 | W6 |
 | W5 | Supabase side: the **same** `WEB_PROXY_KEY` as a function secret (`supabase secrets set`), then **redeploy the `web` function** (it now carries `render.ts`); needs Nemat's approval | credential, deploy | REQUIRED | yes | Nemat sets the value; Lead deploys | Supabase function secret; hosted `web` | W4 (the value is generated once and used in both places) | per-visitor rate limits; `web_link_opened` events |
 | W6 | Deploy the Pages project and add custom domains `<domain>` and `admin.<domain>`; run the four checks in `web/README.md` (`text/html` on `/r/<id>`, JSON `.well-known`, `/admin` with a nonce CSP on the admin host, 404 for pages on the admin host) | provider setting | REQUIRED | yes | Nemat, Lead | Cloudflare Pages | W2, W4, W5 | `web` pages, `admin` (H7) |
@@ -288,17 +288,17 @@ add-on, `CUSTOM-DOMAIN.md`) is not being bought. Each step below is on Nemat's g
 2. **S10** Create the Cloudflare account (free plan); on the Mac `cd web && npx wrangler login`.
 3. **W2** Put the domain's DNS on Cloudflare (Registrar purchase is immediate; a nameserver move from another registrar can take
    up to a day). A subdomain-only setup can use a CNAME, but the apex (`https://<domain>/r/{id}`) needs Cloudflare DNS.
-4. **W3** `npx wrangler pages project create shortcut-web --production-branch main`.
+4. **W3** `npx wrangler pages project create conga-web --production-branch main`.
 5. **W4** Generate `WEB_PROXY_KEY` (`openssl rand -hex 32`, kept in a shell variable, never printed). Then
-   `npx wrangler pages secret put SUPABASE_ANON_KEY --project-name shortcut-web` (the publishable key, from the dashboard; it is
+   `npx wrangler pages secret put SUPABASE_ANON_KEY --project-name conga-web` (the publishable key, from the dashboard; it is
    public but kept out of git) and `... put WEB_PROXY_KEY ...`. In `web/wrangler.toml` `[env.production.vars]` fill `ADMIN_HOST`
    (`admin.<domain>`) and `WEB_BASE_URL` (`https://<domain>`) and commit; optional `STORE_URL`, `WAITLIST_URL` (D4).
 6. **W5** Supabase side, with approval: `supabase secrets set WEB_PROXY_KEY=<the same value> --project-ref picvoavfxnajfjkqawju`,
    then `supabase functions deploy web --no-verify-jwt --project-ref picvoavfxnajfjkqawju` (redeploy; it now carries `render.ts`).
    Without the key the function behaves as before. The key lives in two places and must be rotated together (`WEB-HOSTING.md`
    section 3).
-7. **W6** `npx wrangler pages deploy public --project-name shortcut-web --branch main`; Cloudflare dashboard, Pages,
-   `shortcut-web`, Custom domains: add `<domain>` and `admin.<domain>`. Check with `curl -sI`: `/r/<live id>` is 200
+7. **W6** `npx wrangler pages deploy public --project-name conga-web --branch main`; Cloudflare dashboard, Pages,
+   `conga-web`, Custom domains: add `<domain>` and `admin.<domain>`. Check with `curl -sI`: `/r/<live id>` is 200
    `text/html` with `x-robots-tag: noindex`; `/.well-known/apple-app-site-association` is 200 `application/json`; `admin.<domain>/admin`
    is 200 with a nonce CSP; `admin.<domain>/r/<id>` is 404. Then open a `/r/<id>` link in a phone browser and check a link
    preview shows thumbnail and prompt. Only then deploy the admin function (H7).

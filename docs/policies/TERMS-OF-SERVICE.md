@@ -1,6 +1,6 @@
-# Terms of Service (DRAFT for the Shortcut closed beta)
+# Terms of Service (DRAFT for the Conga closed beta)
 
-> **Status: working draft, not legal advice, not reviewed, not published.** It describes how Shortcut works as
+> **Status: working draft, not legal advice, not reviewed, not published.** It describes how Conga works as
 > specified (`SPEC.md` sections 13 to 18) and built. It does **not** contain legal terms the company has not decided:
 > licences, liability limits, governing law, dispute handling and similar are marked **[LEGAL REVIEW]** with a
 > placeholder instead of invented text. A lawyer must write or approve those clauses before this is used.
@@ -8,7 +8,7 @@
 
 **Effective date:** [PLACEHOLDER: date]
 **Who these terms are with:** [PLACEHOLDER: Company legal name], [PLACEHOLDER: registered address and country]
-("we", "us"). [PLACEHOLDER: final product name; "Shortcut" is the working name.]
+("we", "us"). [PLACEHOLDER: final product name; "Conga" is the working name.]
 
 ## 1. Agreeing to these terms
 
@@ -17,11 +17,11 @@ By continuing past the Welcome screen you agree to these Terms and to the Commun
 [PLACEHOLDER: decide how acceptance is recorded; the approved Welcome screen has only the line "By continuing you
 agree to the Terms and Community Guidelines." and does not mention the Privacy Policy. **[LEGAL REVIEW]**]
 
-## 2. Who can use Shortcut
+## 2. Who can use Conga
 
 - You must be **18 or older**. When you sign up we ask "Are you 18 or older?"; if you say no you are signed out and
   no profile is created. We do not check ID. If we find that an account belongs to someone under 18, we remove it.
-- Shortcut is in a **closed beta**. To make a profile you need a valid invite from a member, or admission from the
+- Conga is in a **closed beta**. To make a profile you need a valid invite from a member, or admission from the
   waitlist. Invites are single-use and expire (7 days at the time of writing, a setting we can change). Access can be
   limited, paused or ended during the beta.
 - You may have one account, and one sign-in method per account: Apple, Google or an email code. There are no
@@ -39,7 +39,7 @@ Guidelines or mislead people. We may change or remove a name, username or photo 
 - **What you can make.** Responses (videos up to 30 seconds made for a prompt), video replies (videos in reply to a
   response or another video reply), captions up to 150 characters, text comments up to 300 characters, and prompt
   suggestions. Videos are recorded inside the app; you cannot upload from your camera roll.
-- **They are public.** Every response and video reply is public. Anyone on Shortcut can watch it, people can reply on
+- **They are public.** Every response and video reply is public. Anyone on Conga can watch it, people can reply on
   video and share it, and anyone with a link can watch it in a browser without an account. The app tells you this
   and asks you to accept before your first public video ("Your videos are public").
 - **You own your content; we need permission to run the service.** [LEGAL REVIEW: write the licence you give us to
@@ -63,9 +63,9 @@ and nothing involving people under 18. **We have no tolerance for objectionable 
 Also:
 
 - Do not try to get around a block, a restriction or a suspension, including by making another account.
-- Do not scrape Shortcut, overload it, test its security without our written permission, or try to access other people's
+- Do not scrape Conga, overload it, test its security without our written permission, or try to access other people's
   accounts or data. [LEGAL REVIEW: add a responsible-disclosure contact if wanted.]
-- Do not use Shortcut for anything illegal.
+- Do not use Conga for anything illegal.
 
 ## 6. Moderation and enforcement
 
@@ -93,11 +93,11 @@ the waitlist. [LEGAL REVIEW: consent wording for messages.]
 You can delete your account in Settings. Everything you made is hidden at once and permanently deleted after 30 days;
 signing back in within 30 days cancels it. See `ACCOUNT-DELETION.md`. We may suspend or close an account for breaking
 these terms, the Community Guidelines or the law, or to end the beta. [LEGAL REVIEW: notice and refunds do not apply;
-Shortcut is free in the beta (confirm).]
+Conga is free in the beta (confirm).]
 
 ## 10. The beta
 
-Shortcut is a closed beta and may change, break, lose data or be withdrawn. [LEGAL REVIEW: disclaimers of warranty,
+Conga is a closed beta and may change, break, lose data or be withdrawn. [LEGAL REVIEW: disclaimers of warranty,
 limitation of liability, indemnity. None are written here because no position has been decided and the spec contains
 none.]
 

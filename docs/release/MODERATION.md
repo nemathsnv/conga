@@ -102,7 +102,7 @@ browser ──POST .../admin/a/remove_video ───────► same checks
 
 ## 4. How a moderator works
 
-Sign in with the email of your Shortcut account; a six-digit code arrives; the nav is Reports,
+Sign in with the email of your Conga account; a six-digit code arrives; the nav is Reports,
 Review requests, Prompt suggestions, Accounts.
 
 - **Reports** (`mod_reports_queue`): oldest first, with what was reported, the reason as the app

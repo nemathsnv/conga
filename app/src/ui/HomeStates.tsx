@@ -186,7 +186,7 @@ export function PostingBanner({ state, onRetry, onDiscard, busy = false, topInse
               <View style={s.bannerTrack} accessible accessibilityRole="progressbar" accessibilityLabel="Upload progress" accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}>
                 <View style={[s.bannerFill, { width: `${progress * 100}%` }]} />
               </View>
-              <Text style={s.bannerSub}>Keep Shortcut open until it&apos;s done.</Text>
+              <Text style={s.bannerSub}>Keep Conga open until it&apos;s done.</Text>
             </>
           )}
         </View>

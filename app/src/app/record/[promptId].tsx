@@ -299,7 +299,7 @@ export default function RecordScreen() {
             <CameraOffIcon size={28} />
           </Glass>
           <Text style={s.stateTitle}>Camera access is off</Text>
-          <Text style={s.stateText}>Responses are recorded on video. Turn on camera access for Shortcut in your phone&apos;s settings.</Text>
+          <Text style={s.stateText}>Responses are recorded on video. Turn on camera access for Conga in your phone&apos;s settings.</Text>
           <Button title="Open Settings" variant="white" onPress={() => void Linking.openSettings()} style={{ marginTop: 24, height: 48, paddingHorizontal: 24 }} />
           <Button title="Not now" variant="textOnDark" onPress={() => router.back()} style={{ marginTop: 8, height: 40 }} textStyle={{ color: 'rgba(255,255,255,0.8)' }} />
         </View>

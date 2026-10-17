@@ -57,7 +57,7 @@ const JS = `
 var CFG=JSON.parse(document.getElementById('cfg').textContent);
 var BASE=location.pathname.replace(/\\/+$/,'');
 var AUTH=(CFG.authBase||location.origin).replace(/\\/+$/,'')+'/auth/v1';
-var KEY='shortcut_admin_session';
+var KEY='conga_admin_session';
 var session=null,pendingEmail='';
 try{session=JSON.parse(sessionStorage.getItem(KEY)||'null')}catch(e){}
 function $(id){return document.getElementById(id)}
@@ -139,20 +139,20 @@ export function shellPage(cfg: ShellConfig, nonce: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<title>Shortcut moderation</title>
+<title>Conga moderation</title>
 <style nonce="${esc(nonce)}">${CSS}</style>
 </head>
 <body>
 <script type="application/json" id="cfg">${jsonForScript(cfg)}</script>
 <p id="msg" class="msg" role="status" aria-live="polite"></p>
 <div id="signin" class="signin hidden">
-<h1>Shortcut moderation</h1>
-<p class="muted">Team only. Sign in with the email of your Shortcut account; a six-digit code is sent to it.</p>
+<h1>Conga moderation</h1>
+<p class="muted">Team only. Sign in with the email of your Conga account; a six-digit code is sent to it.</p>
 <form id="emailForm"><label>Email<input name="email" type="email" autocomplete="username" required></label><button type="submit">Send code</button></form>
 <form id="codeForm" class="hidden"><label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required></label><button type="submit">Sign in</button></form>
 </div>
 <div id="app" class="hidden">
-<header><b>Shortcut moderation</b>
+<header><b>Conga moderation</b>
 <nav><a href="#/reports" data-nav="reports">Reports</a><a href="#/reviews" data-nav="reviews">Review requests</a><a href="#/suggestions" data-nav="suggestions">Prompt suggestions</a><a href="#/accounts" data-nav="accounts">Accounts</a></nav>
 <span class="muted" id="who"></span><a href="#" id="signout">Sign out</a>
 </header>

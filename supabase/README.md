@@ -1,6 +1,6 @@
 # Supabase backend
 
-Postgres, Auth, Storage and Edge Functions for Shortcut. Everything here is reproducible from
+Postgres, Auth, Storage and Edge Functions for Conga. Everything here is reproducible from
 `migrations/` on a clean database; nothing is ever edited by hand on the hosted project.
 
 ## Layout

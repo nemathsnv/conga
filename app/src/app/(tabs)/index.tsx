@@ -13,7 +13,7 @@ import { shouldAsk } from '@/lib/notificationAsk';
 import { takeFeedDirty } from '@/ui/feedStore';
 import { ActionSheet } from '@/ui/ActionSheet';
 import { ConversationView } from '@/ui/ConversationView';
-import { DISCARD_SHEET, REACHED_SHORTCUT_SHEET, discardOutcome } from '@/ui/failedPost';
+import { DISCARD_SHEET, REACHED_CONGA_SHEET, discardOutcome } from '@/ui/failedPost';
 import { FeedHeader } from '@/ui/dark';
 import { EmptyPrompt, FollowingEmpty, HomeLoading, OfflineBanner, PostingBanner } from '@/ui/HomeStates';
 import { usePosting } from '@/video/posting';
@@ -33,12 +33,12 @@ export default function HomeTab() {
   const [suggestions, setSuggestions] = useState<FollowSuggestion[]>([]);
   const seen = useRef<string[]>([]);
   const loading = useRef(false);
-  // P4 (Discard confirmation) and P6 (it already reached Shortcut). While a Discard runs ('running')
+  // P4 (Discard confirmation) and P6 (it already reached Conga). While a Discard runs ('running')
   // the banner's buttons wait; once it has answered ('done') the posting state tells the outcome,
   // for that recording only (a later recording that processes is not P6).
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [discard, setDiscard] = useState<{ status: 'idle' | 'running' | 'done'; recordingId: string | null }>({ status: 'idle', recordingId: null });
-  const reachedShortcut = discard.status === 'done' && discardOutcome(posting.state) === 'reached_shortcut' && posting.state.kind === 'processing' && posting.state.post.recording.id === discard.recordingId;
+  const reachedConga = discard.status === 'done' && discardOutcome(posting.state) === 'reached_conga' && posting.state.kind === 'processing' && posting.state.post.recording.id === discard.recordingId;
   const viewing = useRef<{ id: string; promptId: string; position: number; since: number; durationMs: number } | null>(null);
   const endView = useCallback(() => {
     const v = viewing.current;
@@ -201,8 +201,8 @@ export default function HomeTab() {
         <ActionSheet title={DISCARD_SHEET.title} lines={[DISCARD_SHEET.line]} actions={[{ label: DISCARD_SHEET.discard, destructive: true, onPress: runDiscard }]} cancelLabel={DISCARD_SHEET.cancel} onCancel={() => setConfirmDiscard(false)} />
       </Modal>
       {/* P6 */}
-      <Modal visible={reachedShortcut} transparent animationType="fade" onRequestClose={() => setDiscard({ status: 'idle', recordingId: null })}>
-        <ActionSheet title={REACHED_SHORTCUT_SHEET.title} lines={[REACHED_SHORTCUT_SHEET.line]} actions={[]} cancelLabel={REACHED_SHORTCUT_SHEET.ok} onCancel={() => setDiscard({ status: 'idle', recordingId: null })} />
+      <Modal visible={reachedConga} transparent animationType="fade" onRequestClose={() => setDiscard({ status: 'idle', recordingId: null })}>
+        <ActionSheet title={REACHED_CONGA_SHEET.title} lines={[REACHED_CONGA_SHEET.line]} actions={[]} cancelLabel={REACHED_CONGA_SHEET.ok} onCancel={() => setDiscard({ status: 'idle', recordingId: null })} />
       </Modal>
     </View>
   );

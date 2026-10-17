@@ -45,7 +45,7 @@ Where things stand (`docs/BETA-READINESS.md` sections 21 to 28):
   - the records.
 
 Both work in a shell that has run `source scripts/provider-env.sh` (it prints no value). Before
-code 1, the lead writes T1's address from `auth.users` into `~/.shortcut-provider/t1.email`
+code 1, the lead writes T1's address from `auth.users` into `~/.conga-provider/t1.email`
 (read-only query, mode 600, never printed), as for C1.
 
 ## 3. The two switches in this session
@@ -95,7 +95,7 @@ what must differ from the previous check.
 | t | Who | Step (approval) | Command | Expected |
 |---|---|---|---|---|
 | −20 | lead | **P0** preflight, read-only | S1, S2 (fingerprint against the local 24-migration stack, 847 objects), S3, `supabase functions list`, `supabase secrets list` | Clean-up `off`. Health `warn` only for `waiting_while_not_live` (e48 has waited over 24 h); anything else stops the session. Open jobs: exactly e48, `pending`, due. T1 active. V `live` on P2. Founder hashes unchanged. Mux: 2 assets, inventory `ccb8b093…`; U5 `timed_out`, no `asset_id`. No `MUX_CLEANUP_MODE`. |
-| −5 | lead | send code 1 (A0) | `node scripts/provider-member.mjs otp "$(cat ~/.shortcut-provider/t1.email)"` | `http 200` |
+| −5 | lead | send code 1 (A0) | `node scripts/provider-member.mjs otp "$(cat ~/.conga-provider/t1.email)"` | `http 200` |
 | 0 | Nemat | enter code 1 | `scripts/provider-t1-verify.sh` | "token saved … (-rw-------)" |
 | +1 | lead | **C2w-a′** (A1) | `node scripts/provider-member.mjs c2 --reply-to 52bbaabb-6faa-4bd2-94f9-015e43be791d --submission no --bytes partial --discard abandon-response` | `ok: true`; mint `200` (U6). No retirement, since T1 holds no unexpired unclaimed URL. `post_reply` `200` (row R6). PUT `cut: true`, 262,144 of 8,388,608 bytes. `abandon_response` `204`. S1: R6 `deleted`; ledger U6 `claimed`; one new job J6 (`cancel_upload`, `abandoned`, U6, owner T1, due). S3: U6 `waiting`, passthrough T1, no `asset_id`. **Note the mint time: C2w-c deadline = mint + 45 min.** |
 | +3 | lead | **C2w-b′** dry run (A2) | `PROVIDER_WRITE_STEP=C2w-b2 scripts/provider-drain.sh hosted dry_run "Nemat: C2w-b2 dry run" <e48 id>,<J6 id>` | `200`, `mode dry_run`, `claimed 2, release 2`. J6 `would {act cancel, upload_status waiting, owner_verified true}`. e48 `would {outcome timed_out}`. Mux: `GET`s only. Switch after: `off`. |
@@ -117,7 +117,7 @@ what must differ from the previous check.
 | +34 | lead | **E3a dry run** (A12) | `PROVIDER_WRITE_STEP=E3a-dry scripts/provider-drain.sh hosted dry_run "Nemat: E3a dry run" <J_E3a>` | `direction revoke, would_revoke [P3…]` |
 | +36 | lead | **E3a live** (A13) | `PROVIDER_WRITE_STEP=E3a-live scripts/provider-drain.sh hosted live "Nemat: E3a revocation" <J_E3a>` | `revoked`; P3 HLS 404; asset a kept; 2 assets |
 | +38 | Nemat | **close W1** | `supabase secrets unset MUX_CLEANUP_MODE --project-ref picvoavfxnajfjkqawju` | No `MUX_CLEANUP_MODE`; functions up one version |
-| +40 | lead | postflight | S1, S2, S3, functions and secrets lists; the token file deleted (`rm ~/.shortcut-provider/t1.token`); the address file kept only if E3b needs it (it does not) | Clean-up `off`. Health `ok` (e48 is done). No open job. T1 deleted, waiting for the purge. V hidden, no playback id, asset a kept. 2 assets. Founder unchanged. |
+| +40 | lead | postflight | S1, S2, S3, functions and secrets lists; the token file deleted (`rm ~/.conga-provider/t1.token`); the address file kept only if E3b needs it (it does not) | Clean-up `off`. Health `ok` (e48 is done). No open job. T1 deleted, waiting for the purge. V hidden, no playback id, asset a kept. 2 assets. Founder unchanged. |
 | day 31 | lead | **E3b check**, read-only | after 03:15 UTC on the first day more than 30 days after E3a (for a deletion on 17 Oct: 17 Nov 03:15 UTC), S1 | T1's account, profile and rows gone. `account_purge_failures` empty. One job J_E3b (`delete_asset`, `account_purged`, asset a, owner T1, due). No `post_submissions` row for T1. |
 | day 31 | lead | **E3b dry run** (A14) | `PROVIDER_WRITE_STEP=E3b-dry scripts/provider-drain.sh hosted dry_run "Nemat: E3b dry run" <J_E3b>` | `would {act delete, asset_id a, owner_verified true}` |
 | day 31 | Nemat, then lead, then Nemat | **E3b live** (A15): W2 open, drain, W2 close | `secrets set …=live`; `PROVIDER_WRITE_STEP=E3b-live scripts/provider-drain.sh hosted live "Nemat: E3b deletion" <J_E3b>`; `secrets unset …` | J_E3b `done {"outcome": "deleted"}`; `muxread asset a` 404; **1 Shortcut Beta asset** (the founder's) |

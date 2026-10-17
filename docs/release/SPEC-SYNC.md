@@ -78,10 +78,10 @@ A recording is never lost because of a bad connection. It stays saved on the pho
 
 - **Upload:** starts when Post is tapped and runs while the app is open.
 - **Upload fails** (`X-Upload-Failed`): "Your response didn't post. It's saved on this phone. Check your connection." with Discard and Retry side by side. For a video reply: "Your video reply didn't post." A recording that can never post ("This recording can't be posted.") or is no longer on the phone ("This recording is no longer on this phone.") offers Discard only.
-- **Discard:** a confirmation comes first: "Discard this recording?" / "Shortcut will try to stop it from posting. If it has already uploaded, it may still appear." Discard, or Cancel. The recording is deleted from the phone once Shortcut confirms none of it will be processed.
-  - **Not confirmed yet** (offline, or Shortcut cannot verify): the recording stays on the phone, shown as "Discarding your response" / "It stays on this phone until Shortcut confirms." Shortcut asks again by itself: when the app opens or comes back, when the connection returns, and on a short, limited schedule.
-  - **Already reached Shortcut:** "This recording already reached Shortcut" / "It may finish processing. If it appears on your profile, you can delete it there." A video that reached Shortcut is never deleted automatically.
-- **One waiting recording at a time:** a recording that is posting, waiting offline or failed is never replaced. While one waits, Respond, Reply and Record do not open the camera: "Your last recording hasn't posted yet" / "Retry or discard it first."; while it posts: "Your last recording is still posting" / "Keep Shortcut open until it's done."
+- **Discard:** a confirmation comes first: "Discard this recording?" / "Conga will try to stop it from posting. If it has already uploaded, it may still appear." Discard, or Cancel. The recording is deleted from the phone once Conga confirms none of it will be processed.
+  - **Not confirmed yet** (offline, or Conga cannot verify): the recording stays on the phone, shown as "Discarding your response" / "It stays on this phone until Conga confirms." Conga asks again by itself: when the app opens or comes back, when the connection returns, and on a short, limited schedule.
+  - **Already reached Conga:** "This recording already reached Conga" / "It may finish processing. If it appears on your profile, you can delete it there." A video that reached Conga is never deleted automatically.
+- **One waiting recording at a time:** a recording that is posting, waiting offline or failed is never replaced. While one waits, Respond, Reply and Record do not open the camera: "Your last recording hasn't posted yet" / "Retry or discard it first."; while it posts: "Your last recording is still posting" / "Keep Conga open until it's done."
 - **Posting** (`PR-Posting`): for a video reply, "Posting your video reply".
 - **App closed mid-upload:** the recording stays saved. Next time the app opens, the same banner offers Retry.
 - **Offline** (`A-Offline`): "You're offline. Your response stays saved on this phone. Post when you're back online." For a video reply, "Your video reply stays saved on this phone." Already loaded videos keep playing. No offline downloads.
@@ -89,13 +89,13 @@ A recording is never lost because of a bad connection. It stays saved on the pho
 - **Two kinds of draft:**
   - An **unposted recording** lives only on the phone.
   - A **first-response draft** for a suggested prompt is uploaded privately to the server, so it survives reinstalls (section 12).
-- Unposted recordings are discarded on sign-out by any route, after a warning (below), on the same terms as Discard. One Shortcut cannot confirm yet stays on the phone, out of reach of any other account, and is discarded the next time that person signs in on this phone. They show up only through the Upload failed banner (`X-Upload-Failed`); there is no separate list.
+- Unposted recordings are discarded on sign-out by any route, after a warning (below), on the same terms as Discard. One Conga cannot confirm yet stays on the phone, out of reach of any other account, and is discarded the next time that person signs in on this phone. They show up only through the Upload failed banner (`X-Upload-Failed`); there is no separate list.
 
-**Signing out with unposted recordings:** a warning comes first, on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email): "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3); its revised text and the other routes are proposal board P9.
+**Signing out with unposted recordings:** a warning comes first, on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email): "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3); its revised text and the other routes are proposal board P9.
 ~~~~
 
 What changed, in words: Discard beside Retry with a confirmation; the "may still appear" and "already reached
-Shortcut" states; one waiting recording at a time with the two camera-entry messages; video-reply wording
+Conga" states; one waiting recording at a time with the two camera-entry messages; video-reply wording
 ("video reply", not "reply"); sign-out discards by every route with a longer warning; the italic revision note
 (proposal boards P1 to P9, final copy for P4, P6 and P9 approved 14 Oct). Decisions: `docs/DECISIONS.md` rows of 13
 Oct (a second recording never overwrites a waiting one) and 14 Oct (two rows).
@@ -109,7 +109,7 @@ stated here, not fixed here:
 | --- | --- | --- |
 | Section 3, screen inventory row 8 (`LV-SignOut`) | "Only when an unposted recording would be deleted." | Section 19: the warning appears on every sign-out route when a recording has not posted, and the outcome is "discarded", possibly "stays private on this device". |
 | Section 20, states table, "Posting failed" | "Saved on the phone, Retry." | Section 19: Discard and Retry side by side; Discard only for a recording that can never post. |
-| Section 20, states table, "Sign-out with unposted recordings" | "Warns before deleting them from the phone." | Section 19: "Signing out stops the upload on this phone, but it may still finish on Shortcut." |
+| Section 20, states table, "Sign-out with unposted recordings" | "Warns before deleting them from the phone." | Section 19: "Signing out stops the upload on this phone, but it may still finish on Conga." |
 | Section 23, phase 3 | "posting with local save and Retry" | Historic phase description; harmless, listed for completeness. |
 
 The first three are stale by the spec's own rule ("Where this spec and a canvas note disagree, this spec wins"), but

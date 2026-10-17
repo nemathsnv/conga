@@ -1,4 +1,4 @@
-// Shared links (SPEC.md Section 4, "Links"): shortcut.app/r/{id}, /p/{id}, /i/{code}.
+// Shared links (SPEC.md Section 4, "Links"): conga.churntech.com/r/{id}, /p/{id}, /i/{code}.
 // The domain and app links are not set up yet (docs/BLOCKERS.md B-3), so links point at the
 // web Edge Function on the Supabase URL until EXPO_PUBLIC_WEB_BASE_URL names the domain.
 import { SUPABASE_URL } from './env';
@@ -60,7 +60,7 @@ export function promptLinkTarget(promptId: string, responses: { id: string }[]):
 const KNOWN_LINK_ROOTS = new Set(['', 'a', 'comments', 'create', 'activity', 'discover', 'me', 'i', 'notice', 'notifications', 'p', 'place', 'player', 'plus', 'profile', 'r', 'record', 'replies', 'reply', 'safety', 'search', 'settings', 'suggest', 'suggestion', 'suggestions', 'u']);
 
 /**
- * A link that opens the app (shortcut://x, https://shortcut.app/x, an Expo development URL) goes to its
+ * A link that opens the app (shortcut://x, https://conga.churntech.com/x, an Expo development URL) goes to its
  * screen when the app has one, and Home otherwise: an unknown link must never leave a blank page.
  * Used by `+native-intent.tsx`, before the router sees the URL.
  */

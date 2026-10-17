@@ -166,7 +166,7 @@ Plus 14 failed-post boards (`P1` to `P9`, with their video reply versions), appr
 | `PR-Posting` | A1 · Posting in progress | [jpg](boards/PR-Posting.jpg) | [html](html/PR-Posting.html) |
 | `PR-Short` | A1 · Under 2 seconds | [jpg](boards/PR-Short.jpg) | [html](html/PR-Short.html) |
 
-> **Canvas note:** Order after recording: Review (play back, optional caption up to 150 characters, Discard, Re-record or Post) → first public video of any type only: the one-time "Your videos are public" sheet opens when Post is tapped (no hint on the review screen itself) → back to the feed, with a "Posting" banner. Uploads run in the foreground: the banner says to keep Shortcut open. On failure: the Upload failed state (recording kept on the phone; P1 to P3). After the first successful post only: the notification ask.
+> **Canvas note:** Order after recording: Review (play back, optional caption up to 150 characters, Discard, Re-record or Post) → first public video of any type only: the one-time "Your videos are public" sheet opens when Post is tapped (no hint on the review screen itself) → back to the feed, with a "Posting" banner. Uploads run in the foreground: the banner says to keep Conga open. On failure: the Upload failed state (recording kept on the phone; P1 to P3). After the first successful post only: the notification ask.
 >
 > Variants: the posting banner for a video reply says "Posting your video reply" (P8-R); a video reply shows who and what it answers and says "Post reply"; the first response to your own suggested prompt says "Only you" and "Save draft", and is never published automatically.
 >
@@ -185,7 +185,7 @@ Plus 14 failed-post boards (`P1` to `P9`, with their video reply versions), appr
 | `P4` | A1 · Discard confirmation (revised) | [jpg](boards/P4.jpg) | [html](html/P4.html) |
 | `P5` | A1 · Discarding: not confirmed yet | [jpg](boards/P5.jpg) | [html](html/P5.html) |
 | `P5-R` | A1 · Discarding a video reply: not confirmed yet | [jpg](boards/P5-R.jpg) | [html](html/P5-R.html) |
-| `P6` | A1 · Discard: it already reached Shortcut | [jpg](boards/P6.jpg) | [html](html/P6.html) |
+| `P6` | A1 · Discard: it already reached Conga | [jpg](boards/P6.jpg) | [html](html/P6.html) |
 | `P7` | A1 · Camera entry: a recording waits (failed or offline) | [jpg](boards/P7.jpg) | [html](html/P7.html) |
 | `P8` | A1 · Camera entry: a recording is still posting | [jpg](boards/P8.jpg) | [html](html/P8.html) |
 | `P8-R` | A1 · PR-Posting: a video reply | [jpg](boards/P8-R.jpg) | [html](html/P8-R.html) |
@@ -195,9 +195,9 @@ Plus 14 failed-post boards (`P1` to `P9`, with their video reply versions), appr
 >
 > Upload failed (`X-Upload-Failed`): Discard sits beside Retry (P1). Both disappear while an attempt runs; Retry switches the banner to `PR-Posting`. A recording that can never post (already responded, prompt or video gone, removed, closed submission, conflicting request) says "This recording can't be posted." and offers Discard only (P2); one no longer on the phone says "This recording is no longer on this phone." (P3). A busy server, an upload limit and a lost connection stay P1.
 >
-> Discard asks first (P4): "Shortcut will try to stop it from posting. If it has already uploaded, it may still appear." The recording leaves the phone only once Shortcut confirms nothing of it will be processed. Not confirmed yet (offline, or Shortcut cannot verify): it stays on the phone as "Discarding your response" with no buttons, and Shortcut asks again by itself: when the app opens or comes back, when the connection returns, then after 30 seconds, 2 minutes and 10 minutes (P5). Already at Shortcut: "It may finish processing. If it appears on your profile, you can delete it there." (P6); it is never deleted automatically.
+> Discard asks first (P4): "Conga will try to stop it from posting. If it has already uploaded, it may still appear." The recording leaves the phone only once Conga confirms nothing of it will be processed. Not confirmed yet (offline, or Conga cannot verify): it stays on the phone as "Discarding your response" with no buttons, and Conga asks again by itself: when the app opens or comes back, when the connection returns, then after 30 seconds, 2 minutes and 10 minutes (P5). Already at Conga: "It may finish processing. If it appears on your profile, you can delete it there." (P6); it is never deleted automatically.
 >
-> One waiting recording at a time: while one is failed, waiting offline or posting, Respond, Reply and Record do not open the camera. "Your last recording hasn't posted yet" / "Retry or discard it first." (P7); "Your last recording is still posting" / "Keep Shortcut open until it's done." (P8).
+> One waiting recording at a time: while one is failed, waiting offline or posting, Respond, Reply and Record do not open the camera. "Your last recording hasn't posted yet" / "Retry or discard it first." (P7); "Your last recording is still posting" / "Keep Conga open until it's done." (P8).
 >
 > Sign out (P9): the revised `LV-SignOut` sheet, shown on every sign-out route while a recording waits. Sign out anyway stops the upload on this phone and never blocks signing out.
 
@@ -243,7 +243,7 @@ Plus 14 failed-post boards (`P1` to `P9`, with their video reply versions), appr
 >
 > Permanent suspension is shown at sign-in; one review request per decision; after it is sent, the button is replaced by "Review requested" and the outcome arrives as a notification. No review-time promise.
 >
-> Sign-out warning only appears when a recording that hasn't posted is saved on this phone. Revised 16 Oct 2026 (P9): its body is "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account.", and the same sheet appears on every sign-out route: Settings, the permanent-suspension screen, the end of Delete account and confirm email.
+> Sign-out warning only appears when a recording that hasn't posted is saved on this phone. Revised 16 Oct 2026 (P9): its body is "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account.", and the same sheet appears on every sign-out route: Settings, the permanent-suspension screen, the end of Delete account and confirm email.
 >
 > Web: an unavailable video and a prompt with no responses both route to the app; no web profiles.
 

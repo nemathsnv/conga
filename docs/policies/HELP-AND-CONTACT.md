@@ -1,4 +1,4 @@
-# Help and contact (DRAFT for the Shortcut closed beta)
+# Help and contact (DRAFT for the Conga closed beta)
 
 > **Status: working draft, not published.** Settings has a "Help and feedback" row that is drawn and inactive because
 > **no destination (address or form) has been decided** (`docs/BLOCKERS.md`, Gate 5 and pre-beta items; BETA-READINESS
@@ -6,7 +6,7 @@
 > it invents no support promise, response time or channel. Stores also need this page as the support URL and, on Apple,
 > as the published contact for user-generated content.
 
-**Product:** [PLACEHOLDER: final product name; "Shortcut" is the working name]
+**Product:** [PLACEHOLDER: final product name; "Conga" is the working name]
 **Support contact:** [PLACEHOLDER: support email address or form URL]
 **Privacy and data requests:** [PLACEHOLDER: privacy contact]
 **Safety and legal notices (including copyright):** [PLACEHOLDER: legal contact]
@@ -27,9 +27,9 @@
 | Use my invite, or get an invite | An invite link or code from a member. If you do not have one, join the waitlist; we email you when there is room. Invites are single-use and expire (7 days at the time of writing). |
 | I have an invite that does not work | Check it has not expired or been used. Then write to us with the code. |
 | Ask a privacy question, or see, correct or delete my data | [PLACEHOLDER: privacy contact] (`PRIVACY-POLICY.md`) |
-| Tell you about a copyright or other legal problem with something on Shortcut | [PLACEHOLDER: legal contact and process; the spec defines none. **[LEGAL REVIEW]**] |
+| Tell you about a copyright or other legal problem with something on Conga | [PLACEHOLDER: legal contact and process; the spec defines none. **[LEGAL REVIEW]**] |
 | Report a bug or send feedback | [PLACEHOLDER: support contact or form]. Include the app version, your phone model and iOS or Android version, and what you did. |
-| Tell you someone under 18 is using Shortcut | Report the account with the reason "May be under 18", or write to us. |
+| Tell you someone under 18 is using Conga | Report the account with the reason "May be under 18", or write to us. |
 | I am in danger, or someone else is | Contact your local emergency services. [PLACEHOLDER: local emergency and crisis numbers for Indonesia and a global fallback; decide before publishing.] |
 
 ## What to expect

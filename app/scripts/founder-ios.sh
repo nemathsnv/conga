@@ -39,10 +39,10 @@ case "${1:-}" in
 esac
 
 npx expo prebuild --platform ios --clean
-xcodebuild -workspace ios/Shortcut.xcworkspace -scheme Shortcut -configuration "$CONFIGURATION" \
+xcodebuild -workspace ios/Conga.xcworkspace -scheme Conga -configuration "$CONFIGURATION" \
   -destination "id=$DEVICE" -derivedDataPath ios/build \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
-xcrun devicectl device install app --device "$DEVICE" "ios/build/Build/Products/$CONFIGURATION-iphoneos/Shortcut.app"
+xcrun devicectl device install app --device "$DEVICE" "ios/build/Build/Products/$CONFIGURATION-iphoneos/Conga.app"
 xcrun devicectl device process launch --device "$DEVICE" app.shortcut.founder
 
 # The Debug build loads its JS from Metro on this Mac (same Wi-Fi as the iPhone).

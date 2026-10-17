@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Signs T1 in with the six-digit code from its inbox, privately: the code is read without echo and
 # never printed; the token goes to PT_TOKEN_FILE (mode 600). docs/release/PROVIDER-TESTS.md section 2.
-#   scripts/provider-t1-verify.sh        (T1's address is read from ~/.shortcut-provider/t1.email)
+#   scripts/provider-t1-verify.sh        (T1's address is read from ~/.conga-provider/t1.email)
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 # shellcheck disable=SC1091
 source scripts/provider-env.sh >/dev/null || exit 1
-ADDR_FILE="$HOME/.shortcut-provider/t1.email"
+ADDR_FILE="$HOME/.conga-provider/t1.email"
 [ -s "$ADDR_FILE" ] || { echo "no address file at $ADDR_FILE" >&2; exit 1; }
 printf 'Six-digit sign-in code for T1 (not shown as you type): '
 read -r -s CODE

@@ -2,7 +2,7 @@
 // LV-Suspended, and the end of Delete account (the Apple and Google path, and confirm email).
 // `confirm()` resolves true when there is nothing waiting or the person taps "Sign out anyway", and
 // false on Cancel. Then the caller runs `signOut()` from this hook: it first discards the waiting
-// recording the way Discard does (stops the upload; one Shortcut cannot confirm yet stays private on
+// recording the way Discard does (stops the upload; one Conga cannot confirm yet stays private on
 // this phone under this account) and never blocks the sign-out.
 //
 // NOT APPROVED YET: P9 is a proposal board. Lives on hold/failed-post-ui.

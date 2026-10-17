@@ -4,13 +4,13 @@ The online doc is the master. If it changes, re-export this file. Diagrams were 
 Local revision, 14 Oct 2026 (approved by Nemat): section 19, failed posts, Discard and sign-out.
 Not yet in the online master: update the master before the next re-export, or this revision is lost. -->
 
-# Shortcut v1 — Product and Build Specification
+# Conga v1 — Product and Build Specification
 
 Oct 5, 2026 · @Nemat
 
 ## Status and how to use this spec
 
-**Locked — approved for implementation (5 Oct 2026).** This is the single build source of truth for Shortcut v1, together with the final A1 Native canvas (version 26, approved 5 Oct 2026). Every v1 screen and state is drawn and approved.
+**Locked — approved for implementation (5 Oct 2026).** This is the single build source of truth for Conga v1, together with the final A1 Native canvas (version 26, approved 5 Oct 2026). Every v1 screen and state is drawn and approved.
 
 - **Designs:** the [A1 Native canvas](https://claude.ai/artifact/AUxUiU1muSm6Z61SP2wCUP), 86 boards in 12 rows. Screen IDs below (e.g. `R-Player-2`) are its board names.
 - **Precedence:** where this spec and a canvas note disagree, this spec wins. Where a screen shows different behaviour, the screen gets fixed.
@@ -21,7 +21,7 @@ Oct 5, 2026 · @Nemat
 
 ## 1. Product definition
 
-Shortcut is a social video app where people respond to prompts with short videos and talk back with video replies. It is a global product; the closed beta is seeded in Canggu, Bali.
+Conga is a social video app where people respond to prompts with short videos and talk back with video replies. It is a global product; the closed beta is seeded in Canggu, Bali.
 
 - **Core loop:** a prompt → people record video responses (up to 30 seconds) → others watch, reply on video, comment and follow → the next prompt.
 - **A prompt** is any sentence that invites a response: a question, a statement, an instruction or a challenge. Main example: "Be honest about the place you live."
@@ -199,9 +199,9 @@ Five tabs, with + in the centre. The player, recording, comments, reply rooms an
 
 | Link | Installed app | No app |
 | --- | --- | --- |
-| shortcut.app/r/{id} | Opens the response or video reply in the player | Web player |
-| shortcut.app/p/{id} | Opens the prompt's first response | Web player |
-| shortcut.app/i/{code} | Invite welcome (`W-Link`) | Store page, then the invite on first open |
+| conga.churntech.com/r/{id} | Opens the response or video reply in the player | Web player |
+| conga.churntech.com/p/{id} | Opens the prompt's first response | Web player |
+| conga.churntech.com/i/{code} | Invite welcome (`W-Link`) | Store page, then the invite on first open |
 
 There are no web profile pages in v1. Share profile creates an app link: it opens the profile in the app, or the store page if the app isn't installed.
 
@@ -426,7 +426,7 @@ Onboarding runs in this order: sign in (Welcome, plus the email-code screen for 
 
 During the beta, creating a profile needs either a valid invite or admission from the waitlist. One server switch (`invite_required`) turns the whole step off at public launch without changing any other screen.
 
-- **Invite step** (`O-Invite`): "Closed beta" label, "Shortcut is in closed beta." / "Access is limited while we're testing. Use an invite if you have one, or join the waitlist." (same wording on the invalid-invite state, W-Invalid), a code field showing "Invited by Putu Ayu" once the code is valid, and "Opened an invite link? You're already in."
+- **Invite step** (`O-Invite`): "Closed beta" label, "Conga is in closed beta." / "Access is limited while we're testing. Use an invite if you have one, or join the waitlist." (same wording on the invalid-invite state, W-Invalid), a code field showing "Invited by Putu Ayu" once the code is valid, and "Opened an invite link? You're already in."
 - **Invite links** (`W-Link`): open the welcome screen with the inviter's card and the cohort line, then skip the code step.
 - **Codes:** single use, readable (e.g. PUTU-7K2). The team can create codes at any time.
 - **Code errors** (`W-Invalid`): not found, expired or already used. Inline red message plus Join waitlist; Continue stays disabled.
@@ -471,7 +471,7 @@ Every response and video reply is public: anyone with a link can watch it in a b
 
 **Web player** (`SF-Web`)
 
-- A slim top bar with Shortcut and "Open in app". The video is full height, with the prompt label, name, caption and rail counts.
+- A slim top bar with Conga and "Open in app". The video is full height, with the prompt label, name, caption and rail counts.
 - "N more responses" lets a visitor watch the prompt's other responses.
 - A footer: "Watch freely. Sign in to respond, reply, like or follow."
 - Respond, Reply, Like, Follow, Comment and Open in app all open `SF-Web-Signin`: "Join the conversation · Anyone can watch…", Open in the app, Get the app, and during the beta "No invite yet? Join the waitlist".
@@ -482,7 +482,7 @@ Every response and video reply is public: anyone with a link can watch it in a b
 **One-time disclosure** (`A-Disclosure`)
 
 - Shown once, before the person's first public video of any kind: a response, a video reply, or a published draft.
-- Titled "Your videos are public". It says: anyone on Shortcut can watch; people can reply on video and share, and responses can also get comments; shared links work on the web without an account; you can delete any of your videos at any time.
+- Titled "Your videos are public". It says: anyone on Conga can watch; people can reply on video and share, and responses can also get comments; shared links work on the web without an account; you can delete any of your videos at any time.
 - Buttons: Post, Go back. It is not tucked away in the Terms.
 - Enforced on the server: a video can't be published until the account has acknowledged the disclosure (`public_disclosure_ack_at`).
 
@@ -557,10 +557,10 @@ A recording is never lost because of a bad connection. It stays saved on the pho
 
 - **Upload:** starts when Post is tapped and runs while the app is open.
 - **Upload fails** (`X-Upload-Failed`): "Your response didn't post. It's saved on this phone. Check your connection." with Discard and Retry side by side. For a video reply: "Your video reply didn't post." A recording that can never post ("This recording can't be posted.") or is no longer on the phone ("This recording is no longer on this phone.") offers Discard only.
-- **Discard:** a confirmation comes first: "Discard this recording?" / "Shortcut will try to stop it from posting. If it has already uploaded, it may still appear." Discard, or Cancel. The recording is deleted from the phone once Shortcut confirms none of it will be processed.
-  - **Not confirmed yet** (offline, or Shortcut cannot verify): the recording stays on the phone, shown as "Discarding your response" / "It stays on this phone until Shortcut confirms." Shortcut asks again by itself: when the app opens or comes back, when the connection returns, and on a short, limited schedule.
-  - **Already reached Shortcut:** "This recording already reached Shortcut" / "It may finish processing. If it appears on your profile, you can delete it there." A video that reached Shortcut is never deleted automatically.
-- **One waiting recording at a time:** a recording that is posting, waiting offline or failed is never replaced. While one waits, Respond, Reply and Record do not open the camera: "Your last recording hasn't posted yet" / "Retry or discard it first."; while it posts: "Your last recording is still posting" / "Keep Shortcut open until it's done."
+- **Discard:** a confirmation comes first: "Discard this recording?" / "Conga will try to stop it from posting. If it has already uploaded, it may still appear." Discard, or Cancel. The recording is deleted from the phone once Conga confirms none of it will be processed.
+  - **Not confirmed yet** (offline, or Conga cannot verify): the recording stays on the phone, shown as "Discarding your response" / "It stays on this phone until Conga confirms." Conga asks again by itself: when the app opens or comes back, when the connection returns, and on a short, limited schedule.
+  - **Already reached Conga:** "This recording already reached Conga" / "It may finish processing. If it appears on your profile, you can delete it there." A video that reached Conga is never deleted automatically.
+- **One waiting recording at a time:** a recording that is posting, waiting offline or failed is never replaced. While one waits, Respond, Reply and Record do not open the camera: "Your last recording hasn't posted yet" / "Retry or discard it first."; while it posts: "Your last recording is still posting" / "Keep Conga open until it's done."
 - **Posting** (`PR-Posting`): for a video reply, "Posting your video reply".
 - **App closed mid-upload:** the recording stays saved. Next time the app opens, the same banner offers Retry.
 - **Offline** (`A-Offline`): "You're offline. Your response stays saved on this phone. Post when you're back online." For a video reply, "Your video reply stays saved on this phone." Already loaded videos keep playing. No offline downloads.
@@ -568,9 +568,9 @@ A recording is never lost because of a bad connection. It stays saved on the pho
 - **Two kinds of draft:**
   - An **unposted recording** lives only on the phone.
   - A **first-response draft** for a suggested prompt is uploaded privately to the server, so it survives reinstalls (section 12).
-- Unposted recordings are discarded on sign-out by any route, after a warning (below), on the same terms as Discard. One Shortcut cannot confirm yet stays on the phone, out of reach of any other account, and is discarded the next time that person signs in on this phone. They show up only through the Upload failed banner (`X-Upload-Failed`); there is no separate list.
+- Unposted recordings are discarded on sign-out by any route, after a warning (below), on the same terms as Discard. One Conga cannot confirm yet stays on the phone, out of reach of any other account, and is discarded the next time that person signs in on this phone. They show up only through the Upload failed banner (`X-Upload-Failed`); there is no separate list.
 
-**Signing out with unposted recordings:** a warning comes first, on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email): "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3); its revised text and the other routes are proposal board P9.
+**Signing out with unposted recordings:** a warning comes first, on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email): "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3); its revised text and the other routes are proposal board P9.
 
 ## 20. Empty, error and loading states
 

@@ -1,4 +1,4 @@
-# Shortcut app
+# Conga app
 
 Expo SDK 57 / React Native / TypeScript / Expo Router, for iOS and Android from one codebase.
 Product behaviour comes from `../SPEC.md`; every screen is built from its board in `../design/`.

@@ -98,7 +98,7 @@ Deno.test("the sign-in page is public, holds no data, and is locked down", async
   const res = await call("GET", "");
   assertEquals(res.status, 200, "status");
   const body = await res.text();
-  assert(body.includes("Shortcut moderation"), "it is the admin page");
+  assert(body.includes("Conga moderation"), "it is the admin page");
   assert(body.includes("anon-public-key"), "the public anon key is on the page, by design");
   assertEquals(calls.length, 0, "no database call for the sign-in page");
   const csp = res.headers.get("Content-Security-Policy") ?? "";

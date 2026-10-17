@@ -1,4 +1,4 @@
-# Account deletion (DRAFT for the Shortcut closed beta)
+# Account deletion (DRAFT for the Conga closed beta)
 
 > **Updated 16 Oct 2026 (integration branch `90eced7`)** for the account-lifecycle fixes in `docs/release/SECURITY.md`
 > (sessions, profile photos, sign-out on the phone). Those fixes are built and tested on a local stack and are **not
@@ -98,7 +98,7 @@ case closes at that moment, and the video file is deleted 30 days after that. (`
 Deleting the account on the server does not by itself empty everything on the phone. From the code:
 
 - **An unposted recording** stays on the phone until it posts or you discard it (`SPEC.md` section 19). One that
-  Shortcut could not yet confirm as discarded stays private on the phone, out of reach of any other account, and is
+  Conga could not yet confirm as discarded stays private on the phone, out of reach of any other account, and is
   discarded the next time that account signs in on that phone. For a take with camera flips, the segment files are kept
   in the app's storage until the stitched clip is kept, and then deleted; leftovers from an interrupted take are swept
   when the next take starts (`docs/release/CAMERA-FLIP.md`).

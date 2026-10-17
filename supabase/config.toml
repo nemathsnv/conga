@@ -254,17 +254,17 @@ otp_expiry = 3600
 # the magic link email; both carry the same 6-digit code and no link. Copy approved by Nemat
 # on 9 Oct (docs/BETA-READINESS.md section 10).
 [auth.email.template.confirmation]
-subject = "Your Shortcut sign-in code"
+subject = "Your Conga sign-in code"
 content_path = "./supabase/templates/sign_in_code.html"
 
 [auth.email.template.magic_link]
-subject = "Your Shortcut sign-in code"
+subject = "Your Conga sign-in code"
 content_path = "./supabase/templates/sign_in_code.html"
 
 # Anyone can ask Auth's public API for a "recovery" email. The app has no passwords, so it gets the
 # same code email instead of the default "Reset your password" link.
 [auth.email.template.recovery]
-subject = "Your Shortcut sign-in code"
+subject = "Your Conga sign-in code"
 content_path = "./supabase/templates/sign_in_code.html"
 
 # Uncomment to customize email template
@@ -305,7 +305,7 @@ max_frequency = "5s"
 # uri = "pg-functions://postgres/auth/before-user-created-hook"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
-# Shortcut: refuses tokens for sessions that used a password, and email codes on Apple or Google
+# Conga: refuses tokens for sessions that used a password, and email codes on Apple or Google
 # accounts (migration 20261010000300_auth_hardening.sql). The function must exist before this is on.
 [auth.hook.custom_access_token]
 enabled = true

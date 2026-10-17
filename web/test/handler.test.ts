@@ -48,7 +48,7 @@ describe("shared-link pages", () => {
     expect(res.headers.get("cache-control")).toBe("public, max-age=60");
     const body = await res.text();
     expect(body).toContain('<meta name="robots" content="noindex, nofollow">');
-    expect(body).toContain('<meta property="og:title" content="Putu on Shortcut">');
+    expect(body).toContain('<meta property="og:title" content="Putu on Conga">');
     expect(body).toContain(`href="shortcut://r/${ID}"`);
     expect(body).toContain("Watch freely. Sign in to respond, reply, like or follow.");
     expect(body).toContain('href="/r/m1"');
@@ -105,7 +105,7 @@ describe("shared-link pages", () => {
     const inv = await get("/i/PUTU-7K2", f);
     expect(inv.status).toBe(200);
     const body = await inv.text();
-    expect(body).toContain("You're invited to Shortcut");
+    expect(body).toContain("You're invited to Conga");
     expect(body).toContain('href="shortcut://i/PUTU-7K2"');
     const prof = await get("/u/lena.hart", f);
     expect(prof.status).toBe(200);
@@ -183,7 +183,7 @@ describe("moderation admin", () => {
     expect(policy).toContain(`script-src 'nonce-${nonce}'`);
     expect(policy).toContain(`connect-src 'self' ${SB}`);
     expect(policy).toContain("frame-ancestors 'none'");
-    expect(body).toContain("<title>Shortcut moderation</title>");
+    expect(body).toContain("<title>Conga moderation</title>");
     const cfg = JSON.parse(/<script type="application\/json" id="cfg">(.*?)<\/script>/.exec(body)![1]);
     expect(cfg).toEqual({ anonKey: "sb_publishable_test", authBase: SB, webBase: "https://links.example.com" });
     expect(calls).toHaveLength(0);

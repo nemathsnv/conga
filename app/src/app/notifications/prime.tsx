@@ -59,7 +59,7 @@ export default function NotificationPrimeScreen() {
             <Text style={s.appIconText}>S</Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.exampleApp}>Shortcut</Text>
+            <Text style={s.exampleApp}>Conga</Text>
             <Text style={s.exampleText}>Sofia Marín replied to your response with a video</Text>
           </View>
           <Avatar uri={null} size={38} radius={8} />

@@ -112,14 +112,14 @@ event (reply, comment, follow, like, prompt, moderation, suggestion)
    then, treat a manual device check as the only proof of delivery. Also from `SECURITY.md` section 3: `send-push`
    compares its key with `!==`, not in constant time (low).
 4. **Android channel: created; icon and colour still missing.** `ensureNotificationChannel()` creates the default
-   channel (id `default`, name "Shortcut") before the permission ask and the token request, which addresses the
+   channel (id `default`, name "Conga") before the permission ask and the token request, which addresses the
    Android 13 prompt concern (`pushRoutes.test.ts` checks the channel id; the prompt itself is unverified on a
    phone). The `expo-notifications` config plugin still has no `icon` or `color`, so the small icon will be the
    launcher glyph, which Android renders as a white square. It needs the brand icon (DECISIONS 9 Oct) and a
    monochrome asset.
 5. **`aps-environment` is `development`** in a local prebuild (verified 16 Oct). EAS store and TestFlight
    builds are signed with a distribution profile whose APNs environment is production; confirm in the first
-   TestFlight build with `codesign -d --entitlements :- Shortcut.app`. If it is not `production`, set
+   TestFlight build with `codesign -d --entitlements :- Conga.app`. If it is not `production`, set
    `['expo-notifications', { mode: 'production' }]` for the production profile. Unchanged.
 
 What still blocks delivery is unchanged: no EAS project id, no APNs key, no FCM credentials, `send-push` and its

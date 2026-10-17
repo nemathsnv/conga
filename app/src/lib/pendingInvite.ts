@@ -1,4 +1,4 @@
-// An invite link (shortcut://i/<code>, later shortcut.app/i/<code>) opened before sign-in.
+// An invite link (shortcut://i/<code>, later conga.churntech.com/i/<code>) opened before sign-in.
 // Kept on the phone until the code is redeemed, so the person skips the code step (W-Link).
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

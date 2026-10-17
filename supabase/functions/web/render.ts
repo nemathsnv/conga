@@ -18,10 +18,10 @@ export type RenderConfig = {
   waitlistUrl: string;
 };
 
-/** The defaults the function has always used: STORE_URL falls back to https://shortcut.app, and
+/** The defaults the function has always used: STORE_URL falls back to https://conga.churntech.com, and
  *  WAITLIST_URL to the store URL. */
 export function renderConfig(base: string, env: { SUPABASE_URL?: string; STORE_URL?: string; WAITLIST_URL?: string }): RenderConfig {
-  const storeUrl = env.STORE_URL ?? "https://shortcut.app";
+  const storeUrl = env.STORE_URL ?? "https://conga.churntech.com";
   return { base, supabaseUrl: env.SUPABASE_URL, storeUrl, waitlistUrl: env.WAITLIST_URL ?? storeUrl };
 }
 
@@ -76,7 +76,7 @@ function sheet(cfg: RenderConfig, appUrl: string): string {
 <div style="margin-top:18px;text-align:center"><h2 style="margin:0;font:700 22px -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.4px">Join the conversation</h2><p style="margin:8px 0 0;font-size:15px;line-height:1.42;color:#6E6E73">Anyone can watch. Responding, replying, liking and following need an account in the app.</p></div>
 <a id="open-app" href="${esc(appUrl)}" style="margin-top:22px;height:52px;border-radius:26px;background:#1C1C1E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;text-decoration:none">Open in the app</a>
 <a href="${cfg.storeUrl}" style="margin-top:10px;height:52px;border-radius:26px;background:#F2F2F7;color:#1C1C1E;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;text-decoration:none">Get the app</a>
-<div style="margin-top:14px;text-align:center;font-size:13px;line-height:1.4;color:#8A8A8E">Shortcut is in closed beta. No invite yet? <a href="${cfg.waitlistUrl}" style="color:#1C1C1E;font-weight:600;text-decoration:none">Join the waitlist</a></div>
+<div style="margin-top:14px;text-align:center;font-size:13px;line-height:1.4;color:#8A8A8E">Conga is in closed beta. No invite yet? <a href="${cfg.waitlistUrl}" style="color:#1C1C1E;font-weight:600;text-decoration:none">Join the waitlist</a></div>
 </section>
 <script>
 function showSheet(){document.getElementById('dim').style.display='block';document.getElementById('sheet').style.display='block';try{navigator.sendBeacon('${cfg.base}/e/signin')}catch(e){}}
@@ -114,7 +114,7 @@ video{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;bac
 </html>`;
 }
 
-const BAR = `<div class="bar"><span style="font:700 17px -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.3px">Shortcut</span><button class="pillw" style="height:32px;padding:0 14px" onclick="showSheet()">Open in app</button></div>`;
+const BAR = `<div class="bar"><span style="font:700 17px -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.3px">Conga</span><button class="pillw" style="height:32px;padding:0 14px" onclick="showSheet()">Open in app</button></div>`;
 const FOOT = `<div class="foot"><span style="flex-grow:1;min-width:0;font-size:13px;line-height:1.35;color:rgba(255,255,255,0.8)">Watch freely. Sign in to respond, reply, like or follow.</span><button class="pillw" onclick="showSheet()">Sign in</button></div>`;
 
 export function videoPage(cfg: RenderConfig, data: Extract<WebVideo, { status: "live" }>, url: string, appUrl: string): string {
@@ -157,7 +157,7 @@ v.addEventListener('timeupdate',function(){if(v.duration)document.getElementById
 v.addEventListener('click',function(){v.muted=false;v.play();});})();
 </script>`;
   return page(cfg, `${v.author.name} · ${data.prompt.text}`, body, {
-    title: `${v.author.name} on Shortcut`,
+    title: `${v.author.name} on Conga`,
     description: v.caption ? `${data.prompt.text} — "${v.caption}"` : data.prompt.text,
     image: thumb(pb, 720, 1280),
     url,
@@ -173,10 +173,10 @@ ${BAR}
 <span class="glass" style="width:56px;height:56px;border-radius:28px;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="3"/><path d="m16 10 5-2.5v9L16 14z"/></svg></span>
 <h1 style="margin:18px 0 0;font:600 22px -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.4px">This video isn't available</h1>
 <p style="margin:8px 0 0;font-size:15px;line-height:1.42;color:rgba(255,255,255,0.75)">It was deleted or removed.</p>
-<button class="pillw" style="margin-top:24px;height:44px;padding:0 20px;border-radius:22px;font-size:15px" onclick="showSheet()">See more on Shortcut</button>
+<button class="pillw" style="margin-top:24px;height:44px;padding:0 20px;border-radius:22px;font-size:15px" onclick="showSheet()">See more on Conga</button>
 </div></div>
 ${FOOT}`;
-  return page(cfg, "Shortcut", body, { title: "Shortcut", description: "This video isn't available.", url }, appUrl);
+  return page(cfg, "Conga", body, { title: "Conga", description: "This video isn't available.", url }, appUrl);
 }
 
 export function emptyPage(cfg: RenderConfig, prompt: Prompt, url: string, appUrl: string): string {
@@ -201,12 +201,12 @@ export function invitePage(cfg: RenderConfig, code: string, url: string): string
 ${BAR}
 <div style="position:relative;height:100vh;min-height:640px;background:#0E0E10">
 <div style="position:absolute;left:28px;right:28px;top:190px;display:flex;flex-direction:column;align-items:center;text-align:center">
-<h1 style="margin:12px 0 0;font:700 28px/1.12 -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.6px">You're invited to Shortcut</h1>
+<h1 style="margin:12px 0 0;font:700 28px/1.12 -apple-system,'SF Pro Display','Helvetica Neue',sans-serif;letter-spacing:-0.6px">You're invited to Conga</h1>
 <a href="${esc(appUrl)}" class="pillw" style="margin-top:24px;height:50px;padding:0 26px;border-radius:25px;font-size:16px">Open in the app</a>
 <a href="${cfg.storeUrl}" style="margin-top:12px;font-size:15px;color:rgba(255,255,255,0.86)">Get the app</a>
 </div></div>
 <script>setTimeout(function(){location.href=${scriptString(appUrl)};},300);</script>`;
-  return page(cfg, "Shortcut invite", body, { title: "You're invited to Shortcut", description: "Open the invite in the app.", url }, appUrl);
+  return page(cfg, "Conga invite", body, { title: "You're invited to Conga", description: "Open the invite in the app.", url }, appUrl);
 }
 
 export function html(body: string, status = 200): Response {

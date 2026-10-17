@@ -24,7 +24,7 @@ set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ID="${1:-int}"
 BASE="${2:-555}"
-SCRATCH="${SCRATCH:-${TMPDIR:-/tmp}/shortcut-verification}"
+SCRATCH="${SCRATCH:-${TMPDIR:-/tmp}/conga-verification}"
 STACK="$SCRATCH/stack-$ID"
 PROJECT="shortcut-$ID"
 DB="supabase_db_$PROJECT"

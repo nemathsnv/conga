@@ -68,7 +68,7 @@ describe('claimPush', () => {
 describe('Android channel', () => {
   it('uses the default channel id pushes arrive on, named for the app', () => {
     expect(ANDROID_CHANNEL_ID).toBe('default');
-    expect(ANDROID_CHANNEL_NAME).toBe('Shortcut');
+    expect(ANDROID_CHANNEL_NAME).toBe('Conga');
   });
 });
 

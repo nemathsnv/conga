@@ -82,8 +82,8 @@ check(otp.status === 200, 'code requested', authError(otp));
 if (otp.status !== 200) process.exit(1);
 
 // 2. Delivery, checked by eye.
-console.log('\nCheck the email now. Expected: from no-reply@auth.churntech.com (Shortcut), subject');
-console.log('"Your Shortcut sign-in code", heading, a 6-digit code, "The code expires in one hour.",');
+console.log('\nCheck the email now. Expected: from no-reply@auth.churntech.com (Conga), subject');
+console.log('"Your Conga sign-in code", heading, a 6-digit code, "The code expires in one hour.",');
 console.log('"If you didn\'t ask for this code, you can ignore this email.", and no link.');
 const looks = (await ask('Does the email match exactly? (y/n): ')).trim().toLowerCase();
 check(looks === 'y', 'email delivered with the approved content (checked by Nemat)');

@@ -1,6 +1,6 @@
 # Android readiness
 
-What it takes to get Shortcut onto a real Android phone and then to Google Play testing. Prepared, not done:
+What it takes to get Conga onto a real Android phone and then to Google Play testing. Prepared, not done:
 **Android has never been built or run for this app or for the spike** (BETA-READINESS section 3), no Play or
 Google Cloud setup exists, and nothing here was purchased or registered. Written 16 Oct 2026. Facts about the app
 come from `app/app.config.ts` and a throwaway `expo prebuild --platform android --no-install` (no Gradle run).

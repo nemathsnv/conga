@@ -1,5 +1,5 @@
 // Camera entry (P7 and P8): Respond, Reply and Record do not open the camera while the member's last
-// recording is waiting (failed, offline, or a discard Shortcut has not confirmed) or still posting.
+// recording is waiting (failed, offline, or a discard Conga has not confirmed) or still posting.
 // The sheet says why; no second take exists to replace the first. Every place that opens the camera
 // goes through useOpenRecord. Reads the posting state (app/src/video), never changes it.
 //

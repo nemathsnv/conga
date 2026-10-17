@@ -21,7 +21,7 @@ and the admin. Supabase stays the backend API. B is prepared and tested locally 
   intended to enable hosting of frontend applications through Edge Functions." It supports
   subdomains only ("only subdomains are supported"), and it documents only the Auth, Functions
   (`/functions/v1/`), Storage and REST paths.
-- **A link domain needs more than HTML.** SPEC.md Section 4 proposes `shortcut.app/r/{id}`,
+- **A link domain needs more than HTML.** SPEC.md Section 4 proposes `conga.churntech.com/r/{id}`,
   `/p/{id}` and `/i/{code}`. B-3 also needs `apple-app-site-association` and `assetlinks.json` at
   `https://<link host>/.well-known/`.
   - Universal links and Android app links are bound to the host that serves those files.
@@ -53,7 +53,7 @@ unset, the function's answers are identical.
 | File | Change | Size |
 |---|---|---|
 | `supabase/functions/web/render.ts` (new) | The page functions moved out of `index.ts` unchanged, with only the path prefix and the three URLs taken from a `RenderConfig`. Output for the function's config is byte-identical to before: checked against the pre-move code for 7 page variants and the response headers, with and without `STORE_URL`/`WAITLIST_URL`. | 214 lines (moved) |
-| `supabase/functions/web/index.ts` | Uses `render.ts`. With a matching `WEB_PROXY_KEY` it takes the visitor address from `x-shortcut-client-ip` and logs `web_link_opened` posted to `/e/link-<target>`. Without the key, both headers and that path are ignored (204, nothing logged). | 240 to 64 lines |
+| `supabase/functions/web/index.ts` | Uses `render.ts`. With a matching `WEB_PROXY_KEY` it takes the visitor address from `x-conga-client-ip` and logs `web_link_opened` posted to `/e/link-<target>`. Without the key, both headers and that path are ignored (204, nothing logged). | 240 to 64 lines |
 | `supabase/functions/web/links.ts` | `LINK_TARGETS`, `linkEventTarget()` | +12 |
 | `supabase/functions/_shared/client.ts` | `proxyKeyMatches()` (constant time; refuses keys under 32 characters) and `proxiedClientIp()`, which falls back to `clientIp()` | +25 |
 | `supabase/functions/admin/handler.ts` | `export` on `SECURITY_HEADERS`, `nonce`, `csp`. No behaviour change. | 3 words, 2 comment lines |
@@ -137,7 +137,7 @@ esbuild bundles them (50 KB). There is no copy and no build step that touches `a
   - `clientIp()` in `_shared/client.ts` and `request_client_ip()` (migration `20261016000204`)
     read `cf-connecting-ip` first. So, behind any Cloudflare proxy, every visitor would land in
     one `web_event` bucket: 60 events an hour for everyone, then silence.
-  - B passes the visitor's `CF-Connecting-IP` in `x-shortcut-client-ip` with `x-shortcut-proxy-key`.
+  - B passes the visitor's `CF-Connecting-IP` in `x-conga-client-ip` with `x-conga-proxy-key`.
     The function trusts it only when the key matches.
   - Checked locally: 65 beacons from one address recorded 60, and a second address still
     recorded 1.

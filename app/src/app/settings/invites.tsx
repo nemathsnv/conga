@@ -107,7 +107,7 @@ export default function InvitesScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingTop: insets.top + 54, paddingBottom: 40 }}>
-          <Text style={s.lead}>Shortcut is in closed beta. Each invite lets one person skip the waitlist.</Text>
+          <Text style={s.lead}>Conga is in closed beta. Each invite lets one person skip the waitlist.</Text>
           <View style={s.card}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <Text style={s.cardTitle}>Your invite link</Text>

@@ -260,7 +260,7 @@ export default function ReviewScreen() {
             </View>
             <Text style={s.sheetTitle}>Your videos are public</Text>
             <View style={s.points}>
-              <Point icon={<PersonIcon size={16} />} title="Anyone on Shortcut can watch them" text="People can reply on video and share them. Responses can also get comments." />
+              <Point icon={<PersonIcon size={16} />} title="Anyone on Conga can watch them" text="People can reply on video and share them. Responses can also get comments." />
               <Point icon={<ShareIcon size={16} color={colors.text} />} title="Shared links work on the web" text="Anyone with a link can watch, even without an account." />
               <Point icon={<CommentIcon size={16} color={colors.text} />} title="You stay in control" text="Delete any of your videos at any time." />
             </View>

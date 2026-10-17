@@ -29,13 +29,13 @@ Copy marks below:
 | P1-R | The same, video reply | "Your **video reply** didn't post" / as P1 | **Discard** · Retry |
 | P2 | Can never post: already responded, prompt or video gone, removed, closed submission, conflicting request | "Your response didn't post" / **"This recording can't be posted."** | **Discard** |
 | P3 | The file is gone | "Your response didn't post" / **"This recording is no longer on this phone."** | **Discard** |
-| P4 | Discard tapped | "Discard this recording?" / **"Shortcut will try to stop it from posting. If it has already uploaded, it may still appear."** | Discard (destructive) / Cancel |
-| P5 | Discard not confirmed yet (offline, not verifiable) | **"Discarding your response"** / **"It stays on this phone until Shortcut confirms."** | none |
-| P6 | Discard found it already at Shortcut | **"This recording already reached Shortcut"** / **"It may finish processing. If it appears on your profile, you can delete it there."** | OK |
+| P4 | Discard tapped | "Discard this recording?" / **"Conga will try to stop it from posting. If it has already uploaded, it may still appear."** | Discard (destructive) / Cancel |
+| P5 | Discard not confirmed yet (offline, not verifiable) | **"Discarding your response"** / **"It stays on this phone until Conga confirms."** | none |
+| P6 | Discard found it already at Conga | **"This recording already reached Conga"** / **"It may finish processing. If it appears on your profile, you can delete it there."** | OK |
 | P7 | Respond, Reply or Record while one waits (failed or offline) | **"Your last recording hasn't posted yet"** / **"Retry or discard it first."** | OK |
-| P8 | The same while it is posting | **"Your last recording is still posting"** / "Keep Shortcut open until it's done." | OK |
-| P8-R | PR-Posting, video reply | "Posting your **video reply**" / "Keep Shortcut open until it's done." | none |
-| P9 | Every sign-out with a recording waiting: Settings, LV-Suspended, the end of Delete account, confirm email | "Sign out?" / "You have 1 recording that hasn't posted. **Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account.**" | Sign out anyway / Cancel |
+| P8 | The same while it is posting | **"Your last recording is still posting"** / "Keep Conga open until it's done." | OK |
+| P8-R | PR-Posting, video reply | "Posting your **video reply**" / "Keep Conga open until it's done." | none |
+| P9 | Every sign-out with a recording waiting: Settings, LV-Suspended, the end of Delete account, confirm email | "Sign out?" / "You have 1 recording that hasn't posted. **Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account.**" | Sign out anyway / Cancel |
 
 Video reply versions of the other states (P2-R, P3-R and P5-R are drawn; P4, P6, P7 and P9 read the same for both; A-Offline is an existing board, not redrawn here):
 - P2-R, P3-R: same lines, title "Your video reply didn't post".

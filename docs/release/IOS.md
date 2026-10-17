@@ -1,6 +1,6 @@
 # iOS readiness
 
-Everything needed to take Shortcut from the founder's free-team iPhone build to TestFlight and the App Store,
+Everything needed to take Conga from the founder's free-team iPhone build to TestFlight and the App Store,
 prepared but not started. **Nothing here was purchased, enrolled, registered or run.** Written 16 Oct 2026;
 facts about the app come from `app/app.config.ts` and a throwaway `expo prebuild` on that date. Facts about
 Apple's programme, App Store Connect and EAS are from general knowledge of those services and must be checked
@@ -44,10 +44,10 @@ likely.
    Welcome hides the Apple button, `signInWithApple()` throws "not configured", no push token is registered.
    The founder build also refuses any Supabase URL that is not the hosted project. It must never go to anyone
    else, and it is not a path to TestFlight.
-4. **Name.** The App Store listing name must be unique on the store. "Shortcut" is the implementation name only;
+4. **Name.** The App Store listing name must be unique on the store. "Conga" is the implementation name only;
    the product name and brand are unapproved (CLAUDE.md, DECISIONS 9 Oct). The bundle id is permanent once an
    app is created in App Store Connect, so approve the name and bundle id **before** creating the app record.
-   `app.shortcut` also implies the unbought domain `shortcut.app`; it does not need to be owned to register
+   `app.shortcut` also implies the unbought domain `conga.churntech.com`; it does not need to be owned to register
    the identifier, but a mismatch with the final brand would be costly later.
 
 ## 3. Identifier, capabilities and entitlements

@@ -55,4 +55,4 @@ export function claimPush(id: string | null | undefined, handled: Set<string>): 
  *  channel exists, so it is created before the ask (the ask itself, N-Prime, is unchanged). The name
  *  is what the phone's settings list: the app's name. */
 export const ANDROID_CHANNEL_ID = 'default';
-export const ANDROID_CHANNEL_NAME = 'Shortcut';
+export const ANDROID_CHANNEL_NAME = 'Conga';

@@ -1,4 +1,4 @@
-# Retention and recovery (DRAFT for the Shortcut closed beta)
+# Retention and recovery (DRAFT for the Conga closed beta)
 
 > **Status: working draft, not legal advice, not published.** One table of how long each kind of data is kept and
 > whether it can be brought back, taken from `SPEC.md` section 18, `docs/DECISIONS.md` (12 Oct 2026 retention rows),
@@ -42,7 +42,7 @@
 | **Sign-in emails (provider logs)** | [PLACEHOLDER: Resend's retention of message logs] | Supplier | **[LEGAL REVIEW]** |
 | **Streaming and file-hosting logs, function logs** | [PLACEHOLDER: Mux, Expo, Supabase, jsDelivr log retention] | Supplier | **[LEGAL REVIEW]** |
 | **Database backups** | [PLACEHOLDER] | The hosted project had no backups and no point-in-time recovery at the 9 Oct check (BETA-READINESS section 9) | State the real setting before telling anyone deleted data is gone. **[LEGAL REVIEW]** |
-| **Unposted recordings on your phone** | Until they post or you discard them | Rule exists | SPEC 19. A recording Shortcut cannot yet confirm as discarded stays private on the phone, out of reach of any other account. A recording whose upload Mux reports as `errored` (or an undocumented state) is kept unverified until 10 minutes after its upload URL's recorded expiry, about 70 minutes after the URL was minted, then retired if Mux still shows no asset (`VIDEO-RELIABILITY.md` section 2). |
+| **Unposted recordings on your phone** | Until they post or you discard them | Rule exists | SPEC 19. A recording Conga cannot yet confirm as discarded stays private on the phone, out of reach of any other account. A recording whose upload Mux reports as `errored` (or an undocumented state) is kept unverified until 10 minutes after its upload URL's recorded expiry, about 70 minutes after the URL was minted, then retired if Mux still shows no asset (`VIDEO-RELIABILITY.md` section 2). |
 | **Segment files of a take with camera flips** | In the app's storage (`Documents/recordings/take/`) until the stitched clip is kept; the stitched clip until the response is live or you discard it; leftovers of an interrupted take are swept when the next take starts | Rule exists in code, **not run on a phone** | `docs/release/CAMERA-FLIP.md`. A take without a flip is uploaded as recorded. |
 | **Queued analytics events and recent searches on the phone** | Until the account signs out of that phone | **[LOCAL ONLY]** Rule exists | `afterSignOut()` clears both when an account leaves the phone (`SECURITY.md` A2). Recent searches never leave the phone. |
 | **First-response draft on the server** | Until you publish, re-record or delete it; kept when its suggestion is declined or withdrawn; deleted with the account | Rule exists | SPEC 12. |
@@ -73,6 +73,6 @@ placeholders, moderation records anonymised. A database trigger (`accounts_befor
 Only these are fully supported by the running system without a caveat (the session and photo rules above are
 **[LOCAL ONLY]** until deployed, and are not in this list): the 30-day window and restore-by-sign-in; the
 hiding of everything at once; the 90-day anonymised moderation record; tombstones; "no undo" for your own deletions;
-that Shortcut is 18+ and invite-only. Everything about a video file being deleted at the video provider, about profile
+that Conga is 18+ and invite-only. Everything about a video file being deleted at the video provider, about profile
 photos, about how long product events, backups and logs are kept, and about who can read moderation records needs the
 checks in `PRIVACY-POLICY.md` and `ACCOUNT-DELETION.md` to be done first.

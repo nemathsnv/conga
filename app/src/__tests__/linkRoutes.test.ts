@@ -35,12 +35,12 @@ describe('promptLinkTarget (p/ opens the prompt first response)', () => {
 
 describe('systemPathRedirect (unknown links go Home)', () => {
   it('leaves links to the app screens alone', () => {
-    for (const path of ['shortcut://r/abc', 'shortcut://p/abc', 'shortcut://u/sofia', 'shortcut://i/TEST-OK1', '/player/abc?entry=1', 'shortcut://', '/', 'https://shortcut.app/r/abc', 'exp://192.168.1.4:8081/--/p/abc', 'shortcut://settings/places', '/(tabs)/activity', '/a/xyz']) {
+    for (const path of ['shortcut://r/abc', 'shortcut://p/abc', 'shortcut://u/sofia', 'shortcut://i/TEST-OK1', '/player/abc?entry=1', 'shortcut://', '/', 'https://conga.churntech.com/r/abc', 'exp://192.168.1.4:8081/--/p/abc', 'shortcut://settings/places', '/(tabs)/activity', '/a/xyz']) {
       expect(systemPathRedirect(path)).toBe(path);
     }
   });
   it('sends a link the app has no screen for to Home (the bug: a blank grey screen)', () => {
-    for (const path of ['shortcut://nothing-here', '/nothing-here', 'shortcut://nothing/here?x=1', 'https://shortcut.app/pricing', 'exp+shortcut://expo-development-client/?url=http%3A%2F%2F192.168.1.4%3A8081', 'shortcut://auth/callback#access_token=x']) {
+    for (const path of ['shortcut://nothing-here', '/nothing-here', 'shortcut://nothing/here?x=1', 'https://conga.churntech.com/pricing', 'exp+shortcut://expo-development-client/?url=http%3A%2F%2F192.168.1.4%3A8081', 'shortcut://auth/callback#access_token=x']) {
       expect(systemPathRedirect(path)).toBe('/');
     }
   });

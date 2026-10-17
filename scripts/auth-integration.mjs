@@ -110,7 +110,7 @@ async function requestCode(email) {
 function checkMail(label, mail) {
   check(`${label}: email arrives`, !!mail);
   if (!mail) return;
-  check(`${label}: subject is "Your Shortcut sign-in code"`, mail.subject === 'Your Shortcut sign-in code', mail.subject);
+  check(`${label}: subject is "Your Conga sign-in code"`, mail.subject === 'Your Conga sign-in code', mail.subject);
   check(`${label}: carries a 6-digit code`, !!codeFrom(mail));
   check(`${label}: carries no link`, !/href=|https?:\/\//i.test(mail.html), 'code only');
   check(`${label}: states the one-hour expiry`, /expires in one hour/i.test(mail.html));

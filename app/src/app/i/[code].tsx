@@ -1,4 +1,4 @@
-// Invite link: shortcut://i/<code> (and shortcut.app/i/<code> once the domain exists).
+// Invite link: shortcut://i/<code> (and conga.churntech.com/i/<code> once the domain exists).
 // Looks the code up, keeps it for the invite step, and opens Welcome with the inviter's
 // card (W-Link). SPEC.md Section 14: invite links skip the code step.
 import { Redirect, useLocalSearchParams } from 'expo-router';

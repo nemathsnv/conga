@@ -1,7 +1,7 @@
 import {
   CAMERA_BLOCK_SHEET,
   DISCARD_SHEET,
-  REACHED_SHORTCUT_SHEET,
+  REACHED_CONGA_SHEET,
   SIGN_OUT_SHEET,
   cameraBlock,
   discardOutcome,
@@ -64,7 +64,7 @@ describe('failedView (P1, P2, P3, P5)', () => {
   it('is Discard only when the file is gone (P3)', () => {
     expect(failedView(post({ failedReason: 'recording_missing' }))).toBe('file_gone');
   });
-  it('shows no buttons while a discard waits for Shortcut (P5), whatever failed before', () => {
+  it('shows no buttons while a discard waits for Conga (P5), whatever failed before', () => {
     expect(failedView(post({ failedReason: 'offline', discardRequested: true }))).toBe('discarding');
     expect(failedView(post({ failedReason: 'recording_missing', discardRequested: true }))).toBe('discarding');
   });
@@ -110,21 +110,21 @@ describe('banner words match the boards', () => {
 describe('sheets (P4, P6, P7, P8, P9) are the boards words', () => {
   it('P4', () => {
     expect(DISCARD_SHEET.title).toBe('Discard this recording?');
-    expect(DISCARD_SHEET.line).toBe('Shortcut will try to stop it from posting. If it has already uploaded, it may still appear.');
+    expect(DISCARD_SHEET.line).toBe('Conga will try to stop it from posting. If it has already uploaded, it may still appear.');
     inBoard(DISCARD_SHEET.title);
     inBoard(DISCARD_SHEET.line);
   });
   it('P6', () => {
-    expect(REACHED_SHORTCUT_SHEET.title).toBe('This recording already reached Shortcut');
-    expect(REACHED_SHORTCUT_SHEET.line).toBe('It may finish processing. If it appears on your profile, you can delete it there.');
-    inBoard(REACHED_SHORTCUT_SHEET.title);
-    inBoard(REACHED_SHORTCUT_SHEET.line);
+    expect(REACHED_CONGA_SHEET.title).toBe('This recording already reached Conga');
+    expect(REACHED_CONGA_SHEET.line).toBe('It may finish processing. If it appears on your profile, you can delete it there.');
+    inBoard(REACHED_CONGA_SHEET.title);
+    inBoard(REACHED_CONGA_SHEET.line);
   });
   it('P7 and P8', () => {
     expect(CAMERA_BLOCK_SHEET.waiting.title).toBe("Your last recording hasn't posted yet");
     expect(CAMERA_BLOCK_SHEET.waiting.line).toBe('Retry or discard it first.');
     expect(CAMERA_BLOCK_SHEET.posting.title).toBe('Your last recording is still posting');
-    expect(CAMERA_BLOCK_SHEET.posting.line).toBe("Keep Shortcut open until it's done.");
+    expect(CAMERA_BLOCK_SHEET.posting.line).toBe("Keep Conga open until it's done.");
     for (const k of ['waiting', 'posting'] as const) {
       inBoard(CAMERA_BLOCK_SHEET[k].title);
       inBoard(CAMERA_BLOCK_SHEET[k].line);
@@ -132,9 +132,9 @@ describe('sheets (P4, P6, P7, P8, P9) are the boards words', () => {
   });
   it('P9', () => {
     expect(SIGN_OUT_SHEET.title).toBe('Sign out?');
-    expect(SIGN_OUT_SHEET.line).toBe("You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account.");
+    expect(SIGN_OUT_SHEET.line).toBe("You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account.");
     inBoard("You have 1 recording that hasn't posted.");
-    inBoard("Signing out stops the upload on this phone, but it may still finish on Shortcut. An unresolved recording stays private on this device for your account.");
+    inBoard("Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account.");
     expect(SIGN_OUT_SHEET.signOut).toBe('Sign out anyway');
   });
 });
@@ -156,8 +156,8 @@ describe('cameraBlock (P7, P8)', () => {
 });
 
 describe('discardOutcome (P6)', () => {
-  it('says the recording reached Shortcut when it carries on processing', () => {
-    expect(discardOutcome({ kind: 'processing', post: post({ state: 'processing' }) })).toBe('reached_shortcut');
+  it('says the recording reached Conga when it carries on processing', () => {
+    expect(discardOutcome({ kind: 'processing', post: post({ state: 'processing' }) })).toBe('reached_conga');
   });
   it('has nothing more to say when it went, or when P5 draws itself', () => {
     expect(discardOutcome({ kind: 'idle' })).toBe('settled');

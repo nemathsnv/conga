@@ -38,7 +38,7 @@ export default function WaitlistScreen() {
             <Image key={i} source={src} style={[s.cardFace, i > 0 && { marginLeft: -10 }]} />
           ))}
         </View>
-        <Text style={s.cardText}>Know someone on Shortcut? An invite from them gets you in straight away.</Text>
+        <Text style={s.cardText}>Know someone on Conga? An invite from them gets you in straight away.</Text>
       </View>
 
       <Button title="I have an invite code" variant="text" onPress={() => router.replace('/(onboarding)/invite')} style={s.codeLink} textStyle={{ fontWeight: '600' }} />

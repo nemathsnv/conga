@@ -1,6 +1,6 @@
-# Shortcut: instructions for Claude Code
+# Conga: instructions for Claude Code
 
-Shortcut is a global social video app. People respond to prompts with short videos and talk back with video replies. The closed beta is seeded in Canggu, Bali. Nemat is the founder and product owner.
+Conga is a global social video app. People respond to prompts with short videos and talk back with video replies. The closed beta is seeded in Canggu, Bali. Nemat is the founder and product owner.
 
 ## Sources of truth, in order
 
@@ -52,7 +52,9 @@ Expo / React Native / TypeScript / Expo Router, and Supabase (Postgres, Auth, St
 - **Outstanding:** Android video validation (the spike checklist on a real mid-range Android over Bali mobile data), and B-1, camera flip during a take (segment stitching; `docs/BLOCKERS.md`).
 - **Gates 1, 2, 5 and 7 are open.** Only Nemat closes a gate, and it is recorded in `docs/DECISIONS.md`. Never mark a gate passed.
 - **What is still open:** `docs/BETA-READINESS.md` (consolidated) and `docs/BLOCKERS.md` (B-1 to B-4).
-- **Name:** "Shortcut" is the implementation name in code, copy and docs. "Conga" is a provisional working brand, not cleared or final. Don't rename the code, bundle id, Supabase project or user-facing copy; a rename is a spec-first change.
+- **Name:** "Conga" is the product name in code, copy and docs (Nemat, 17 Oct 2026; it replaces the earlier implementation name "Shortcut"). The public link domain is `conga.churntech.com`, the moderation admin `admin.conga.churntech.com`, the Cloudflare Pages project `conga-web`.
+  - Some stable identifiers still say `shortcut` on purpose: the iOS bundle id and Android package `app.shortcut`, the URL scheme `shortcut://`, the app's on-device storage keys `shortcut.*`, the local Supabase `project_id` and its containers, and names inside deployed migrations. Don't rename them without the migration plan in `docs/release/CONGA-RENAME.md`.
+  - Historical reports and results keep the name they were written with.
 
 ## Working style
 

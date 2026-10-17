@@ -1,4 +1,4 @@
-# Privacy Policy (DRAFT for the Shortcut closed beta)
+# Privacy Policy (DRAFT for the Conga closed beta)
 
 > **Status: working draft written from the product as specified and built on 16 Oct 2026. Not legal advice, not
 > reviewed by a lawyer, not published.** Nothing in square brackets is decided. Every sentence marked
@@ -18,16 +18,16 @@
 
 **Effective date:** [PLACEHOLDER: date]
 **Who we are:** [PLACEHOLDER: Company legal name], [PLACEHOLDER: registered address and country], the company that
-runs Shortcut ("we", "us"). [PLACEHOLDER: final product name; "Shortcut" is the working name.]
+runs Conga ("we", "us"). [PLACEHOLDER: final product name; "Conga" is the working name.]
 **Contact for privacy questions and requests:** [PLACEHOLDER: privacy contact email address]
 (see also `HELP-AND-CONTACT.md`). [PLACEHOLDER: data protection officer or representative, if one is required.
 **[LEGAL REVIEW]**]
 
 ## 1. What this policy covers
 
-This policy covers the Shortcut app on iOS and Android, the web pages that open when someone shares a link to a
-response, a video reply or a prompt, and the closed beta waitlist. Shortcut is in a **closed beta**: you need an
-invite from a member, or admission from the waitlist, to make a profile. Shortcut is for people who are **18 or
+This policy covers the Conga app on iOS and Android, the web pages that open when someone shares a link to a
+response, a video reply or a prompt, and the closed beta waitlist. Conga is in a **closed beta**: you need an
+invite from a member, or admission from the waitlist, to make a profile. Conga is for people who are **18 or
 older**.
 
 ## 2. What we collect, and why
@@ -37,10 +37,10 @@ older**.
 | What | When | Why | Who can see it |
 | --- | --- | --- | --- |
 | **Email address** | You sign in with an email code, or Apple or Google gives us your email when you use them. Apple's "Hide my email" relay addresses are treated like any other address. | To create and secure your account, send sign-in codes, and tell you when you are admitted from the waitlist. | Only us and the services that deliver the email (section 4). Never shown to other members. |
-| **Your answer to "Are you 18 or older?"** | Onboarding | To keep Shortcut to adults. We record the time you confirmed; we do not check ID. | Us. |
+| **Your answer to "Are you 18 or older?"** | Onboarding | To keep Conga to adults. We record the time you confirmed; we do not check ID. | Us. |
 | **Name, username and optional bio** | You choose them when you create your profile. | To show who made a response, video reply, comment or follow. | Every signed-in member. |
 | **Profile photo (optional)** | You take one or choose one from your photo library. Only the photo you select is read. | To show on your profile. | Every signed-in member, and anyone who has the photo's web address. |
-| **Videos: responses and video replies** | You record in the app and tap Post. Recording happens only inside Shortcut; you cannot upload from your camera roll. | To show them to others. **They are public** (section 3). | Anyone on Shortcut, and anyone with a link (section 3). |
+| **Videos: responses and video replies** | You record in the app and tap Post. Recording happens only inside Conga; you cannot upload from your camera roll. | To show them to others. **They are public** (section 3). | Anyone on Conga, and anyone with a link (section 3). |
 | **First-response drafts** | You record one for a prompt you suggested, while it is in review. | To keep it for you until you publish, re-record or delete it. | Only you, until you publish it. |
 | **Captions, comments, bio, prompt suggestions** | You write them. | To show on the product, and for review of suggestions. | Captions and comments: members who can see the video. Suggestions: us until reviewed; then public if approved, with your name unless you turn that off. |
 | **Likes, follows, followed places, blocks** | You tap them. | To run the feeds and the Activity list. Followed places are private. Blocks are silent. | You and us. Counts of likes and follows can be seen by others. |
@@ -60,7 +60,7 @@ older**.
 ### 2.3 What we do not collect
 
 No advertising identifiers, no advertising or tracking software, no GPS or precise location, no contacts, no
-camera-roll uploads, no phone number, no payment details (Shortcut has no purchases in the beta), no health or
+camera-roll uploads, no phone number, no payment details (Conga has no purchases in the beta), no health or
 financial data, and no information from other apps or websites.
 
 ### 2.4 On the web
@@ -76,7 +76,7 @@ during the beta.
 
 ## 3. What is public
 
-**Your videos are public.** Anyone on Shortcut can watch them, people can reply on video and share them, and
+**Your videos are public.** Anyone on Conga can watch them, people can reply on video and share them, and
 responses can get comments. A shared link works on the web **without an account**. You are shown this in the app
 before your first public video ("Your videos are public") and you must accept before anything is published. You can
 delete any of your videos at any time (section 7).
@@ -88,7 +88,7 @@ your private drafts are not shown to other members.
 
 ## 4. Who handles data for us
 
-We use these providers to run Shortcut. They process data on our behalf and under their own terms.
+We use these providers to run Conga. They process data on our behalf and under their own terms.
 **[LEGAL REVIEW: confirm each contract or terms, data processing terms, locations and sub-processors; this table
 states what the product does, not what the contracts say.]**
 
@@ -169,7 +169,7 @@ how that is logged. **[LEGAL REVIEW]**] No system is perfectly secure, and we ca
 
 ## 9. Children
 
-Shortcut is for people **18 or older**, by self-declaration; we do not check ID. "May be under 18" is a report
+Conga is for people **18 or older**, by self-declaration; we do not check ID. "May be under 18" is a report
 reason, and an account we confirm is under 18 is removed. If you believe a child has made an account, tell us
 (`HELP-AND-CONTACT.md`). **[LEGAL REVIEW: the age threshold and verification duties differ by country.]**
 

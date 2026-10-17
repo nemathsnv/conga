@@ -1,4 +1,4 @@
-# Moderation policy (DRAFT for the Shortcut closed beta)
+# Moderation policy (DRAFT for the Conga closed beta)
 
 > **Status: working draft, not legal advice, not published.** It states how moderation works as specified in
 > `SPEC.md` sections 12, 17 and 22 and recorded in `docs/DECISIONS.md` (8 and 12 Oct 2026), and as implemented in

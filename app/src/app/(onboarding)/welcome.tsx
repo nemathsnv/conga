@@ -81,7 +81,7 @@ export default function WelcomeScreen() {
           <View style={s.inviteRow}>
             <Avatar uri={avatarUrl(invite.inviter_photo_path)} size={46} borderWidth={1.5} borderColor="rgba(255,255,255,0.6)" />
             <View style={{ flexShrink: 1 }}>
-              <Text style={s.inviteTitle}>{invite.inviter_name ?? 'The Shortcut team'} invited you</Text>
+              <Text style={s.inviteTitle}>{invite.inviter_name ?? 'The Conga team'} invited you</Text>
               <Text style={s.inviteSub}>
                 You&apos;ll start with prompts from {invite.cohort_name ?? 'your place'} as well as global ones. Change it anytime.
               </Text>
@@ -104,7 +104,7 @@ export default function WelcomeScreen() {
 
       <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View style={s.textBlock}>
-          <Text style={s.brand}>Shortcut</Text>
+          <Text style={s.brand}>Conga</Text>
           <Text style={s.headline}>One prompt.{'\n'}Everyone&apos;s take,{'\n'}on video.</Text>
           <Text style={s.sub}>Watch people respond, then add yours.</Text>
         </View>

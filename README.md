@@ -1,4 +1,4 @@
-# Shortcut
+# Conga
 
 A social video app where people respond to prompts with short videos and talk back with video replies. The product is global; the closed beta is seeded in Canggu.
 

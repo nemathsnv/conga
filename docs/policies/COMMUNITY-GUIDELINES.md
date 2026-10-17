@@ -1,4 +1,4 @@
-# Community Guidelines (DRAFT for the Shortcut closed beta)
+# Community Guidelines (DRAFT for the Conga closed beta)
 
 > **Status: working draft, not reviewed, not published.** The product text that already exists in `SPEC.md`
 > sections 12, 16 and 17 and in the approved boards is quoted exactly. The one-sentence explanation after each
@@ -12,18 +12,18 @@
 
 **Effective date:** [PLACEHOLDER: date]
 
-## What Shortcut is for
+## What Conga is for
 
-Shortcut is where people respond to prompts with short videos (up to 30 seconds) and talk back with video replies.
+Conga is where people respond to prompts with short videos (up to 30 seconds) and talk back with video replies.
 It works when people feel safe being honest. These guidelines say what is not allowed, how you can report it, and
-what we do. They apply to everything you make or send on Shortcut: responses, video replies, captions, comments,
+what we do. They apply to everything you make or send on Conga: responses, video replies, captions, comments,
 your name, username, bio and photo, and the prompts you suggest.
 
-Shortcut is for people who are **18 or older**. It is in a **closed beta**, joined by invite or from the waitlist.
+Conga is for people who are **18 or older**. It is in a **closed beta**, joined by invite or from the waitlist.
 
 ## Your videos are public
 
-Every response and video reply is public. Anyone on Shortcut can watch it, people can reply on video and share it,
+Every response and video reply is public. Anyone on Conga can watch it, people can reply on video and share it,
 and anyone with a link can watch it in a browser without an account. Think about that before you record. You can
 delete any of your videos at any time.
 
@@ -47,7 +47,7 @@ These are the reasons you can pick when you report something. We use the same li
    "It shared someone else's private information, which breaks the Community Guidelines.")
 7. **Spam or scam.** Advertising, promotions, repeated unwanted content, scams, or trying to get money or details
    from people under false pretences.
-8. **Being under 18.** People under 18 may not use Shortcut. If we confirm an account belongs to someone under 18, we
+8. **Being under 18.** People under 18 may not use Conga. If we confirm an account belongs to someone under 18, we
    remove it.
 9. **Something else.** Anything else that puts people at risk or breaks the law. You can report it, and we decide
    case by case.
@@ -86,7 +86,7 @@ fast we will answer. [PLACEHOLDER: confirm that this is the public wording Nemat
   and: "Nobody can watch it any more. Please treat this as a warning."
 - **A repeated similar violation:** posting is paused until a date you are shown. You can still watch, but you cannot
   respond, reply, comment or suggest prompts until then.
-- **Further, repeated or severe abuse:** we suspend the account. You cannot use Shortcut with it; at sign-in you see why.
+- **Further, repeated or severe abuse:** we suspend the account. You cannot use Conga with it; at sign-in you see why.
 - **Severe cases can skip steps.**
 - **Nothing in a notice promises a next step.** A notice never says an automatic penalty will follow.
 
@@ -106,5 +106,5 @@ we take is logged with who, when and why. See `MODERATION-POLICY.md`.
 
 ## Changes and contact
 
-We may update these guidelines as Shortcut grows and will show the date. Questions, or to tell us something that is
+We may update these guidelines as Conga grows and will show the date. Questions, or to tell us something that is
 not covered by the report button: [PLACEHOLDER: support contact; see `HELP-AND-CONTACT.md`].

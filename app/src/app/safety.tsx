@@ -193,7 +193,7 @@ export default function SafetyScreen() {
               <Avatar uri={avatarUrl(author.photo_path)} size={36} />
               <View style={{ flex: 1 }}>
                 <Text style={s.blockTitle}>Block {author.name}</Text>
-                <Text style={s.blockSub}>You won&apos;t see each other on Shortcut</Text>
+                <Text style={s.blockSub}>You won&apos;t see each other on Conga</Text>
               </View>
               <Pressable accessibilityRole="button" onPress={() => setStage('block')} style={({ pressed }) => [s.blockPill, pressed && { opacity: 0.7 }]}>
                 <Text style={s.blockPillText}>Block</Text>

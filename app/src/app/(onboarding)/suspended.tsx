@@ -38,7 +38,7 @@ export default function SuspendedScreen() {
           <PersonIcon size={26} color={colors.text} />
         </View>
         <Text style={s.h1}>Your account is suspended</Text>
-        <Text style={s.lead}>This suspension is permanent. You can&apos;t watch, post or reply on Shortcut with this account.</Text>
+        <Text style={s.lead}>This suspension is permanent. You can&apos;t watch, post or reply on Conga with this account.</Text>
       </View>
       <View style={[s.group, { marginTop: 36 }]}>
         <View style={s.row}>
