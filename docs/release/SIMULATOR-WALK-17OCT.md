@@ -66,7 +66,7 @@ matters for row 3.
 Nothing crashed. The only red toasts were development LogBox entries: `expo-notifications` keychain
 access (no entitlement in this unsigned simulator build) and the recorder error in 9c.
 
-## Defects (none fixed here)
+## Defects (none fixed during the walk; D-A, D-B and D-D fixed and re-walked afterwards, see Re-walk)
 
 | | Severity | Step | Expected (board / SPEC) | Seen | Shot | Likely cause / suggestion |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -98,3 +98,20 @@ Still open from 16 Oct: **M2** ("1 responses" on profiles; needs singular copy).
 - **Audio.** Not observable here; row 4 relies on the player's position (method in the row).
 - **A Release-build cold start from a link.** Only the development build, which puts its launcher in front.
 - **Android, push, VoiceOver.**
+
+## Re-walk of D-A, D-B and D-D (17 Oct, after the fixes)
+
+Same simulator, Debug build and isolated stack setup as above (stack `shortcut-walk` restarted from the
+same scratch copy; a fresh account `walkerd@example.com` signed in by a Mailpit code; Metro on port 8090 from
+the integration worktree, with file watching on). Code: `c12724e` (D-A) plus the D-B and D-D commits that
+follow it. Nothing else was walked again.
+
+| Defect | Fix | Seen | Result | Shot |
+| --- | --- | --- | --- | --- |
+| D-D | Unknown links redirect to `/(tabs)` instead of `/` (`links.ts` `systemPathRedirect`, `+native-intent.tsx`) | Reproduced first with the old bundle: `app.shortcut://u/adamnovak`, then `app.shortcut://nothing-here`, the profile stays. With the fix the same two links pop the profile and land on Home (For you) | **fixed** | [53](screenshots/walk-17oct/53-dd-unknown-link-from-profile-home.jpg) |
+| D-A | The response loops while Comments is over it and does not advance (`endsToNext`, `VideoSurface` applies `loop` changes) | Adam's 4.4 s response opened with Comments (`player/<prompt>?entry=<id>&openComments=1`); eight screenshots over about 12 s: the sheet stays on Adam's 3 comments, and the video area differs in every frame (playing, not stopped at the end). Closing Comments shows the chrome on Adam, 1 of 4 | **fixed** | [54](screenshots/walk-17oct/54-da-comments-after-12s-still-adam.jpg), [57](screenshots/walk-17oct/57-comments-closed-chrome-back.jpg) |
+| D-B | The player draws no chrome under any sheet opened for the page (`pageShowsChrome`); the Comments line above its sheet shows only while Comments is the focused screen | Comments → "3 video replies": above the Replies sheet only the dimmed video, as on the Replies board. Closing Replies: the "Adam Novak · Be honest about the place you live." line is back above Comments | **fixed** | [55](screenshots/walk-17oct/55-db-replies-from-comments.jpg), [56](screenshots/walk-17oct/56-db-comments-after-replies-closed.jpg) |
+
+Still open: D-C (hidden responses counted) and M2. Taps sometimes land on the page shown a moment
+earlier when the seed's 3.6 to 5.5 s clips advance; an early tap here opened Comments for Sofia's response
+instead of Adam's (the app did what was tapped). Not a defect.
