@@ -553,7 +553,7 @@ People can delete anything they posted at any time, and deleting an account has 
 
 A recording is never lost because of a bad connection. It stays saved on the phone until it posts or the person discards it. There is no background upload that survives closing the app.
 
-*Revised 14 Oct 2026 (Nemat): Discard, one waiting recording at a time, and sign-out on every route. The new states are proposal boards P1 to P9 (`design/proposals/`), awaiting visual approval; nothing here is built until they are approved. Final copy for P4, P6 and P9 approved 14 Oct.*
+*Revised 14 Oct 2026 (Nemat): Discard, one waiting recording at a time, and sign-out on every route. The new states are approved boards P1 to P9 (`design/html/`, `design/BOARDS.md`), approved by Nemat and built on 16 Oct 2026. Final copy for P4, P6 and P9 approved 14 Oct.*
 
 - **Upload:** starts when Post is tapped and runs while the app is open.
 - **Upload fails** (`X-Upload-Failed`): "Your response didn't post. It's saved on this phone. Check your connection." with Discard and Retry side by side. For a video reply: "Your video reply didn't post." A recording that can never post ("This recording can't be posted.") or is no longer on the phone ("This recording is no longer on this phone.") offers Discard only.

@@ -5,7 +5,7 @@ Shortcut is a global social video app. People respond to prompts with short vide
 ## Sources of truth, in order
 
 1. **`SPEC.md`**: the locked v1 product and build spec (rev 110, locked 5 Oct 2026). It is the only source of product behaviour.
-2. **`design/`**: the 86 approved A1 Native boards (canvas version 26).
+2. **`design/`**: the 86 approved A1 Native boards (canvas version 26) and the 14 failed-post boards approved 16 Oct 2026 (100 in all).
    - `design/BOARDS.md` indexes them by row, with the canvas notes.
    - `design/boards/<ID>.jpg` are renders.
    - `design/html/<ID>.html` hold exact copy, colours and sizes.
