@@ -47,7 +47,9 @@ export type Deps = {
   log?: (entry: Record<string, unknown>) => void;
 };
 
-const SECURITY_HEADERS = {
+// Exported (with nonce and csp) for the Cloudflare Pages host in web/, which serves this sign-in
+// page itself and proxies every other route here (docs/release/WEB-HOSTING.md).
+export const SECURITY_HEADERS = {
   "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
   "Pragma": "no-cache",
   "Expires": "0",
@@ -80,13 +82,13 @@ const REFUSALS: Record<string, string> = {
   invalid_reason: "That reason is not on the fixed list.",
 };
 
-function nonce(): string {
+export function nonce(): string {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);
   return btoa(String.fromCharCode(...b)).replace(/[^A-Za-z0-9]/g, "");
 }
 
-function csp(n: string, cfg: Deps["config"]): string {
+export function csp(n: string, cfg: Deps["config"]): string {
   const connect = ["'self'"];
   if (cfg.authBase) connect.push(cfg.authBase);
   return [
