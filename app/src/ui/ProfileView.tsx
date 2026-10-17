@@ -11,6 +11,7 @@ import { followedByLabel, formatCount } from '@/lib/format';
 import { Avatar, Separator } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { PinIcon, PlusSlotIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
+import { shouldLoadReplies } from '@/ui/profileRules';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
 
@@ -42,11 +43,11 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
   const [following, setFollowing] = useState(profile.is_following);
   const [tab, setTab] = useState<'responses' | 'replies'>('responses');
   const [replies, setReplies] = useState<ProfileReply[] | null>(null);
-  // Replies load when the tab is first opened, and again whenever the profile is reloaded (Me
-  // reloads on every focus), so a video reply deleted from its player is gone when you come back.
+  // Replies load when the tab is first opened, and again whenever the profile is reloaded
+  // (shouldLoadReplies).
   const repliesLoaded = replies !== null;
   useEffect(() => {
-    if (tab !== 'replies' && !repliesLoaded) return;
+    if (!shouldLoadReplies(tab, repliesLoaded)) return;
     let cancelled = false;
     profileReplies(profile.id)
       .then((list) => {
