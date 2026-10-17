@@ -36,6 +36,16 @@ pgTAP 1662/1662; every Deno unit and integration suite; rollback check; schedule
 provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and lint clean; Jest
 322/322. Full table: docs/release/FINAL-REPORT.md section D.
 
+## Cycle 2 (16 to 17 Oct, Nemat's decisions 1 to 5)
+
+| Item | State |
+|---|---|
+| Failed-post UI P1 to P9 | approved by Nemat; merged from hold/failed-post-ui (3908825); typecheck, lint clean, Jest 347/347; simulator verification and screenshot review in progress (Agent B); board-set update in progress (Agent E) |
+| Domain architecture (Cloudflare Pages vs Supabase add-on) | in progress (Agent G): comparison and local preparation, no DNS or purchase |
+| Provider testing | deferred by Nemat; one coordinated session plan in progress (Agent A) |
+| Stage 4 credentials checklist, release-build prep | in progress (Agent F) |
+| Notion | connector not authorised in this session; this file is the record |
+
 ## Hosted sequence (each step on Nemat's approval)
 
 | Step | State |
