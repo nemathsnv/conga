@@ -32,6 +32,7 @@ import {
   type Take,
   type TakeOutcome,
 } from '@/video/recorder';
+import { permissionStep } from '@/video/permissions';
 import { getCurrentRecording, setCurrentRecording } from '@/video/recordingStore';
 import { MAX_DURATION_MS, RECORDING_SETTINGS, type CameraFacing } from '@/video/types';
 
@@ -44,8 +45,8 @@ export default function RecordScreen() {
   const { promptId, replyTo, draftFor } = useLocalSearchParams<{ promptId: string; replyTo?: string; draftFor?: string }>();
   const [prompt, setPrompt] = useState<PromptCard | null>(null);
   const [target, setTarget] = useState<Video | null>(null);
-  const [camera, requestCamera] = useCameraPermissions();
-  const [mic, requestMic] = useMicrophonePermissions();
+  const [camera, requestCamera, getCamera] = useCameraPermissions();
+  const [mic, requestMic, getMic] = useMicrophonePermissions();
   const [facing, setFacing] = useState<CameraFacing>('front');
   const [light, setLight] = useState(false);
   // Back-camera light is the torch; the front camera has none, so its light is a screen fill.
@@ -84,12 +85,24 @@ export default function RecordScreen() {
       .catch((e) => console.error('get_video failed', e));
   }, [replyTo, router]);
 
+  const cameraStep = permissionStep(camera);
+  const micStep = permissionStep(mic);
   useEffect(() => {
-    if (camera && !camera.granted && camera.canAskAgain) void requestCamera();
-  }, [camera, requestCamera]);
+    if (cameraStep === 'ask') void requestCamera();
+  }, [cameraStep, requestCamera]);
   useEffect(() => {
-    if (camera?.granted && mic && !mic.granted && mic.canAskAgain) void requestMic();
-  }, [camera?.granted, mic, requestMic]);
+    if (cameraStep === 'granted' && micStep === 'ask') void requestMic();
+  }, [cameraStep, micStep, requestMic]);
+  // Back from Settings (A-Camera, A-Mic): read both again. Android does not restart the app when
+  // access is turned on there, and the permission hooks only read on mount.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      void getCamera();
+      void getMic();
+    });
+    return () => sub.remove();
+  }, [getCamera, getMic]);
 
   const stopTimer = () => {
     if (timer.current) clearInterval(timer.current);
@@ -228,8 +241,8 @@ export default function RecordScreen() {
     };
   }, []);
 
-  const cameraOff = camera && !camera.granted && !camera.canAskAgain;
-  const micOff = !!camera?.granted && !!mic && !mic.granted && !mic.canAskAgain;
+  const cameraOff = cameraStep === 'off';
+  const micOff = cameraStep === 'granted' && micStep === 'off';
   useEffect(() => {
     if (cameraOff) track('permission_denied', { permission: 'camera' });
   }, [cameraOff]);
