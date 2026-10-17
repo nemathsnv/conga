@@ -4878,7 +4878,9 @@ Base `4b2fe3f`; 23 commits to `c12724e`. Nothing pushed, deployed, installed on 
   (the home-screen name is now Conga). The app's data container is intact (AsyncStorage files from 13 Oct,
   preferences from 10 Oct; `Documents/recordings` empty, so no waiting recording). The first launch was
   refused by iOS until the new development certificate is trusted on the phone (Settings > General > VPN &
-  Device Management); not yet opened on the device.
+  Device Management). 18 Oct: after Nemat trusted and verified the developer entry, `devicectl` launched
+  Conga; the process was still running about 40 s later with no crash log. What the screen shows (Home
+  signed in, or Welcome) was not seen from the Mac.
 - *Still open from this pass:* D-C (hidden responses still counted; server side, section 1), the end card's one-response copy (section 1); M2 fixed (`7c6276c`); failed
   recording start shows nothing (no board); "Send a new code" failures silent (no board); unreferenced
   files in `Documents/recordings/` never swept; sign-out scope global vs local (Nemat). Android still never
