@@ -7,7 +7,7 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackHandler, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -66,6 +66,16 @@ export default function ReviewScreen() {
   useEffect(() => {
     if (ownerId) uploadTickets.prefetch(ownerId);
   }, [ownerId]);
+
+  // Android's Back is the X: PR-Discard first, never a silent exit that leaves the recording's files.
+  // While Post runs it does nothing (the files belong to the post).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (reviewEditable({ busy, posting: gate.running() })) setDiscardAsk(true);
+      return true;
+    });
+    return () => sub.remove();
+  }, [busy, gate]);
 
   useEffect(() => {
     if (!current) router.replace('/(tabs)');
