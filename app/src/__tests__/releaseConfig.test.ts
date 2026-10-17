@@ -1,5 +1,6 @@
 // app.config.ts: the guards on builds and over-the-air updates that reach a phone, and the EAS Update
 // settings (docs/release/OTA-UPDATES.md).
+/* eslint-disable @typescript-eslint/no-require-imports */
 import type { ExpoConfig } from 'expo/config';
 
 const eas = require('../../eas.json');
