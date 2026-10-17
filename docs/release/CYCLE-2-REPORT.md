@@ -7,7 +7,7 @@ provider test ran.
 
 ## Integrated HEAD
 
-`claude/shortcut-multi-agent-execution-93fee4` at 226d095, clean tree. Since 7ca853d (the end of
+`claude/shortcut-multi-agent-execution-93fee4`, the commit after the one that adds this report (`git log --oneline -1` on the branch), clean tree. Since 7ca853d (the end of
 the hosted day): the failed-post UI merged from `hold/failed-post-ui`, the 14 boards added to the
 approved set, the Cloudflare Pages project in `web/`, the web function's rendering shared from
 `render.ts`, the provider-session plan, the Stage 4 setup checklist, and the records.
@@ -35,7 +35,7 @@ approved set, the Cloudflare Pages project in `web/`, the web function's renderi
   view; it now shows the recording's first frame through a paused video view) and the confirm-email
   footer sat under the number pad (it now stays above the keyboard, like the sign-in code screen).
   A third finding (a recording whose file is gone showed P1 until Retry) is fixed in
-  `memberPosting.ts`: the restored post shows P3 at once (Jest 349/349, not re-walked on the
+  `memberPosting.ts`: the restored post shows P3 at once (Jest 350/350, not re-walked on the
   simulator). One design question remains for Nemat (N3: P7's "Retry or discard it first." shows while a discard
   is still unconfirmed and neither button is on screen, a consequence of build decision 2).
 
@@ -127,7 +127,7 @@ to 11:29 local, functions and migrations as at 4966c61, app as at the end of the
 | `scripts/provider-rehearsal.sh` | 8/8 |
 | `scripts/auth-integration.mjs` | 52/52 |
 | App: `tsc --noEmit`, `expo lint` | clean |
-| App: Jest, 25 suites | 348/348 in run 4; 349/349 after the last fix (P3 at launch for a missing file) |
+| App: Jest, 25 suites | 348/348 in run 4; 350/350 after the last fix (P3 at launch for a missing file) |
 | `web/`: vitest | 21/21; Pages bundle compiles |
 | iOS simulator (Agent B): P1 to P9 | every reachable state matches the approved copy word for word (15 screenshots, `FAILED-POST-REVIEW-SIMULATOR.md`); re-check of the two fixes: both work (the banner shows the recording's first frame; Delete account sits above the number pad and submits by touch), three screenshots |
 
