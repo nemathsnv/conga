@@ -16,13 +16,13 @@ run on a device), **partly verified** (some of the check has run on a device; th
 
 | Item | Status | What is left | Check that closes it |
 | --- | --- | --- | --- |
-| B-1 Camera flip during a take (SPEC.md Section 6; Nemat, 6 Oct) | open | The recorder records one segment per camera and a local module stitches them (iOS `AVMutableComposition`, Android Media3 `Transformer`); upload stitches before sending; review plays the stitched file. The flip control is disabled while recording today and nothing pretends otherwise. | Real iPhone and Android: record, flip twice mid-take, stop; review and the live response play one continuous clip with sound across the joins. |
+| B-1 Camera flip during a take (SPEC.md Section 6; Nemat, 6 Oct) | built, unverified (16 Oct; hardened 17 Oct, section 30) | The recorder records one segment per camera and a local module stitches them (iOS `AVMutableComposition`, Android Media3 `Transformer`); upload stitches before sending; review plays the stitched file. The flip control is disabled while recording today and nothing pretends otherwise. | Real iPhone and Android: record, flip twice mid-take, stop; review and the live response play one continuous clip with sound across the joins. |
 | B-3 app-link wiring in the app | needs input, then code | `associatedDomains` and `intentFilters` in `app.config.ts`, `EXPO_PUBLIC_WEB_BASE_URL` set to the domain, the two association files served (see section 6). | Part of the B-3 check in section 6. |
 | Settings rows with no destination | needs input, then code | Community guidelines, Privacy policy, Terms, Help and feedback rows and the `A-Removed` guideline link are drawn and inactive; they are wired once the URLs or address exist (section 4). | Each row opens its document; `A-Removed` opens the guidelines. |
 | Moderation web admin | open | A small internal web admin over the `mod_*` functions (queues, actions, the log, suggestion review). The CLI `scripts/moderate.sh` is development-only. See section 7. | A moderator handles a report, a review request and a suggestion from the admin without the CLI. |
-| Post refused while creating the row (security stage 2 follow-up) | open | When the server refuses the post itself for a reason other than a restriction or a stale upload URL (for example `already_responded`, `prompt_not_found`, `video_not_found`), or the connection drops at that step, Post Review still only logs it: Post does nothing visible. Pre-existing; left out of stage 2 by decision (Nemat, 12 Oct). Needs a decided state or copy. | Each refusal shows something on Post Review or Home; nothing is silent. |
+| Post refused while creating the row (security stage 2 follow-up) | partly open (17 Oct: a dropped connection now shows Upload failed; refusals and a failed stitch are still silent and need a board) | When the server refuses the post itself for a reason other than a restriction or a stale upload URL (for example `already_responded`, `prompt_not_found`, `video_not_found`), or the connection drops at that step, Post Review still only logs it: Post does nothing visible. Pre-existing; left out of stage 2 by decision (Nemat, 12 Oct). Needs a decided state or copy. | Each refusal shows something on Post Review or Home; nothing is silent. |
 | Restricted on Retry (security stage 2 follow-up) | open | A post that never got a row (an upload limit at Post) and is retried after the member has been restricted or suspended shows the Upload failed banner's generic line, not A-Restricted or LV-Suspended. Rare; left out of stage 2 by decision (Nemat, 12 Oct). | Retry by a restricted member opens A-Restricted; by a suspended one, LV-Suspended. |
-| Deleted reply stays in Me → Replies (seen 12 Oct, stage 3 step 4A) | open | After Nemat deleted a test video reply on the iPhone (founder build `ede68ed`), its card stayed in Me → Replies; opening it showed "This video is not available."; it was gone only after the app restarted. The server is right (`profile_replies` no longer returns it, `get_video` answers `unavailable`); the app does not refresh the profile's lists after `delete_video` (only Home is marked dirty). Not fixed during the security verification (Nemat, 12 Oct). | Delete your own reply (and response): it leaves Me → Replies (and Responses) at once, without a restart. |
+| Deleted reply stays in Me → Replies (seen 12 Oct, stage 3 step 4A) | fixed (eee10a7, 16 Oct; regression test bdfb749, 17 Oct), not re-checked on a device | After Nemat deleted a test video reply on the iPhone (founder build `ede68ed`), its card stayed in Me → Replies; opening it showed "This video is not available."; it was gone only after the app restarted. The server is right (`profile_replies` no longer returns it, `get_video` answers `unavailable`); the app does not refresh the profile's lists after `delete_video` (only Home is marked dirty). Not fixed during the security verification (Nemat, 12 Oct). | Delete your own reply (and response): it leaves Me → Replies (and Responses) at once, without a restart. |
 | Duplicate upload URLs (seen 12 Oct step 4A and 13 Oct CP0) | fixed locally 13 Oct, not built | Post Review's URL request raced Post's; double taps and the disclosure sheet's Post could submit twice; Retry minted on each attempt. App-only fix in section 16 (one URL per member at a time, single-flight Post, once per recording). Needs review, a founder build and the device checks in section 16. | On the iPhone: Post at once, double-tap, the disclosure Post and two re-records each leave exactly one `video_uploads` row per post. |
 | iOS uploads run in a background `URLSession` (SPEC.md Sections 2 and 19) | needs decision | `putRecording` uses expo-file-system's default `sessionType` (`background`), so an upload can continue after the app closes, against the spec's non-goal; Retry after reopening can PUT again or leave an orphan asset. Proposed: `sessionType: 'foreground'` (section 16). Not changed. | Decided by Nemat; if changed, a device test of going to the Home screen and force-quitting mid-upload shows Retry and one upload, no orphan. |
 | App icon | needs input (branding) | The Expo template icon is development-only and must not go to outside testers or the stores (Nemat, 9 Oct). Replaced once the name and brand are approved (section 5). | The icon in `app/assets` is the approved one before any outside build. |
@@ -4818,6 +4818,51 @@ object was touched.
 - *Next:* approval 5, the custom domains `conga.churntech.com` and `admin.conga.churntech.com`
   (`CLOUDFLARE-DASHBOARD.md` part 5); the hosted sign-in email still says Shortcut
   (`CONGA-RENAME.md` section 5).
+
+
+## 30. Mobile beta pass: fixes, founder Release build, EAS Update (17 Oct; local only, nothing installed or published)
+
+Base `4b2fe3f`; 23 commits to `c12724e`. Nothing pushed, deployed, installed on a phone or published.
+
+- *Audit.* Four read-only audits (camera and stitching, posting, playback and social, auth and branding)
+  of the integrated app; confirmed defects fixed with regression tests, speculative ones listed below.
+- *Fixed (with tests):* pending recordings found again after an app update moves the iOS container
+  (`06cf961`; matters for installing over the founder build); Re-record and Discard locked while Post runs
+  (`c114e65`); the first state load retried, so the app no longer hangs on the splash when it starts
+  offline or the first call fails; sign-out works offline with an expired token; a failed reload never
+  sends a signed-in person to Welcome (`8d6a3e3`); code fields accept a pasted "123 456" (`6a30b91`);
+  a take stopped under 2 s with no data is PR-Short, a second Stop re-sends it (`9c188bb`); camera and mic
+  asked once then A-Camera/A-Mic, re-read after Settings (`58d4477`); Android Back on Post Review asks
+  PR-Discard (`44be241`); players stop when another screen covers them, sheets kept as a stack
+  (`8ec3c51`, `5bff5e7`); closing SF-Reported any way leaves the reported item (`8c20a93`); Home tab
+  switches never drop a load (`d60eee1`); no auto-opened sheet over an unavailable entry (`591c02d`);
+  a restricted commenter sees the notice (`f8c4739`); the response loops under Comments (`c12724e`).
+  Stitcher hardening (`af36abe`): one failed copy ends all, so a failed writer cannot leave Post busy
+  (not reproduced on macOS; harness ALL PASS).
+- *EAS Update (`cc1cea1`; `OTA-UPDATES.md`):* `expo-updates` 57.0.26, runtime version policy
+  `fingerprint`, channels `founder`, `preview`, `production`; updates stay off until `EAS_PROJECT_ID`
+  exists; `scripts/publish-update.sh` with a publish guard in `app.config.ts`. `eas.json`: channels,
+  `EXPO_PUBLIC_WEB_BASE_URL=https://conga.churntech.com`, Android production app bundle (validated with
+  `@expo/eas-json`). Founder release builds: dev tools off and the links domain whatever `.env.founder`
+  says. Distribution map: `BETA-DISTRIBUTION.md`.
+- *Verified locally:* typecheck, lint, Jest 36 suites 444/444 (350 at the base); stitcher harness ALL PASS;
+  iOS **simulator Release** build of the founder config: BUILD SUCCEEDED, Welcome renders with Conga
+  branding and no dev controls, an unreachable update server neither blocks nor slows launch (A/B with
+  updates off, 4 to 5 s both ways), the embedded fingerprint equals the publish-time one; **device
+  Release** compile (arm64, unsigned): BUILD SUCCEEDED, bundle id `app.shortcut.founder`, display name
+  Conga, JavaScript embedded; founder update dry run: bundle holds the hosted URL, the links domain and the
+  publishable key, no local address, no function-URL links, no secret. Debug **simulator walk** against
+  an isolated stack (`SIMULATOR-WALK-17OCT.md`): every fix above that the simulator can show held, no
+  crash; found D-A (fixed in `c12724e`, not re-walked), D-B, D-C, D-D (open, below).
+- *Installed on the iPhone (read 17 Oct, read-only):* `app.shortcut.founder` 0.1.0 (1), named
+  "Shortcut" (built before the rename). The new build has the same bundle id and team, so installing it is
+  an upgrade: the app's data (sign-in, waiting recordings) is kept. The auth storage key is now pinned to
+  the supabase-js default, so the session survives.
+- *Still open from this pass:* D-B (Replies opened from Comments draws the header over the author line),
+  D-C (hidden responses still counted), D-D (an unknown link from a pushed screen stays put), M2; failed
+  recording start shows nothing (no board); "Send a new code" failures silent (no board); unreferenced
+  files in `Documents/recordings/` never swept; sign-out scope global vs local (Nemat). Android still never
+  run.
 
 ## Gates
 

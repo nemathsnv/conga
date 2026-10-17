@@ -90,3 +90,11 @@ three templates now send "Your Conga sign-in code"), app typecheck, lint, Jest 3
 archive in the local Pages runtime. `expo prebuild --no-install --platform ios`: `ios/Conga`, display name
 Conga, schemes `shortcut`, `app.shortcut`, `exp+conga` (generated folder removed). Not run: anything on
 Cloudflare, Supabase hosted, Mux, a phone, or Android.
+
+## 17 Oct 2026: mobile beta pass (branch `claude/conga-mobile-beta-055063`)
+
+| Item | Status |
+|---|---|
+| Audit and fixes of recording, posting, playback, auth (BETA-READINESS section 30) | implemented locally; Jest 444/444; simulator walk passed for the fixes it could show |
+| EAS Update and channels; guarded publish script; distribution map (`OTA-UPDATES.md`, `BETA-DISTRIBUTION.md`) | implemented locally; nothing published; waits for `eas init` (Nemat) |
+| Founder Release build | simulator Release and unsigned device Release built; install on the iPhone awaits Nemat |
