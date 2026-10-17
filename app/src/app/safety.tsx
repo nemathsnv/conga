@@ -7,13 +7,14 @@
 import * as Clipboard from 'expo-clipboard';
 import { track } from '@/lib/analytics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useState } from 'react';
+import { BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { avatarUrl } from '@/lib/api';
 import { blockUser, deleteVideo, reportItem, REPORT_REASONS, type ProfileCard, type ReportKind, type ReportReason } from '@/lib/content';
 import { profileLink, videoLink } from '@/lib/links';
 import { markFeedDirty } from '@/ui/feedStore';
+import { closeAction, type SafetyStage } from '@/ui/safetyClose';
 import { ActionSheet, WhiteSheet } from '@/ui/ActionSheet';
 import { Avatar, Button } from '@/ui/components';
 import { CheckIcon, ChevronLeft, LinkIcon, ShareIcon } from '@/ui/Icons';
@@ -31,20 +32,30 @@ type Params = {
   body?: string;
 };
 
-type Stage = 'menu' | 'report' | 'reported' | 'block' | 'delete' | 'comment';
-
 export default function SafetyScreen() {
   const router = useRouter();
   const { height } = useWindowDimensions();
   const p = useLocalSearchParams<Params>();
   const kind: ReportKind = p.kind ?? (p.flow === 'comment' ? 'comment' : 'video');
-  const [stage, setStage] = useState<Stage>(p.flow === 'delete' ? 'delete' : p.flow === 'comment' ? 'comment' : 'menu');
+  const [stage, setStage] = useState<SafetyStage>(p.flow === 'delete' ? 'delete' : p.flow === 'comment' ? 'comment' : 'menu');
   const [author, setAuthor] = useState<ProfileCard | null>(p.authorId ? { id: p.authorId, name: p.authorName ?? '', username: p.authorUsername ?? '', photo_path: p.authorPhoto ?? null } : null);
   const [busy, setBusy] = useState(false);
   const firstName = (author?.name ?? '').split(' ')[0];
   const noun = kind === 'profile' ? 'profile' : kind === 'comment' ? 'comment' : 'response';
 
-  const close = () => router.back();
+  // Set once a report went through: from then on, closing goes where Done goes (safetyClose.ts).
+  const [reported, setReported] = useState(false);
+  const leaveHome = closeAction(stage, reported) === 'home';
+  const close = () => (leaveHome ? router.dismissTo('/(tabs)') : router.back());
+  // Android Back would pop this sheet back to the reported item; do what Done does instead.
+  useEffect(() => {
+    if (!leaveHome) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      router.dismissTo('/(tabs)');
+      return true;
+    });
+    return () => sub.remove();
+  }, [leaveHome, router]);
 
   const link = kind === 'profile' ? profileLink(author?.username ?? '') : videoLink(p.id);
   const copyLink = async () => {
@@ -68,6 +79,7 @@ export default function SafetyScreen() {
       const who = await reportItem(kind, p.id, reason);
       markFeedDirty();
       setAuthor(who);
+      setReported(true);
       setStage('reported');
     } catch (e) {
       console.error('report failed', e);
