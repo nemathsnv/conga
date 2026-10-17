@@ -40,10 +40,10 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 
 | Item | State |
 |---|---|
-| Failed-post UI P1 to P9 | approved by Nemat; merged from hold/failed-post-ui (3908825); typecheck, lint clean, Jest 347/347; simulator verification and screenshot review in progress (Agent B); board-set update in progress (Agent E) |
+| Failed-post UI P1 to P9 | approved by Nemat; merged from hold/failed-post-ui (3908825); typecheck, lint clean, Jest 347/347; simulator verification and screenshot review in progress (Agent B); the 14 boards added to the approved set, four boards updated, decision recorded (ed854d7) |
 | Domain architecture (Cloudflare Pages vs Supabase add-on) | in progress (Agent G): comparison and local preparation, no DNS or purchase |
 | Provider testing | deferred by Nemat; one coordinated session plan in progress (Agent A) |
-| Stage 4 credentials checklist, release-build prep | in progress (Agent F) |
+| Stage 4 credentials checklist, release-build prep | done (452baf6): docs/release/STAGE-4-SETUP.md (63 items, required vs optional, iPhone-only path), BUILD.md section 7, RELEASE-CHECKLIST state after 16 Oct; the domain rows wait for the Cloudflare comparison |
 | Notion | connector not authorised in this session; this file is the record |
 
 ## Hosted sequence (each step on Nemat's approval)
