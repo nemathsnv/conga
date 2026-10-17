@@ -61,7 +61,9 @@ const KNOWN_LINK_ROOTS = new Set(['', 'a', 'comments', 'create', 'activity', 'di
 
 /**
  * A link that opens the app (shortcut://x, https://conga.churntech.com/x, an Expo development URL) goes to its
- * screen when the app has one, and Home otherwise: an unknown link must never leave a blank page.
+ * screen when the app has one, and Home otherwise: an unknown link must never leave a blank page. Home is
+ * '/(tabs)', not '/': on the simulator '/' left a profile opened by an earlier link on screen, '/(tabs)'
+ * went back to Home (17 Oct 2026, SIMULATOR-WALK-17OCT.md D-D; the same as useGoBack).
  * Used by `+native-intent.tsx`, before the router sees the URL.
  */
 export function systemPathRedirect(path: string): string {
@@ -73,7 +75,7 @@ export function systemPathRedirect(path: string): string {
   const root = rest.split(/[/?#]/)[0] ?? '';
   // Route groups such as (tabs) are the app's own paths, never a link's.
   if (KNOWN_LINK_ROOTS.has(root) || /^\(.*\)$/.test(root)) return path;
-  return '/';
+  return '/(tabs)';
 }
 
 /** The parts of a React Navigation state that decide Back (useRootNavigationState()). */

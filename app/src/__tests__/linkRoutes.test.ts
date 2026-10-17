@@ -41,7 +41,7 @@ describe('systemPathRedirect (unknown links go Home)', () => {
   });
   it('sends a link the app has no screen for to Home (the bug: a blank grey screen)', () => {
     for (const path of ['shortcut://nothing-here', '/nothing-here', 'shortcut://nothing/here?x=1', 'https://conga.churntech.com/pricing', 'exp+shortcut://expo-development-client/?url=http%3A%2F%2F192.168.1.4%3A8081', 'shortcut://auth/callback#access_token=x']) {
-      expect(systemPathRedirect(path)).toBe('/');
+      expect(systemPathRedirect(path)).toBe('/(tabs)');
     }
   });
 });

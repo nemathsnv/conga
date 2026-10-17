@@ -7,6 +7,6 @@ export function redirectSystemPath({ path }: { path: string; initial: boolean })
   try {
     return systemPathRedirect(path);
   } catch {
-    return '/';
+    return '/(tabs)';
   }
 }
