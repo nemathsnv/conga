@@ -1,4 +1,4 @@
-# Real-provider tests C1, C2, E1, E2 and E3 (prepared 16 Oct 2026; none run)
+# Real-provider tests C1, C2, E1, E2 and E3 (prepared 16 Oct 2026; C1 passed, C2w half done; run order in `PROVIDER-SESSION.md`)
 
 These are the remaining real-Mux tests of the accepted plan (`docs/BETA-READINESS.md` section 15,
 "Prioritised matrix"; `docs/DECISIONS.md` 13 Oct). Everything here is **prepared, not run**: no
@@ -8,6 +8,15 @@ a live step (section 15, "Approval checkpoints").
 
 What was run is the local rehearsal of every script below against a fake Mux (section 8). It shows
 the scripts and the code agree; it says nothing about what real Mux does.
+
+**Hosted state since 16 Oct** (`docs/BETA-READINESS.md` sections 21 to 28): batch A
+(`20261013000200`, `20261013000300`) and `abandon-submission` are deployed (H2, H3); batch B
+(`20261016000200` to `204`, including `20261016000202_session_lifecycle`) is deployed (H4); C1
+passed (section 27); C2w-a and C2w-b passed but U5 timed out before C2w-c, leaving job
+`e48cdb45…` pending (section 28). The remaining tests run as **one coordinated session**:
+`docs/release/PROVIDER-SESSION.md` (order, timeline, who types what, switch windows, stop rules).
+The function secret `MUX_CLEANUP_MODE` is set and unset by Nemat only; T1's codes are entered by
+Nemat with `scripts/provider-t1-verify.sh`.
 
 ## 1. Fixed facts and rules
 
@@ -21,9 +30,13 @@ the scripts and the code agree; it says nothing about what real Mux does.
   Every postflight shows it unchanged.
 - **Mux budget:** Shortcut Beta 2 assets, spike 7: 9 of the free plan's 10 if the cap is
   account-wide. No step here should create an asset, except possibly the optional C2e.
-- **Switches:** database `off`, `MUX_CLEANUP_MODE` unset at the start and end of every step. The
-  only way any step changes Mux through the worker is one controlled drain
-  (`scripts/provider-drain.sh`), with the database switch up for seconds.
+- **Switches:** database `off` at the start and end of every step; `MUX_CLEANUP_MODE` unset at
+  the start and end of every session. Within the session plan (`PROVIDER-SESSION.md` section 3)
+  Nemat holds the function secret live for one window (W1) spanning the session's live drains,
+  instead of setting and unsetting it around each. The database switch stays `off` throughout,
+  except inside a drain, so the scheduled worker does nothing during W1. The only way any step
+  changes Mux through the worker is one controlled drain (`scripts/provider-drain.sh`), with the
+  database switch up for seconds.
 - **Stop at once** (switch `off`, variable unset, nothing more until Nemat decides) on anything in
   section 15's stop list, and on: a script exiting non-zero; a job not in the step's expected list;
   any change at Mux to an object other than the step's own; a third Shortcut Beta asset (except
@@ -64,7 +77,7 @@ node scripts/provider-member.mjs verify <T1 email> <6-digit code>   # token save
 ```
 
 A saved token lasts one session. Get a new one (a new code) before each test day, before E1's
-deletion (it needs a sign-in from the last 10 minutes), and after E1 (with `20261016000202`, the
+deletion (it needs a sign-in from the last 10 minutes), and after E1 (`20261016000202` is applied, so the
 deletion ends every session; an old token is refused with `session_revoked`). C1 and C2 do not
 delete anything account-wide and keep working on one session, but they must run before E3 (after
 the purge T1 is gone).
@@ -93,11 +106,12 @@ select jsonb_build_object(
 ) as state
 ```
 
-After `20261013000200` is deployed, add T1's submissions:
+Since H2 (`20261013000200` deployed), add T1's submissions as `'t1_submissions'`:
 `(select coalesce(jsonb_agg(to_jsonb(s) - 'caption' order by created_at), '[]') from public.post_submissions s where account_id = 'b0c14e38-4e89-4dbd-a9a3-8a8c01872a78')`.
 
 **S2, schema:** `scripts/schema-fingerprint.sql` (as in R0), compared line for line with a local stack
-built from the same migrations. At the end of B2: 759 objects (`10acc19f…`), 17 migrations.
+built from the same migrations. At the end of B2: 759 objects (`10acc19f…`), 17 migrations; since
+H4: 847 objects, listing md5 `8bddf2614e7c2d55acfcd10d951dddc5`, 24 migrations.
 
 **S3, Mux:** `muxread assets` (count and `inventory_md5`; Shortcut Beta must be 2 assets: a and the
 founder's), `muxread asset <a>`, `muxread playback <P2>`, and for each upload a step names,
@@ -137,7 +151,12 @@ Discard button is not built yet (P1 to P4 await approval). So C2 is split, and b
 driven by `scripts/provider-member.mjs`, which does exactly what the app does (mint, claim the row
 before any byte, start the transfer, cut it, discard) without depending on the UI.
 
-### C2w: the worker cancels it (no deployment needed)
+### C2w: the worker cancels it
+
+**16 Oct:** C2w-a and C2w-b passed with U5; U5 timed out at Mux before C2w-c, and its job
+`e48cdb45…` is still pending (BETA-READINESS section 28). The fresh run (C2w-a′, C2w-b′, C2w-c with
+both jobs listed) is in `PROVIDER-SESSION.md`; per Nemat's decision 3, U5 is not recreated and only
+one fresh attempt is made, inside that session.
 
 What it proves: a `cancel_upload` job, made by `abandon_response` (the discard of every installed
 build before the new one), cancels a real waiting upload that received part of a file, and nothing
@@ -150,8 +169,10 @@ else.
    node scripts/provider-member.mjs c2 --reply-to 52bbaabb-6faa-4bd2-94f9-015e43be791d \
      --submission no --bytes partial --discard abandon-response
    ```
-   (`--submission no`: the hosted database has no `p_submission` until `20261013000200`.) The reply is
-   to T1's own V, so the founder gets no activity. Expected: `ok: true`; `put` `cut: true`;
+   (`--submission no` exercises the legacy discard path that installed builds before `b7a02ad` use,
+   `abandon_response` and then a worker `cancel_upload`. It is not a database limitation: since H2
+   the database also accepts `p_submission`.) The reply is to T1's own V, so the founder gets no
+   activity. Expected: `ok: true`; `put` `cut: true`;
    `abandon_response` `204`. Then S1: the new row (U5) `deleted`; ledger U5 `claimed`; exactly one new
    job, `cancel_upload`, `abandoned`, upload U5, owner T1, no asset, due now. `muxread upload U5`:
    `waiting`, passthrough T1, no `asset_id`. **If Mux already shows `asset_created`, stop**: the worker
@@ -173,13 +194,14 @@ else.
    the job is `running` with an expired lease; one more controlled drain under its own approval
    finishes it (section 15, "A step that stops halfway").
 
-### C2a: abandon-submission cancels it (needs the deployment in `VIDEO-RELIABILITY.md` section 5)
+### C2a: abandon-submission cancels it (its deployment is done: H2, H3 on 16 Oct)
 
 What it proves, against real Mux: the new discard path cancels a waiting upload with partial bytes
 first, retires the row only after Mux confirms, and queues no worker job.
 
-1. **Preconditions:** `20261013000200` and `20261013000300` applied and `abandon-submission`
-   deployed (`VIDEO-RELIABILITY.md`, steps 1 to 5); S1 as for C2w.
+1. **Preconditions:** met since 16 Oct (`20261013000200`, `20261013000300` applied at H2;
+   `abandon-submission` deployed at H3; the version has moved with secret changes, same bundle);
+   S1 as for C2w.
 2. **Run (approval: one upload create, a cut transfer, one cancel by `abandon-submission`; 0 assets):**
    ```bash
    node scripts/provider-member.mjs c2 --reply-to 52bbaabb-6faa-4bd2-94f9-015e43be791d \
@@ -217,14 +239,14 @@ node scripts/provider-member.mjs c2 --reply-to 52bbaabb-6faa-4bd2-94f9-015e43be7
 
 ## 6. Tests E1, E2, E3: account deletion, recovery and the purge (T1, reusing V)
 
-These need none of the unreleased video migrations (E1 to E3 use `delete_account`, the launch call
-`get_onboarding_state`, `purge_deleted_accounts` and the worker, all deployed 12 and 13 Oct).
-**Sessions:** with Agent C's `20261016000202_session_lifecycle` deployed, `delete_account` needs a
-sign-in (not a token refresh) from the last 10 minutes, ends **every** session of the account at
-once, and only a session that **began after the deletion** restores it; a token of an ended session
-is refused everywhere with `session_revoked`. Before that migration, any existing session's launch
-call restored the account. The steps below are written to work either way: every sign-in is a new
-email code, never a reused session. Record in the results which behaviour the hosted project showed.
+E1 to E3 use `delete_account`, the launch call `get_onboarding_state`, `purge_deleted_accounts` and
+the worker. **They run with `20261016000202_session_lifecycle` applied (H4, 16 Oct 12:07 UTC):**
+`delete_account` needs a sign-in (not a token refresh) from the last 10 minutes, ends **every**
+session of the account at once, and only a session that **began after the deletion** restores it;
+a token of an ended session is refused everywhere with `session_revoked`. Every sign-in below is
+therefore a new email code, never a reused session; the codes are entered by Nemat
+(`scripts/provider-t1-verify.sh`). An old token that still restores the account is a stop
+(`PROVIDER-SESSION.md`, stop rule 8).
 They must run in this order, each drain before the next account change: **a sign-in while E1's playback
 job is still pending joins that job** (one `sync_playback` per video; the worker decides revoke or
 restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
@@ -238,7 +260,7 @@ restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
    `node scripts/provider-member.mjs delete-account` (expected `204`; `reauth_required` means the
    sign-in is older than 10 minutes: get a new code). Expected (S1): `deleted_at` set; T1's push
    tokens gone; exactly one new job, `sync_playback` / `account_deleted`, asset a, response V, due
-   now. V stays `live` in the database but is hidden (account deleted). With `20261016000202`: T1's
+   now. V stays `live` in the database but is hidden (account deleted). Since H4 (`20261016000202`): T1's
    `auth.sessions` rows gone, the app on the phone is signed out, and
    `node scripts/provider-member.mjs sign-in-state` with the token just used answers
    `session_revoked` and restores nothing (check `deleted_at` is still set).
@@ -258,7 +280,7 @@ restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
    `verify <T1 email> <code>` (a new session, saved over the old token), then
    `node scripts/provider-member.mjs sign-in-state`. Expected: `200`; `deleted_at` null; exactly one
    new job, `sync_playback` / `account_restored`, for V. If `sign-in-state` is tried first with the
-   token from before the deletion: `session_revoked` (with `20261016000202`) and `deleted_at` still
+   token from before the deletion: `session_revoked` (applied since H4) and `deleted_at` still
    set; that is correct, not a failure.
 2. **E2 dry run:** plan `direction` `restore`, `would_create` `public`.
 3. **E2 live:** as E1 live. Expected: job `done` `{"outcome": "restored"}`; V's `mux_playback_id` =
