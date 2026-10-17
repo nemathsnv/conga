@@ -1,9 +1,11 @@
 # Over-the-air updates (EAS Update)
 
 How a change reaches an installed Conga build without a cable, which changes cannot, and how an update
-is published, checked and rolled back. Written 17 Oct 2026. **Nothing has been published:** the EAS
-project does not exist yet (`eas init` needs Nemat's Expo account), so every build made so far runs only
-the JavaScript it was built with.
+is published, checked and rolled back. Written 17 Oct 2026. The EAS project **@nemathsnv/conga** exists
+(`eas init`, 17 Oct; id `89a7bb41-ee22-4358-9ab1-75299a5ae2f9`, committed in `app.config.ts` with
+`owner: 'nemathsnv'`), and the channels `founder`, `preview` and `production` exist, each with its own
+branch. **Nothing has been published.** The EAS environments `development`, `preview` and `production`
+hold no variables yet.
 
 ## 1. The rule
 
@@ -45,8 +47,8 @@ belong to that checkout; any later native change moves them.)
 | `development` | EAS `development` builds (dev client) | developers | not used: a dev client loads JavaScript from Metro |
 
 An EAS build gets its channel from `eas.json`; the founder build, made on this Mac, sends the
-`expo-channel-name: founder` header (`app.config.ts`). Until `EAS_PROJECT_ID` exists a build has
-`updates.enabled: false` and never asks.
+`expo-channel-name: founder` header (`app.config.ts`). Every build made from `6bd067a` on asks EAS Update at
+launch; `EAS_PROJECT_ID` in the environment overrides the committed project id (for a test project).
 
 ## 3. How an update reaches a phone
 
@@ -124,24 +126,25 @@ does not matter for it; the roll-back-to-embedded publishes no JavaScript).
   its profile expires 7 days after the build, and then iOS will not open the app at all, whatever updates
   it has. Rebuild and reinstall with `founder-ios.sh release` at least weekly (section 8). Data is kept.
 - It cannot change native code, permissions, entitlements, the icon or the bundle id (section 1).
-- It cannot reach a build made before EAS Update was configured: the first build with `EAS_PROJECT_ID`
-  set is the first one that can be updated.
+- It cannot reach a build made before EAS Update was configured: the founder build installed on the iPhone
+  before 17 Oct (named "Shortcut") has no updater. The first founder build from `6bd067a` on is the first
+  that can be updated.
 
 ## 8. The founder iPhone, end to end
 
-Once:
+Done on 17 Oct: Expo login (Nemat), `eas init --account nemathsnv` (the project; eas-cli cannot write the id
+into a dynamic `app.config.ts`, so it was committed by hand), `EAS_PROJECT_ID` added to `app/.env.founder`,
+the three channels created, the EAS environments checked empty.
 
-1. `npx eas-cli login` (Nemat's Expo account; free).
-2. In `app/`: `npx eas-cli init` creates the project `conga` and prints its id. Put it in
-   `app/.env.founder` as `EAS_PROJECT_ID=<id>` (and in `app/.env` for other local builds). Because the
-   config is `app.config.ts`, eas-cli cannot write the id itself; that is expected.
-3. In the EAS dashboard, leave the `development` environment without `EXPO_PUBLIC_` variables.
-4. `DEVICE=<udid> app/scripts/founder-ios.sh release` with the iPhone connected (or paired over the
-   network, below). It prints the build's runtime version and installs over the existing app, keeping its
-   data.
+Each founder build:
+
+1. `INSTALL=0 DEVICE=<udid> app/scripts/founder-ios.sh release` builds and signs with the Personal Team and
+   prints the build's runtime version and the install command; without `INSTALL=0` it also installs over
+   the existing app, keeping its data. Keep the EAS `development` environment free of `EXPO_PUBLIC_`
+   variables (the founder channel's updates are exported with it).
 
 Then, for a JavaScript change: commit, `DRY_RUN=1 …` once, `scripts/publish-update.sh founder "…"`,
-cold-start twice on the phone. For a native change, or every 7 days for the profile: step 4 again.
+cold-start twice on the phone. For a native change, or every 7 days for the profile: step 1 again.
 
 **No cable for step 4.** Xcode can install over the local network: with the iPhone connected once, Xcode >
 Window > Devices and Simulators > the iPhone > "Connect via network". After that `xcrun devicectl list

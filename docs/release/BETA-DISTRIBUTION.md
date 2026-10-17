@@ -12,14 +12,14 @@ general knowledge as of this date and are marked **(verify)** where they drift.
 | Build profiles | `app/eas.json`: `development` (dev client, simulator), `preview` (internal: ad hoc iPhone, Android APK), `production` (TestFlight and stores; Android app bundle). Each has its own update channel |
 | Environment | `preview` and `production` pin the hosted Supabase URL, `EXPO_PUBLIC_WEB_BASE_URL=https://conga.churntech.com`, dev tools off, founder switch off. The publishable key and the other public ids go in the EAS environment of the same name. On the EAS servers `app.config.ts` refuses a build with a wrong URL or key, dev tools on, the founder switch on or no links domain (tested in `releaseConfig.test.ts`) |
 | Versions | `version` `0.1.0` in `app.config.ts` (what testers see); build numbers (iOS `CFBundleVersion`, Android `versionCode`) kept on EAS and raised on every build (`appVersionSource: remote`, `autoIncrement`) |
-| Updates | EAS Update with fingerprint runtime versions and channels `founder`, `preview`, `production` (`OTA-UPDATES.md`); off until the EAS project exists |
+| Updates | EAS Update with fingerprint runtime versions and channels `founder`, `preview`, `production` (`OTA-UPDATES.md`); project and channels exist on EAS, nothing published |
 | Founder build | `app/scripts/founder-ios.sh release`: free Personal Team, bundle id `app.shortcut.founder`, no Sign in with Apple, no push |
 
 ## 2. What can be done now, without paying Apple
 
 | Step | Who | Needs |
 | --- | --- | --- |
-| Expo account, `npx eas-cli login`, `npx eas-cli init` in `app/` (the project id) | Nemat, then the lead | Expo account (free) |
+| Expo account, `npx eas-cli login`, `npx eas-cli init` in `app/` (the project id) | **done 17 Oct**: @nemathsnv/conga, id in `app.config.ts`; channels `founder`, `preview`, `production` created | Expo account (free) |
 | EAS environment variables for `preview` and `production` (`EXPO_PUBLIC_SUPABASE_ANON_KEY`, Google client ids if Google ships) | Nemat in the EAS dashboard, or the lead with `eas env:create` once logged in | the values (public) |
 | OTA updates to the founder iPhone | lead, each on Nemat's go-ahead | the project id in `app/.env.founder` and one founder build made with it |
 | **Android tester builds with an install link** | lead (`npx eas-cli build -p android --profile preview`) | the Expo project; EAS generates and keeps the Android signing key. No Google account needed for an APK |
