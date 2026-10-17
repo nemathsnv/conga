@@ -2,7 +2,7 @@ import { videoLinkTarget } from '@/lib/links';
 import { resetAccountScopedUi } from '@/ui/accountScope';
 import { getUnread, setUnread } from '@/ui/activityStore';
 import { markFeedDirty, takeFeedDirty } from '@/ui/feedStore';
-import { isPlaybackFailure, shouldResumeOnForeground } from '@/ui/playbackRules';
+import { isPlaybackFailure, shouldResumeOnForeground, stillSource } from '@/ui/playbackRules';
 
 jest.mock('@/lib/content', () => ({ activityUnreadCount: jest.fn() }));
 
@@ -46,5 +46,15 @@ describe('resetAccountScopedUi', () => {
     // The next account does not see the last one's filled bell, nor a feed reload it did not cause.
     expect(getUnread()).toBe(0);
     expect(takeFeedDirty()).toBe(false);
+  });
+});
+
+describe('stillSource (the banner thumbnail)', () => {
+  it('shows a still only of a file on the phone', () => {
+    expect(stillSource('file:///var/mobile/recordings/r1.mp4')).toBe('file:///var/mobile/recordings/r1.mp4');
+    expect(stillSource('')).toBeNull();
+    expect(stillSource('   ')).toBeNull();
+    expect(stillSource(null)).toBeNull();
+    expect(stillSource(undefined)).toBeNull();
   });
 });
