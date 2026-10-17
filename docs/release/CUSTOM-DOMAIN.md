@@ -1,3 +1,5 @@
+> **Status (17 Oct 2026): superseded as the recommendation.** `docs/release/WEB-HOSTING.md` (Agent G) compares this option A with Cloudflare Pages (B) and a Worker proxy (C) and recommends **B**, prepared in `web/` and not deployed; Nemat said not to buy the Supabase custom-domain add-on yet. Kept unchanged below as the record of option A and its steps. Setup items: `docs/release/STAGE-4-SETUP.md` section 7.
+
 # H5b follow-up: a domain in front of the Edge Functions (prepared 16 Oct; no DNS or account change made)
 
 ## Why this is needed

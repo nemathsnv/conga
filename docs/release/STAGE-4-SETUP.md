@@ -1,5 +1,7 @@
 # Stage 4 setup: everything still needed outside the repository
 
+**Updated 17 Oct 2026 for Agent G's `WEB-HOSTING.md`**: the shared-link pages and the admin go on **Cloudflare Pages** (prepared in `web/`, not deployed), not behind the Supabase custom-domain add-on, and Nemat said not to buy the add-on yet. So the **Supabase Pro plan is no longer required for the domain** (it stays an optional plan decision for backups and no pausing), the **domain stays required**, and a **free Cloudflare account** is added. `CUSTOM-DOMAIN.md` is the superseded comparison.
+
 One consolidated checklist, written 17 Oct 2026 from `RELEASE-CHECKLIST.md` stage 4, `IOS.md`, `ANDROID.md`,
 `NOTIFICATIONS.md`, `SECURITY.md` section 5, `CUSTOM-DOMAIN.md`, `BUILD.md`, `PROVIDER-TESTS.md` and
 `BETA-READINESS.md` sections 21 to 28. **Nothing here has been done.** No account was created, nothing was bought,
@@ -35,8 +37,12 @@ Apple Developer Program (paid) ─► App ID capabilities ─┬─► APNs key 
                                    │                   └─► App Store Connect record ─► eas submit ─► TestFlight
                                    ├─► Sign in with Apple, native (bundle id only) ─► Supabase Apple provider
                                    └─► [Android web flow only] Services ID ─► key ─► client-secret JWT ─► supabase/.env
-Custom domain (bought) ─► Supabase Pro ─► custom-domain add-on ─► `web` pages + `admin` render ─► EXPO_PUBLIC_WEB_BASE_URL
-   └─► must be ACTIVE before the Services ID return URL and Google redirect URI are entered
+Domain (bought) ─► Cloudflare account (free) + the domain's DNS on Cloudflare ─► Pages project `shortcut-web` ─► Pages secrets
+   (SUPABASE_ANON_KEY, WEB_PROXY_KEY) ──┐                                    └─► custom domains `<domain>` and `admin.<domain>` ─► EXPO_PUBLIC_WEB_BASE_URL
+   Supabase: same WEB_PROXY_KEY as a function secret ─► redeploy `web` ◄─┘
+   Auth stays on `picvoavfxnajfjkqawju.supabase.co`, so the Services ID return URL and Google redirect URI do NOT wait for the domain
+   Apple Team ID (from the Developer Program) ─► `.well-known/apple-app-site-association`;  signing SHA-256s ─► `.well-known/assetlinks.json`
+Supabase Pro (optional, Nemat decides): backups, no pausing. Not needed for the domain any more.
 Google Cloud project ─► consent screen ─► web client ─► iOS client (+ URL scheme) ─► Supabase Google provider
    └─► [Android only] Android clients with SHA-1s (need the EAS keystore, which needs the first Android build)
 Firebase ─► google-services.json + FCM service account ─► Expo (Android push only)
@@ -54,10 +60,11 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 | S3 | Google Play Console account | paid account | OPTIONAL | no | Nemat | play.google.com/console | D1 | Android internal/closed tracks |
 | S4 | Google Cloud project | account | REQUIRED if Google sign-in ships | yes (iOS client) | Nemat | console.cloud.google.com | none | G1 to G3 |
 | S5 | Firebase project | account | OPTIONAL | no | Nemat | console.firebase.google.com | S4 optional | Android push |
-| S6 | Supabase Pro plan | paid plan | REQUIRED (custom domain, backups) | yes | Nemat | Supabase dashboard billing | none | W3, backups |
+| S6 | Supabase Pro plan | paid plan | **OPTIONAL: Nemat decides.** Reasons: backups (none at the 9 Oct check), no project pausing, support. No longer needed for the domain | yes | Nemat | Supabase dashboard billing | none | backups for the policies (B2) |
 | S7 | Mux paid plan (card on file) | paid plan | REQUIRED | yes | Nemat | Mux dashboard billing | none | more than 10 assets |
-| S8 | Domain name | paid account | REQUIRED (web pages, admin) | yes | Nemat | a registrar + DNS | D2 name | W1 to W7 |
+| S8 | Domain name (apex or a subdomain) | paid account | REQUIRED (web pages, admin) | yes | Nemat | a registrar; DNS on Cloudflare (needed for the apex; a subdomain can be a CNAME) | D2 name | W1 to W9 |
 | S9 | Resend plan | account | already exists; upgrade OPTIONAL | yes | Nemat | Resend dashboard | none | email volume |
+| S10 | Cloudflare account (free plan) | account | REQUIRED (web pages, admin) | yes | Nemat | dash.cloudflare.com; `npx wrangler login` on the Mac | none | W2 to W7 |
 | **Decisions** | | | | | | | | |
 | D1 | Seller: individual or company | decision | REQUIRED | yes | Nemat | Apple/Google enrolment; policies `[Company legal name]` | none | S2, S3 |
 | D2 | Product name, bundle id `app.shortcut`, package `app.shortcut` | decision | REQUIRED | yes | Nemat | `app.config.ts`, Apple, Google, App Store Connect | none | A2, A9, G3 |
@@ -72,18 +79,20 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 | A4 | APNs key (`.p8`) uploaded to Expo | credential | REQUIRED for push | yes | Nemat | Expo credentials (`*.p8` never in git) | A1, S1, P1 | P4 push |
 | A5 | EAS-managed distribution certificate and profile | credential | REQUIRED | yes | EAS on Nemat's Apple login | Expo credentials | A1, S1 | builds |
 | A6 | Sign in with Apple, native: Supabase Apple provider | provider setting | REQUIRED | yes | Nemat | `supabase/.env` then `config push` | A2 | Gate 2 (iOS) |
-| A7 | Services ID, key and client-secret JWT | credential | OPTIONAL | **no** (Android web flow only) | Nemat | `supabase/.env` then `config push` | A1, W5 (domain active), A6 | Apple sign-in on Android |
+| A7 | Services ID, key and client-secret JWT | credential | OPTIONAL | **no** (Android web flow only) | Nemat | `supabase/.env` then `config push` | A1, A6 (no wait for the domain: Auth stays on `supabase.co`) | Apple sign-in on Android |
 | A8 | Hide My Email relay: register the sending domain | provider setting | REQUIRED if Apple users get waitlist emails | yes | Nemat | Apple Developer, "Sign in with Apple for Email Communication" (verify) | A1, E1 | admission emails reach relay addresses |
 | A9 | App Store Connect app record | provider setting | REQUIRED for TestFlight | yes | Nemat | appstoreconnect.apple.com | A1, D2 | A10, A12 |
 | A10 | `ascAppId` in `eas.json` submit block | repo edit after A9 | REQUIRED for `eas submit` | yes | Agent F on request | `app/eas.json` | A9 | A12 |
 | A11 | Age rating and privacy labels | provider setting | REQUIRED for store, not internal TestFlight | yes | Nemat | App Store Connect | A9, policies | external TestFlight |
 | A12 | TestFlight internal, then external (Beta App Review) | provider setting | REQUIRED for outside testers | yes | Nemat | App Store Connect | A9, A10, D3, policy URLs | first outside tester |
+| A13 | **Input for W8:** the Apple Team ID (10 characters, shown in the membership page; not a secret) | value to hand over | OPTIONAL (universal links) | optional | Nemat | `web/public/.well-known/apple-app-site-association` | A1 | universal links |
 | **Google** | | | | | | | | |
 | G1 | OAuth consent screen | provider setting | REQUIRED if Google sign-in ships | yes | Nemat | Google Cloud | S4 | G2 |
-| G2 | Web OAuth client (id and secret) | credential | REQUIRED if Google ships | yes | Nemat | id: EAS variable; secret: `supabase/.env`; redirect: Supabase callback | G1, W5 (domain active, for the callback URL) | G5 |
+| G2 | Web OAuth client (id and secret) | credential | REQUIRED if Google ships | yes | Nemat | id: EAS variable; secret: `supabase/.env`; redirect URI: the Supabase Auth callback on `picvoavfxnajfjkqawju.supabase.co` | G1 | G5 |
 | G3 | iOS OAuth client (id and reversed scheme) | credential | REQUIRED if Google ships | yes | Nemat | ids: EAS variables; scheme: `GOOGLE_IOS_URL_SCHEME` | G1, D2 | G5 |
 | G4 | Android OAuth clients, one per signing SHA-1 | credential | OPTIONAL | **no** | Nemat | Google Cloud | S3, first Android build, Play App Signing | Google on Android |
 | G5 | Supabase Google provider | provider setting | REQUIRED if Google ships | yes | Nemat, Lead | `supabase/.env` then `config push` | G2, G3 | Gate 2 (Google) |
+| G6 | **Input for W8:** SHA-256 fingerprint(s) of the signing certificate(s): the EAS upload key and, once on Play, the Play App Signing key (not secrets) | value to hand over | OPTIONAL | **no** | Nemat | `web/public/.well-known/assetlinks.json` | first Android build, S3 | Android app links |
 | **Push** | | | | | | | | |
 | P1 | Expo project id (`eas init`) | credential | REQUIRED | yes | Nemat | `app/.env` and EAS variable `EAS_PROJECT_ID` | S1 | A4, builds |
 | P2 | `send-push` sender secrets | credential | REQUIRED for push | yes | Nemat, Lead | function secret and Vault | P1, A4 | push |
@@ -97,13 +106,13 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 | E4 | Email rate limit before declaring SMTP in `config.toml` | provider setting | REQUIRED if SMTP is ever declared | yes | Lead | `config.toml` `email_sent`, then `config diff` | E1 | safe config push |
 | **Domain and web** | | | | | | | | |
 | W1 | Buy the domain | paid account | REQUIRED | yes | Nemat | registrar | D2 | W2 |
-| W2 | DNS: CNAME and TXT for `links.<domain>` | provider setting | REQUIRED | yes | Nemat | DNS | W1, S6 | W3 |
-| W3 | Supabase custom-domain add-on | paid plan | REQUIRED | yes | Nemat | Supabase CLI/dashboard | S6, W2 | W5 |
-| W4 | Verify, then activate | provider setting | REQUIRED | yes | Nemat, Lead | Supabase CLI | W3 | W5 |
-| W5 | Check HTML is served as `text/html` | check | REQUIRED | yes | Lead | n/a | W4 | `web` pages, `admin` (H7), A7, G2 callback |
-| W6 | `STORE_URL`, `WAITLIST_URL` secrets | provider setting | REQUIRED | yes | Nemat | `supabase secrets set` | D4 | correct buttons on web pages |
-| W7 | `EXPO_PUBLIC_WEB_BASE_URL`, `ADMIN_AUTH_BASE` | config | REQUIRED | yes | Lead | EAS variable; function secret | W5 | share links, admin |
-| W8 | `apple-app-site-association` and `assetlinks.json` | provider setting | OPTIONAL | AASA optional, assetlinks **no** | Nemat, Lead | files served from the domain | W5, A1 / Android signing | universal and app links |
+| W2 | DNS on Cloudflare: bought through Cloudflare Registrar, or nameservers moved (up to a day), or a CNAME for a subdomain only | provider setting | REQUIRED | yes | Nemat | Cloudflare dashboard | W1, S10 | W6 |
+| W3 | Pages project `shortcut-web` (`wrangler pages project create`) | provider setting | REQUIRED | yes | Nemat, Lead | Cloudflare Pages | S10 | W4 |
+| W4 | Pages configuration: secrets `SUPABASE_ANON_KEY` (the publishable key, set as a Pages environment variable/secret binding, never in git) and `WEB_PROXY_KEY` (32+ random characters); variables `ADMIN_HOST=admin.<domain>`, `WEB_BASE_URL=https://<domain>` in `web/wrangler.toml` `[env.production.vars]` (committed, not secret), optional `STORE_URL`/`WAITLIST_URL` | credential, config | REQUIRED | yes | Nemat sets the secrets; Lead commits the vars | Cloudflare Pages secrets (`wrangler pages secret put`); `web/wrangler.toml` | W3, D2 (domain), D4 | W6 |
+| W5 | Supabase side: the **same** `WEB_PROXY_KEY` as a function secret (`supabase secrets set`), then **redeploy the `web` function** (it now carries `render.ts`); needs Nemat's approval | credential, deploy | REQUIRED | yes | Nemat sets the value; Lead deploys | Supabase function secret; hosted `web` | W4 (the value is generated once and used in both places) | per-visitor rate limits; `web_link_opened` events |
+| W6 | Deploy the Pages project and add custom domains `<domain>` and `admin.<domain>`; run the four checks in `web/README.md` (`text/html` on `/r/<id>`, JSON `.well-known`, `/admin` with a nonce CSP on the admin host, 404 for pages on the admin host) | provider setting | REQUIRED | yes | Nemat, Lead | Cloudflare Pages | W2, W4, W5 | `web` pages, `admin` (H7) |
+| W7 | `EXPO_PUBLIC_WEB_BASE_URL=https://<domain>` in the EAS `preview` and `production` environments and `app/.env` (after W6 passes). `ADMIN_AUTH_BASE` is not needed on this path: Auth stays on `supabase.co` | config | REQUIRED | yes | Lead | EAS variable | W6 | share links in the app |
+| W8 | The two `.well-known` files: Apple Team ID into `web/public/.well-known/apple-app-site-association` (input A13), Android signing SHA-256(s) into `assetlinks.json` (input G6) | provider setting | OPTIONAL | AASA optional, assetlinks **no** | Nemat gives the values (neither is a secret); Lead edits and redeploys Pages | `web/public/.well-known/` | W6, A1 / Android signing | universal and app links |
 | W9 | `associatedDomains` and `intentFilters` | repo edit after W8 | OPTIONAL | optional | Agent F on request | `app.config.ts` | W8 | links open the app |
 | **Mux** | | | | | | | | |
 | M1 | Paid plan with a card | paid plan | REQUIRED | yes | Nemat | Mux billing | none | beyond 10 assets |
@@ -117,7 +126,7 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 | V4 | A mid-range Android phone | device | OPTIONAL | **no** | Nemat | n/a | none | Gate 1 Android run, B-1 on Android |
 | V5 | The Mac with Xcode and a UTF-8 shell | device | REQUIRED for local builds | yes | Nemat | n/a | none | founder build |
 | **Supabase plan** | | | | | | | | |
-| B1 | Pro plan | paid plan | REQUIRED | yes | Nemat | billing | none | W3, backups, no pausing |
+| B1 | Pro plan (same as S6) | paid plan | **OPTIONAL: Nemat decides** | yes | Nemat | billing | none | backups, no pausing |
 | B2 | Backups or point-in-time recovery decision | decision | REQUIRED for the policies | yes | Nemat | dashboard | B1 | `RETENTION-AND-RECOVERY.md` |
 | B3 | Config pushes (Apple, Google) | provider setting | REQUIRED | yes | Lead | `supabase config push` | A6, G5 | sign-in |
 
@@ -147,13 +156,19 @@ card number anywhere except Apple's own page.
 
 Play Console registration with identity verification; Firebase project for FCM. See G4, P4 and `ANDROID.md` section 7.
 
-### S6 and B1 Supabase Pro; S7 and M1 Mux paid plan; S8 domain
+### S6 and B1 Supabase Pro (optional); S7 and M1 Mux paid plan; S8 domain; S10 Cloudflare
 
-Billing pages of each provider, entered by Nemat. Reasons, each from the docs: the custom-domain add-on needs Pro
-(`CUSTOM-DOMAIN.md`); the hosted project had **no backups and no point-in-time recovery** at the 9 Oct check, and the
-policies cannot say deleted data is gone without knowing (`RETENTION-AND-RECOVERY.md`); Mux's free plan caps at 10
-assets and the Beta environment has 2 plus the spike's 7 (BETA-READINESS sections 12 and 27, `PROVIDER-TESTS.md`); the domain is
-needed for the web pages and the admin (W1).
+Billing pages of each provider, entered by Nemat. Reasons, each from the docs:
+
+- **Supabase Pro is Nemat's decision, not a requirement.** It was required only for the custom-domain add-on
+  (`CUSTOM-DOMAIN.md`), which `WEB-HOSTING.md` replaces with Cloudflare Pages ("No Supabase plan change is needed for B") and
+  which Nemat said not to buy yet. What remains is the hosted project's **lack of backups and point-in-time recovery** at the
+  9 Oct check (the policies cannot say deleted data is gone without knowing, `RETENTION-AND-RECOVERY.md`) and project pausing
+  on the free plan. Decide with B2.
+- Mux's free plan caps at 10 assets and the Beta environment has 2 plus the spike's 7 (BETA-READINESS sections 12 and 27,
+  `PROVIDER-TESTS.md`).
+- The domain is needed for the web pages, link previews and the admin (W1); the Cloudflare account on the **free** plan covers
+  the Pages project (`WEB-HOSTING.md` section 3: 100,000 Function requests a day, static files free).
 
 ### S4 Google Cloud, S9 Resend
 
@@ -190,14 +205,15 @@ Order, each step depends on the one before it:
 11. **A12** `npx eas-cli build --platform ios --profile production`, then `npx eas-cli submit --platform ios --profile
     production`; internal TestFlight first (no review); external needs Beta App Review, a privacy policy URL and D3.
 
-**A7, Android only (OPTIONAL for an iPhone-only beta).** Do it after the custom domain is **active** (W4), because the
-Services ID return URL is the Auth callback and Auth advertises the custom domain once activated (`CUSTOM-DOMAIN.md`
-step 5). Services ID (for example `app.shortcut.signin`) with domain and return URL
-`https://<custom domain>/auth/v1/callback` (or the project URL if no custom domain; re-enter after activation); a Key
-with Sign in with Apple enabled; generate the client-secret JWT (ES256; `iss` Team ID, `sub` Services ID, `aud`
-`https://appleid.apple.com`, expiry at most six months). Put `app.shortcut,<services id>` and the JWT in
-`supabase/.env`. **Put a calendar reminder about five months out: when the JWT expires, Apple sign-in fails**
-(`SECURITY.md` section 5).
+**A7, Android only (OPTIONAL for an iPhone-only beta).** The Auth callback stays on the project URL (Option B keeps Auth on
+`supabase.co`), so this does not wait for the domain. Services ID (for example `app.shortcut.signin`) with the domain
+`picvoavfxnajfjkqawju.supabase.co` and return URL `https://picvoavfxnajfjkqawju.supabase.co/auth/v1/callback`; a Key with Sign in
+with Apple enabled; generate the client-secret JWT (ES256; `iss` Team ID, `sub` Services ID, `aud` `https://appleid.apple.com`,
+expiry at most six months). Put `app.shortcut,<services id>` and the JWT in `supabase/.env`. **Put a calendar reminder about
+five months out: when the JWT expires, Apple sign-in fails** (`SECURITY.md` section 5).
+
+**A13 (OPTIONAL, for universal links).** Give Agent F the Apple Team ID (not a secret) so it can replace the placeholder in
+`web/public/.well-known/apple-app-site-association`; `associatedDomains` in `app.config.ts` follows (`IOS.md` section 3).
 
 **D3 reviewer access.** The app is invite-only and codes arrive by email, so a reviewer cannot sign in. Options are in
 `IOS.md` section 7 (a long-lived single-use invite in the review notes with Sign in with Apple; a reviewer account with a
@@ -216,14 +232,16 @@ code and design change, not proposed here.
    testers.
 2. **G2** Credentials, Create OAuth client ID, **Web application**. Its **id** becomes `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
    (EAS variable, plain text is fine, it is public) and its **secret** goes only into `supabase/.env` as
-   `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`. Authorised redirect URI: the Supabase Auth callback; if the custom domain will be
-   used, do this after W4 so it is entered once.
+   `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`. Authorised redirect URI: the Supabase Auth callback on the project URL (unchanged by
+   the web hosting choice).
 3. **G3** **iOS** client for bundle id `app.shortcut`. Its id becomes `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` and its reversed
    form `GOOGLE_IOS_URL_SCHEME` (both EAS variables; the scheme is needed at prebuild time or the plugin is left out).
 4. **G5** `supabase/.env`: `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=<web id>,<ios id>`. Flip
    `[remotes.hosted.auth.external.google] enabled = true`; `config diff`, preview push, interactive push (as in A6).
    `skip_nonce_check = true` stays (native tokens carry no checkable nonce).
-5. **G4, Android, OPTIONAL for iPhone-only.** One Android client per signing certificate SHA-1: the EAS keystore (after the
+5. **G6, Android app links (OPTIONAL).** The signing certificates' SHA-256 fingerprints (EAS upload key; Play App Signing key once on
+   Play) go to Agent F for `web/public/.well-known/assetlinks.json` (`ANDROID.md` section 6).
+6. **G4, Android, OPTIONAL for iPhone-only.** One Android client per signing certificate SHA-1: the EAS keystore (after the
    first Android build), the local debug keystore, and the Play App Signing certificate (after the first Play upload). Missing
    the Play one is the "works from the APK, fails from Play" failure (`ANDROID.md` section 3).
 
@@ -257,28 +275,41 @@ code and design change, not proposed here.
 - Decision for later: who admits people from the waitlist and how the email goes out (`team_admit_from_waitlist` exists; the
   workflow does not).
 
-## 7. Domain and web (W1 to W9)
+## 7. Domain and web (S8, S10, W1 to W8)
 
 Why this is required: on the default `supabase.co` functions domain the platform serves HTML as `text/plain`
-(BETA-READINESS 25, H5b). The shared-link pages (`web`) show source, link previews cannot read the page, and the moderation
-admin (`admin`, required before the first outside tester) cannot render. `CUSTOM-DOMAIN.md` recommends option A.
+(BETA-READINESS 25, H5b). The shared-link pages show source, link previews cannot read the page, and the moderation admin
+(required before the first outside tester) cannot render. `WEB-HOSTING.md` (Agent G, 17 Oct) recommends **option B, Cloudflare
+Pages with Pages Functions**, prepared and tested locally in `web/`, not deployed; it matches SPEC.md Section 4's links on the
+apex, serves the `.well-known` files, isolates the admin on its own host, and needs no Supabase plan change. Option A (the Supabase
+add-on, `CUSTOM-DOMAIN.md`) is not being bought. Each step below is on Nemat's go-ahead; the exact commands are in `web/README.md`.
 
-1. **W1** Buy the domain (D2). Not a domain of the provisional brand for email (DECISIONS 9 Oct).
-2. **S6** Supabase Pro.
-3. **W2** DNS: `CNAME links.<domain> -> picvoavfxnajfjkqawju.supabase.co` (low TTL).
-4. **W3** `supabase domains create --project-ref picvoavfxnajfjkqawju --custom-hostname links.<domain>` prints a TXT record
-   (`_acme-challenge.links`); add it. This is the paid add-on and needs Nemat's go-ahead.
-5. **W4** `supabase domains reverify --project-ref picvoavfxnajfjkqawju` until verified. **Before** `activate`, list the
-   OAuth redirect URLs that will change (A7, G2) and enter them right after. Then `supabase domains activate ...`.
-6. **W5** `curl -sI https://links.<domain>/functions/v1/web/i/CHECK` must return `content-type: text/html`; open a
-   `/functions/v1/web/r/<id>` link in a phone browser; check a link preview shows thumbnail and prompt.
-7. **W6** `supabase secrets set STORE_URL=... WAITLIST_URL=...` once the store page and waitlist URL exist (D4). Until set, the
-   function falls back to `https://shortcut.app`, a domain nobody owns.
-8. **W7** EAS variable `EXPO_PUBLIC_WEB_BASE_URL=https://links.<domain>` for `preview` and `production`, and `app/.env`; for the
-   admin, function secret `ADMIN_AUTH_BASE=https://links.<domain>` (H7).
-9. **W8/W9, OPTIONAL for a first beta.** `apple-app-site-association` and `assetlinks.json` served from the domain, then
-   `associatedDomains` and `intentFilters` in `app.config.ts` (`IOS.md` section 3, `ANDROID.md` section 6). Without them the
-   page's "Open in the app" button still opens the app through the `shortcut://` scheme. `assetlinks.json` is Android only.
+1. **W1** Buy the domain (D2). Not a domain of the provisional brand if it will also send email (DECISIONS 9 Oct).
+2. **S10** Create the Cloudflare account (free plan); on the Mac `cd web && npx wrangler login`.
+3. **W2** Put the domain's DNS on Cloudflare (Registrar purchase is immediate; a nameserver move from another registrar can take
+   up to a day). A subdomain-only setup can use a CNAME, but the apex (`https://<domain>/r/{id}`) needs Cloudflare DNS.
+4. **W3** `npx wrangler pages project create shortcut-web --production-branch main`.
+5. **W4** Generate `WEB_PROXY_KEY` (`openssl rand -hex 32`, kept in a shell variable, never printed). Then
+   `npx wrangler pages secret put SUPABASE_ANON_KEY --project-name shortcut-web` (the publishable key, from the dashboard; it is
+   public but kept out of git) and `... put WEB_PROXY_KEY ...`. In `web/wrangler.toml` `[env.production.vars]` fill `ADMIN_HOST`
+   (`admin.<domain>`) and `WEB_BASE_URL` (`https://<domain>`) and commit; optional `STORE_URL`, `WAITLIST_URL` (D4).
+6. **W5** Supabase side, with approval: `supabase secrets set WEB_PROXY_KEY=<the same value> --project-ref picvoavfxnajfjkqawju`,
+   then `supabase functions deploy web --no-verify-jwt --project-ref picvoavfxnajfjkqawju` (redeploy; it now carries `render.ts`).
+   Without the key the function behaves as before. The key lives in two places and must be rotated together (`WEB-HOSTING.md`
+   section 3).
+7. **W6** `npx wrangler pages deploy public --project-name shortcut-web --branch main`; Cloudflare dashboard, Pages,
+   `shortcut-web`, Custom domains: add `<domain>` and `admin.<domain>`. Check with `curl -sI`: `/r/<live id>` is 200
+   `text/html` with `x-robots-tag: noindex`; `/.well-known/apple-app-site-association` is 200 `application/json`; `admin.<domain>/admin`
+   is 200 with a nonce CSP; `admin.<domain>/r/<id>` is 404. Then open a `/r/<id>` link in a phone browser and check a link
+   preview shows thumbnail and prompt. Only then deploy the admin function (H7).
+8. **W7** `EXPO_PUBLIC_WEB_BASE_URL=https://<domain>` in the EAS `preview` and `production` environments and `app/.env`.
+9. **W8, OPTIONAL for a first beta.** Replace the placeholders in `web/public/.well-known/` with the Apple Team ID (A13) and the
+   Android SHA-256 (G6), redeploy Pages, then `associatedDomains` and `intentFilters` in `app.config.ts` (`IOS.md` section 3,
+   `ANDROID.md` section 6). Without them the page's "Open in the app" button still opens the app through the `shortcut://`
+   scheme. `assetlinks.json` is Android only.
+
+Secrets that appear in this flow and where they live: `SUPABASE_ANON_KEY` (public key, Pages secret), `WEB_PROXY_KEY` (Pages secret
+and Supabase function secret), nothing else. This Pages project holds no service-role key.
 
 ## 8. Mux (M1 to M4)
 
@@ -304,7 +335,7 @@ admin (`admin`, required before the first outside tester) cannot render. `CUSTOM
 
 ## 10. Supabase plan (B1 to B3)
 
-- **B1** Pro plan: custom domain (W3), backups, no pausing, support (`CUSTOM-DOMAIN.md`).
+- **B1** Pro plan: **optional, Nemat decides**. It is no longer needed for the domain (`WEB-HOSTING.md`); remaining reasons are backups, no pausing and support.
 - **B2** Decide the backup posture and write it into the policies; the hosted project had no backups or PITR at 9 Oct.
 - **B3** Config pushes always: `supabase config diff --project-ref picvoavfxnajfjkqawju`, a preview push with
   `< /dev/null`, then the interactive push, never `--yes`; only Auth properties should change (A6, A7, G5).
@@ -312,18 +343,18 @@ admin (`admin`, required before the first outside tester) cannot render. `CUSTOM
 ## 11. The shortest path for a first iPhone-only beta
 
 Required and in this order: D1, D2, D6 -> S1 -> S2/A1 -> A2 -> P1 -> A5 and A3 -> first `preview` build to the founder's iPhone
-(BUILD.md) -> A4 and P2 (push) -> A6 (Apple native) -> S4 and G1, G2, G3, G5 (Google, unless deferred) -> E2, E3 -> S6/B1,
-S8/W1 to W7 (custom domain, web pages, admin: H7) -> M1, M2 -> A9, A10, A11 -> `production` build, internal TestFlight ->
+(BUILD.md) -> A4 and P2 (push) -> A6 (Apple native) -> S4 and G1, G2, G3, G5 (Google, unless deferred) -> E2, E3 ->
+S8/W1, S10, W2 to W7 (domain, Cloudflare Pages, web function redeploy, admin: H7) -> M1, M2 -> A9, A10, A11 -> `production` build, internal TestFlight ->
 D3, policy URLs, D4/W6 -> external TestFlight (A12) -> Gate 5 decision.
 
-Optional for that beta: S3, S5, A7, G4, P3, P4, V4, W8, W9, M3, an upgrade of Resend.
+Optional for that beta: S3, S5, S6/B1 (Supabase Pro; Nemat decides), A7, A13, G4, G6, P3, P4, V4, W8, M3, an upgrade of Resend.
 
 ## 12. What each item unblocks, by gate
 
 - **Gate 2** (Nemat can sign up on iOS and Android): A2, A5, A6, G1 to G5, E2, P1, a signed build; Android needs S3, G4, V4 and a
   built Android app.
-- **Gate 5** (safety complete): the admin (S6, S8, W1 to W5, H7), M2, M4, P2/A4/P5 (B-2), policies (D5, S2 for seller name).
+- **Gate 5** (safety complete): the admin (S8, S10, W1 to W7, H7), M2, M4, P2/A4/P5 (B-2), policies (D5, S2 for seller name).
 - **Gate 7**: everything above plus Nemat's decision.
 - **B-2** push: P1, A4, P2, P5 (iOS); P4 adds Android.
-- **B-3** links: W1 to W7; W8/W9 for universal links.
+- **B-3** links: W1 to W7; W8 (with A13/G6) for universal links.
 - **B-4** store builds: S1, S2, A5, A9 to A12, policy URLs, icon and listing material (outside this file).
