@@ -1,10 +1,13 @@
-# Cloudflare Pages project for the shared-link pages and the moderation admin
-# (docs/release/WEB-HOSTING.md, web/README.md). NOT deployed. Secrets are never written here:
+# Cloudflare Pages project `conga-web` for the shared-link pages and the moderation admin
+# (docs/release/WEB-HOSTING.md, web/README.md). NOT deployed.
+# It is deployed by a dashboard upload of dist/conga-web-dashboard.zip, which carries no
+# wrangler.toml: in production the values below are set in the dashboard (Settings, Variables and
+# Secrets; docs/release/CLOUDFLARE-DASHBOARD.md). This file is for `wrangler pages dev` and as the
+# record of those values. Secrets are never written here:
 #   SUPABASE_ANON_KEY  the project's publishable key (public, but kept out of git like app/.env)
 #   WEB_PROXY_KEY      the same random value as the `web` Edge Function's WEB_PROXY_KEY secret
-# set with `wrangler pages secret put <NAME> --project-name shortcut-web`, and locally in
-# web/.dev.vars (git-ignored).
-name = "shortcut-web"
+# set as encrypted variables in the dashboard, and locally in web/.dev.vars (git-ignored).
+name = "conga-web"
 pages_build_output_dir = "./public"
 compatibility_date = "2026-10-01"
 
@@ -15,15 +18,14 @@ SUPABASE_URL = "http://127.0.0.1:54321"
 ADMIN_HOST = ""
 WEB_BASE_URL = ""
 
-# Deployments. Fill ADMIN_HOST and WEB_BASE_URL once the domain exists (Needs Nemat). Leave
-# STORE_URL / WAITLIST_URL out until they exist; the pages fall back to the same placeholders as
-# the Edge Function.
+# Deployments: the hosts chosen on 17 Oct 2026 (DECISIONS). Leave STORE_URL / WAITLIST_URL out until
+# they exist; the pages fall back to the same placeholders as the Edge Function.
 [env.production.vars]
 SUPABASE_URL = "https://picvoavfxnajfjkqawju.supabase.co"
-ADMIN_HOST = ""
-WEB_BASE_URL = ""
+ADMIN_HOST = "admin.conga.churntech.com"
+WEB_BASE_URL = "https://conga.churntech.com"
 
 [env.preview.vars]
 SUPABASE_URL = "https://picvoavfxnajfjkqawju.supabase.co"
-ADMIN_HOST = ""
-WEB_BASE_URL = ""
+ADMIN_HOST = "admin.conga.churntech.com"
+WEB_BASE_URL = "https://conga.churntech.com"

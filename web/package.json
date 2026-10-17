@@ -1,13 +1,15 @@
 {
-  "name": "shortcut-web",
+  "name": "conga-web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Shared-link pages and the moderation admin on Cloudflare Pages (docs/release/WEB-HOSTING.md). Not deployed.",
+  "description": "Shared-link pages and the moderation admin of Conga on Cloudflare Pages (docs/release/WEB-HOSTING.md). Deployed by dashboard upload of dist/conga-web-dashboard.zip (docs/release/CLOUDFLARE-DASHBOARD.md); not deployed yet.",
   "scripts": {
     "test": "vitest run",
     "dev": "wrangler pages dev --port 8788",
-    "build:check": "wrangler pages functions build --outdir .wrangler/functions-check"
+    "build:check": "wrangler pages functions build --outdir .wrangler/functions-check",
+    "build:dashboard": "scripts/build-dashboard.sh",
+    "verify:dashboard": "node scripts/verify-dashboard-package.mjs"
   },
   "devDependencies": {
     "vitest": "5.0.2",

@@ -1,0 +1,6 @@
+# Bundling only: `npm run build:dashboard` uses this file with `wrangler deploy --dry-run`, which
+# compiles src/worker.ts into one _worker.js and deploys nothing (no login, no account). The real
+# project settings live in the Cloudflare dashboard (docs/release/CLOUDFLARE-DASHBOARD.md).
+name = "conga-web"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
