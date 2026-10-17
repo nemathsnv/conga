@@ -26,6 +26,17 @@ export function sheetOverPage(top: OverlayEntry | null, pageResponseId: string |
   return top && pageResponseId && top.responseId === pageResponseId ? top.mode : null;
 }
 
+/** The sheet the response player opens by itself over its entry (opened from Activity, a
+ *  notification or a rail icon on Home with openComments / openReplies). Only when the first page
+ *  is that entry, live: a deleted or removed entry is X-Unavailable, and a sheet over it would ask
+ *  for a response that is not there and never finish loading. */
+export function autoSheet({ entry, openComments, openReplies, firstPage }: { entry: string | undefined; openComments: string | undefined; openReplies: string | undefined; firstPage: { kind: string; responseId?: string } | undefined }): { pathname: '/comments/[responseId]'; params: { responseId: string } } | { pathname: '/replies/[rootId]'; params: { rootId: string } } | null {
+  if (!entry || firstPage?.kind !== 'response' || firstPage.responseId !== entry) return null;
+  if (openComments === '1') return { pathname: '/comments/[responseId]', params: { responseId: entry } };
+  if (openReplies === '1') return { pathname: '/replies/[rootId]', params: { rootId: entry } };
+  return null;
+}
+
 /** Whether a player page plays. Only the page on screen, and only while its screen is the one the
  *  person sees: a profile, the recorder, another player or a sheet pushed over it stops it (sound
  *  included; VideoSurface also resumes only active players on foreground). The one exception is

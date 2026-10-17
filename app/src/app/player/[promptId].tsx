@@ -16,7 +16,7 @@ import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
-import { playerPageActive, sheetOverPage } from '@/ui/playbackRules';
+import { autoSheet, playerPageActive, sheetOverPage } from '@/ui/playbackRules';
 import { useOverlay } from '@/ui/playerOverlay';
 import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
@@ -80,15 +80,13 @@ export default function PlayerScreen() {
   }, [load]);
 
   // Opened from Activity or a rail icon on Home: go straight to the sheet over the entry.
+  // Only over the entry itself, live (autoSheet); a deleted or removed entry shows X-Unavailable.
   useEffect(() => {
-    if (!pages || openedSheet.current || !entry) return;
-    if (openComments === '1') {
-      openedSheet.current = true;
-      router.push({ pathname: '/comments/[responseId]', params: { responseId: entry } });
-    } else if (openReplies === '1') {
-      openedSheet.current = true;
-      router.push({ pathname: '/replies/[rootId]', params: { rootId: entry } });
-    }
+    if (!pages || openedSheet.current) return;
+    openedSheet.current = true;
+    const first = pages[0];
+    const sheet = autoSheet({ entry, openComments, openReplies, firstPage: first ? { kind: first.kind, responseId: first.kind === 'response' ? first.response.id : undefined } : undefined });
+    if (sheet) router.push(sheet);
   }, [pages, entry, openComments, openReplies, router]);
 
   // The end card leads to the next conversation (SPEC.md Section 6): the next Home conversation
