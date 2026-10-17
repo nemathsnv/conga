@@ -265,6 +265,12 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
       flipCamera();
       return;
     }
+    // A take stopped before 2 seconds often holds no usable data at all (Android's CameraX rejects
+    // it; iOS can report no file): that is PR-Short, not a failed take.
+    if (segments.length === 0 && reason === 'stop' && durationMs < MIN_DURATION_MS) {
+      finish();
+      return;
+    }
     // Stop, the limit, an interruption, or the camera ending the segment on its own.
     finish(segments.length === 0 ? error ?? (uri ? undefined : new Error('record_failed')) : undefined);
   };
@@ -294,7 +300,12 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
 
   const requestEnd = (reason: EndReason) => {
     // A stop (or the limit) asked while a flip is stopping the segment wins: the take ends there.
-    if (ending !== null && !(ending === 'flip' && reason !== 'flip')) return;
+    if (ending !== null && !(ending === 'flip' && reason !== 'flip')) {
+      // Stop tapped again: ask the camera again. On iOS a stop that lands in the moment before
+      // recording has really started is lost, and the take would otherwise run to its limit.
+      if (reason === 'stop' && ending === 'stop') deps.stopRecording();
+      return;
+    }
     const first = ending === null;
     if (endRequestedAt === null) endRequestedAt = deps.now();
     ending = reason;

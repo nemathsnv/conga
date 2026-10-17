@@ -399,3 +399,41 @@ test("a segment keeps its camera's container extension until it is stitched", ()
   expect(fileExtension('file:///data/cache/Camera/x.mp4')).toBe('mp4');
   expect(fileExtension('file:///no-extension')).toBe('mp4');
 });
+
+test('a take stopped under 2 s whose camera hands back no valid data is PR-Short, not a failure', async () => {
+  const h = harness();
+  h.take.start();
+  h.advance(300);
+  h.stopRecording.mockImplementationOnce(() => {
+    h.recordings[0].done.reject(new Error('no valid data'));
+  });
+  h.take.stop();
+  await flush();
+  expect(h.outcomes).toEqual([{ kind: 'short' }]);
+});
+
+test('a stopped take of 2 s or more whose camera fails is still a failed take', async () => {
+  const h = harness();
+  h.take.start();
+  h.advance(2500);
+  h.stopRecording.mockImplementationOnce(() => {
+    h.recordings[0].done.reject(new Error('recording failed'));
+  });
+  h.take.stop();
+  await flush();
+  expect(h.outcomes[0]).toMatchObject({ kind: 'failed' });
+});
+
+test('Stop tapped again asks the camera again when the first stop was lost', async () => {
+  const h = harness();
+  h.take.start();
+  h.stopRecording.mockImplementationOnce(() => {}); // the camera had not really started: the stop is lost
+  h.advance(3000);
+  h.take.stop();
+  await flush();
+  expect(h.outcomes).toEqual([]);
+  h.take.stop();
+  await flush();
+  expect(h.stopRecording).toHaveBeenCalledTimes(2);
+  expect(h.outcomes[0]).toMatchObject({ kind: 'recorded', durationMs: 3000 });
+});
