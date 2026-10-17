@@ -75,6 +75,7 @@ export default function ConfirmEmailScreen() {
               </View>
             );
           })}
+          {/* No maxLength: it would cut a pasted "123 456" to "12345"; normaliseOtp keeps six digits. */}
           <TextInput
             ref={codeInput}
             style={s.codeInput}
@@ -87,9 +88,7 @@ export default function ConfirmEmailScreen() {
             keyboardType="number-pad"
             textContentType="oneTimeCode"
             autoComplete="one-time-code"
-            maxLength={OTP_LENGTH}
             caretHidden
-            contextMenuHidden
             onSubmitEditing={() => void verify()}
             accessibilityLabel="6-digit code"
           />
