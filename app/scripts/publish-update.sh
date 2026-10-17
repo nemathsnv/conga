@@ -64,7 +64,7 @@ if [[ ${DRY_RUN:-} == 1 ]]; then
   CONGA_UPDATE_CHANNEL=$CHANNEL npx expo config --type public >/dev/null
   CONGA_UPDATE_CHANNEL=$CHANNEL npx expo export --platform "$PLATFORM" --output-dir "${TMPDIR:-/tmp}/conga-update-dry-run"
   for p in $([[ $PLATFORM == all ]] && echo ios android || echo "$PLATFORM"); do
-    echo "runtime version ($p): $(npx expo-updates runtimeversion:resolve --platform "$p" | tail -1)"
+    echo "runtime version ($p): $(npx expo-updates runtimeversion:resolve --platform "$p" | tail -1 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runtimeVersion))')"
   done
   echo "dry run only: nothing uploaded"
   exit 0
