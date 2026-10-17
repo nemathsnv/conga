@@ -5,6 +5,7 @@
 #
 #   DEVICE=<udid> app/scripts/founder-ios.sh release   # standalone: JS bundled in, no Metro
 #   DEVICE=<udid> app/scripts/founder-ios.sh debug     # dev client, then starts Metro on this Mac
+#   INSTALL=0 DEVICE=<udid> app/scripts/founder-ios.sh release   # build and sign only; prints the install step
 #
 # The iPhone's UDID: `xcrun devicectl list devices`. Xcode must be signed in to the Apple ID of
 # the Personal Team (Xcode > Settings > Accounts); xcodebuild then creates the free profile for
@@ -54,6 +55,11 @@ xcodebuild -workspace ios/Conga.xcworkspace -scheme Conga -configuration "$CONFI
 APP="ios/build/Build/Products/$CONFIGURATION-iphoneos/Conga.app"
 if [[ -f $APP/EXUpdates.bundle/fingerprint ]]; then
   echo "runtime version (fingerprint) of this build: $(cat "$APP/EXUpdates.bundle/fingerprint")"
+fi
+if [[ ${INSTALL:-1} == 0 ]]; then
+  echo "built, not installed: $APP"
+  echo "install: xcrun devicectl device install app --device $DEVICE \"$PWD/$APP\" && xcrun devicectl device process launch --device $DEVICE app.shortcut.founder"
+  exit 0
 fi
 # Installing over the installed app.shortcut.founder keeps its data (sign-in, waiting recordings), as long
 # as it is signed by the same team; iOS refuses, and deletes nothing, if the team differs.
