@@ -5,8 +5,8 @@ import { useSession } from '@/lib/session';
 
 /**
  * Development-only controls, shown when EXPO_PUBLIC_DEV_TOOLS=1. Sign out lives in
- * Settings (board S-Settings, phase 3+); until then the team needs a way to repeat
- * sign-up on a device. Not part of the product and never on in a tester build.
+ * Settings (board S-Settings); this is a quicker way for the team to repeat sign-up on a
+ * device. Not part of the product and never on in a tester build.
  */
 export function DevTools() {
   const insets = useSafeAreaInsets();

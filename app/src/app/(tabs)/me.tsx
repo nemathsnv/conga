@@ -1,5 +1,5 @@
 // Boards LV-MyProfile (own profile, populated) and X-Me-Empty (before any response).
-// Settings (S-Settings) arrives with a later phase; its icon is drawn as on the boards.
+// The Settings icon opens S-Settings (app/settings).
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback } from 'react';

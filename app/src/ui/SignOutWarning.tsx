@@ -5,7 +5,7 @@
 // recording the way Discard does (stops the upload; one Conga cannot confirm yet stays private on
 // this phone under this account) and never blocks the sign-out.
 //
-// NOT APPROVED YET: P9 is a proposal board. Lives on hold/failed-post-ui.
+// P9 was approved as drawn by Nemat on 16 Oct 2026 (design/BOARDS.md, "Failed posts").
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Modal } from 'react-native';
 
