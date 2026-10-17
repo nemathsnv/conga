@@ -3,7 +3,7 @@
 // SPEC.md Sections 4 and 6.
 import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from 'react-native';
@@ -16,7 +16,7 @@ import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
-import { sheetOverPage } from '@/ui/playbackRules';
+import { playerPageActive, sheetOverPage } from '@/ui/playbackRules';
 import { useOverlay } from '@/ui/playerOverlay';
 import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
@@ -36,6 +36,8 @@ export default function PlayerScreen() {
   // never loops back to one of them.
   const { promptId, entry, visited, openComments, openReplies } = useLocalSearchParams<{ promptId: string; entry?: string; visited?: string; openComments?: string; openReplies?: string }>();
   const overlay = useOverlay();
+  // Covered by another screen (a profile, the recorder, another player, a sheet): stop playing.
+  const focused = useIsFocused();
   const openedSheet = useRef(false);
   const [prompt, setPrompt] = useState<PromptCard | null>(null);
   const [pages, setPages] = useState<Page[] | null>(null);
@@ -116,7 +118,7 @@ export default function PlayerScreen() {
   const current = pages?.[index];
   const currentNumber = current?.kind === 'response' ? responses.findIndex((r) => r.response.id === current.response.id) + 1 : 0;
   // Comments keeps the response playing with its chrome hidden; Replies pauses and dims it.
-  const sheet = sheetOverPage(overlay, current?.kind === 'response' ? current.response.id : null);
+  const sheet = sheetOverPage(overlay, current?.kind === 'response' ? current.response.id : null, focused);
 
   const onViewable = useCallback(({ viewableItems }: { viewableItems: ViewToken<Page>[] }) => {
     const first = viewableItems.find((v) => v.isViewable);
@@ -209,7 +211,7 @@ export default function PlayerScreen() {
                 <ResponsePage
                   response={item.response}
                   prompt={prompt}
-                  active={i === index && sheet !== 'replies'}
+                  active={playerPageActive({ isCurrentPage: i === index, screenFocused: focused, overlay, responseId: item.response.id })}
                   chrome={!(i === index && sheet === 'comments')}
                   next={pages[i + 1]?.kind === 'response' ? (pages[i + 1] as Extract<Page, { kind: 'response' }>).response : null}
                   onProgress={setProgress}

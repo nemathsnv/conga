@@ -1,7 +1,7 @@
 // Boards Reply-Watch (a reply to the root), Reply-Watch-2 (a reply to a reply, flat in the
 // root's room) and A-Orphan (the root response was deleted). SPEC.md Section 7.
 import { track } from '@/lib/analytics';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from 'react-native';
@@ -17,6 +17,7 @@ import { ChevronLeft, HeartIcon, MoreIcon, RecordDotIcon, ShareIcon, VideoReplyI
 import { OrphanCard, ReplyCard } from '@/ui/ReplyCard';
 import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
+import { playerPageActive } from '@/ui/playbackRules';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { useOpenRecord } from '@/ui/recordEntry';
@@ -34,6 +35,8 @@ export default function ReplyPlayerScreen() {
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const list = useRef<FlatList<Page>>(null);
+  // Covered by another screen (a profile, the recorder, another player): stop playing.
+  const focused = useIsFocused();
 
   const load = useCallback(() => {
     if (!id) return Promise.resolve();
@@ -103,7 +106,7 @@ export default function ReplyPlayerScreen() {
             <View style={{ height }}>
               <ReplyPage
                 reply={item}
-                active={i === index}
+                active={playerPageActive({ isCurrentPage: i === index, screenFocused: focused, overlay: null, responseId: item.id })}
                 rootAuthor={rootAuthor}
                 orphan={!!orphan}
                 promptText={video.context.kind === 'reply' ? video.context.prompt_text : video.prompt.text}
