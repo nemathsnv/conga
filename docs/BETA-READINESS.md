@@ -4863,6 +4863,14 @@ Base `4b2fe3f`; 23 commits to `c12724e`. Nothing pushed, deployed, installed on 
 - *Re-walk (same day):* D-A, D-B (Replies from Comments drew the header over the author line) and D-D (an
   unknown link from a pushed screen stayed put) fixed (`c12724e`, `dbc149e`, `45b44ab`) and seen fixed on
   the simulator (SIMULATOR-WALK-17OCT, Re-walk).
+- *EAS and the founder build (17 Oct, later):* `eas init` created **@nemathsnv/conga** (id in `app.config.ts`);
+  channels `founder`, `preview`, `production` created, nothing published; EAS environments empty. The
+  founder Release build compiles for the iPhone (unsigned check: BUILD SUCCEEDED; `app.shortcut.founder`,
+  Conga 0.1.0 (1), updates from the `founder` channel, embedded fingerprint
+  `edf83d3d73556f1c00acd0a131ff609ebb31e158` equal to the publish-time one). The **signed** build stopped
+  at signing: Xcode has no Apple ID signed in ("No Accounts"), so the free profile for
+  `app.shortcut.founder` cannot be created; Nemat signs in to Xcode (Settings > Accounts), then
+  `INSTALL=0 DEVICE=<udid> app/scripts/founder-ios.sh release`. Not installed.
 - *Still open from this pass:* D-C (hidden responses still counted; server side, section 1), the end card's one-response copy (section 1); M2 fixed (`7c6276c`); failed
   recording start shows nothing (no board); "Send a new code" failures silent (no board); unreferenced
   files in `Documents/recordings/` never swept; sign-out scope global vs local (Nemat). Android still never
