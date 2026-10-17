@@ -11,7 +11,7 @@ drift.
 
 | Item | State |
 | --- | --- |
-| Package name | `app.shortcut` (permanent once published; same name-approval caveat as the iOS bundle id, `IOS.md` section 2) |
+| Package name | `app.shortcut`, kept through the rename to Conga (permanent once published; decide it with the iOS bundle id, `IOS.md` section 2, `CONGA-RENAME.md` section 4) |
 | Version | `versionName 0.1.0`, `versionCode 1` in the project; `eas.json` keeps the code on EAS (`appVersionSource: remote`, `autoIncrement`) |
 | SDK levels | React Native 0.86 defaults: `minSdk 24` (Android 7.0), `targetSdk 36` (`node_modules/react-native/gradle/libs.versions.toml`). Confirm in the generated `android/build.gradle` at the first build. |
 | Orientation, back gesture | portrait; `predictiveBackGestureEnabled: false` |

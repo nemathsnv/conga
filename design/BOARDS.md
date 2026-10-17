@@ -8,6 +8,7 @@ Plus 14 failed-post boards (`P1` to `P9`, with their video reply versions), appr
 - `html/<ID>.html` is the static board markup. Open it in a browser and use it for exact colours, sizes, spacing and copy. It is a design reference, not app code. Rebuild in React Native and do not port the HTML.
 - Board IDs match the screen IDs in `SPEC.md`. Where a canvas note below disagrees with SPEC.md, **SPEC.md wins**.
 - People and photos in the boards are placeholders.
+- Product name: the boards were drawn as "Shortcut". Since 17 Oct 2026 the product is **Conga** (`docs/DECISIONS.md`): the name is replaced in `html/<ID>.html` and in the notes below, which stay the copy source word for word. The `boards/<ID>.jpg` renders are unchanged images and still show "Shortcut"; read the name from the HTML.
 
 ## A1 Native — prompt, video responses, conversation. Press Play and tap through.
 

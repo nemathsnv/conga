@@ -6,7 +6,7 @@
 > it invents no support promise, response time or channel. Stores also need this page as the support URL and, on Apple,
 > as the published contact for user-generated content.
 
-**Product:** [PLACEHOLDER: final product name; "Conga" is the working name]
+**Product:** Conga
 **Support contact:** [PLACEHOLDER: support email address or form URL]
 **Privacy and data requests:** [PLACEHOLDER: privacy contact]
 **Safety and legal notices (including copyright):** [PLACEHOLDER: legal contact]

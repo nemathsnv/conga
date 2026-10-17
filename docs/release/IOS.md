@@ -44,11 +44,12 @@ likely.
    Welcome hides the Apple button, `signInWithApple()` throws "not configured", no push token is registered.
    The founder build also refuses any Supabase URL that is not the hosted project. It must never go to anyone
    else, and it is not a path to TestFlight.
-4. **Name.** The App Store listing name must be unique on the store. "Conga" is the implementation name only;
-   the product name and brand are unapproved (CLAUDE.md, DECISIONS 9 Oct). The bundle id is permanent once an
-   app is created in App Store Connect, so approve the name and bundle id **before** creating the app record.
-   `app.shortcut` also implies the unbought domain `conga.churntech.com`; it does not need to be owned to register
-   the identifier, but a mismatch with the final brand would be costly later.
+4. **Name.** The product name is Conga (DECISIONS 17 Oct). The App Store listing name must be unique on the
+   store, and an established software company already trades as Conga: check the store name and the
+   trademark before creating the app record (`CONGA-RENAME.md` section 3). The bundle id is permanent once an
+   app is created in App Store Connect, so decide it **before** creating the app record. `app.shortcut` was kept
+   through the rename (it implies the unowned domain `shortcut.app`); `com.churntech.conga` would follow the
+   domain Nemat owns. What a change touches: `CONGA-RENAME.md` section 4.
 
 ## 3. Identifier, capabilities and entitlements
 
@@ -157,7 +158,7 @@ production`.
 
 | Item | Needed for | Status |
 | --- | --- | --- |
-| App Store Connect app record (name, primary language, bundle id `app.shortcut`, SKU) | any TestFlight build | not created; blocked on the name decision |
+| App Store Connect app record (name, primary language, bundle id `app.shortcut`, SKU) | any TestFlight build | not created; blocked on the bundle id decision and the store-name check (name decided 17 Oct) |
 | Processed build | testers | none |
 | Export compliance | every build | answered in the build: `ITSAppUsesNonExemptEncryption = false` (HTTPS and OS cryptography only; **confirm with Nemat that no proprietary or non-standard cryptography exists**: none was found) |
 | Internal testing | up to the App Store Connect team members, no review | possible as soon as a build is processed |

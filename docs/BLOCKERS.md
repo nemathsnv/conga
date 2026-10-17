@@ -68,8 +68,13 @@ stops it; comments within 10 minutes arrive as one notification.
 
 ## B-3 · Web domain and app links (phase 5, open)
 
-**Requirement.** Shared links on one domain (SPEC.md Section 4: `shortcut.app/r/{id}`, `/p/{id}`,
+**Requirement.** Shared links on one domain (SPEC.md Section 4: `conga.churntech.com/r/{id}`, `/p/{id}`,
 `/i/{code}`), universal links and Android app links opening the app, link previews.
+
+**17 Oct.** The domain is chosen: `conga.churntech.com`, admin on `admin.conga.churntech.com`, both
+subdomains of `churntech.com`, which is already on Cloudflare (no purchase). The Pages package and the
+dashboard steps are ready, nothing deployed: `docs/release/CLOUDFLARE-DASHBOARD.md`. The paragraphs
+below describe the state before that.
 
 **Why it is open.** The domain is not bought or pointed anywhere (SPEC.md Section 22). The web
 player is built as the `web` Edge Function and works on the Supabase function URL; the app's links

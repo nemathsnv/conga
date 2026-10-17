@@ -18,7 +18,7 @@
 
 **Effective date:** [PLACEHOLDER: date]
 **Who we are:** [PLACEHOLDER: Company legal name], [PLACEHOLDER: registered address and country], the company that
-runs Conga ("we", "us"). [PLACEHOLDER: final product name; "Conga" is the working name.]
+runs Conga ("we", "us").
 **Contact for privacy questions and requests:** [PLACEHOLDER: privacy contact email address]
 (see also `HELP-AND-CONTACT.md`). [PLACEHOLDER: data protection officer or representative, if one is required.
 **[LEGAL REVIEW]**]

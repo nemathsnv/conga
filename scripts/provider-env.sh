@@ -5,7 +5,7 @@
 # It prints no value. It sets the approval flags, so source it only after Nemat's go for a test.
 # The main checkout (where the git-ignored .env files live), found from git so the scripts keep
 # working from any worktree and after the project folder is renamed (docs/release/CONGA-RENAME.md).
-MAIN_CHECKOUT="$(cd "$(git -C "$(dirname "${BASH_SOURCE[0]:-$0}")" rev-parse --git-common-dir)/.." && pwd)"
+MAIN_CHECKOUT="$(cd "$(git -C "$(dirname "${BASH_SOURCE[0]:-$0}")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 ENV_FILE="${CONGA_APP_ENV:-$MAIN_CHECKOUT/app/.env.founder}"   # the file that names the hosted project (app/.env points at the local stack)
 if [ ! -r "$ENV_FILE" ]; then echo "provider-env: $ENV_FILE not readable" >&2; return 1 2>/dev/null || exit 1; fi
 export PT_SUPABASE_URL="$(sed -n 's/^EXPO_PUBLIC_SUPABASE_URL=//p' "$ENV_FILE" | tr -d '"' | head -1)"

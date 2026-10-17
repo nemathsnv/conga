@@ -2,7 +2,9 @@
 https://claude.ai/code/artifact/eee59791-f711-4dac-bc44-d24dfaae2018
 The online doc is the master. If it changes, re-export this file. Diagrams were converted to text.
 Local revision, 14 Oct 2026 (approved by Nemat): section 19, failed posts, Discard and sign-out.
-Not yet in the online master: update the master before the next re-export, or this revision is lost. -->
+Local revision, 17 Oct 2026 (Nemat): the product name is Conga, and the links are on conga.churntech.com
+(section 4). Name and domain only; no behaviour changed.
+Not yet in the online master: update the master before the next re-export, or these revisions are lost. -->
 
 # Conga v1 — Product and Build Specification
 

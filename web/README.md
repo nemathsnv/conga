@@ -1,7 +1,10 @@
 # web/: shared-link pages and the moderation admin on Cloudflare Pages
 
-Option B of [`docs/release/WEB-HOSTING.md`](../docs/release/WEB-HOSTING.md). **Prepared and tested
-locally only. Nothing here has been deployed, and no Cloudflare account, domain or DNS exists yet.**
+Option B of [`docs/release/WEB-HOSTING.md`](../docs/release/WEB-HOSTING.md), for Conga's link domain
+`conga.churntech.com` and the admin on `admin.conga.churntech.com` (Pages project `conga-web`).
+**Prepared and tested locally only. Nothing here has been deployed.** It is deployed by uploading
+`dist/conga-web-dashboard.zip` in the Cloudflare dashboard
+([`docs/release/CLOUDFLARE-DASHBOARD.md`](../docs/release/CLOUDFLARE-DASHBOARD.md)); no Wrangler login.
 
 Supabase stays the backend. This project only serves HTML on a domain that is allowed to serve it.
 
@@ -19,27 +22,31 @@ Supabase stays the backend. This project only serves HTML on a domain that is al
 The pages come from `supabase/functions/web/render.ts`, the same module the `web` Edge Function
 uses. They have the same words, Open Graph tags, `noindex` and app link. The admin sign-in page
 comes from `supabase/functions/admin/shell.ts` and `handler.ts`. Wrangler bundles those files
-straight from `supabase/` with esbuild. There is no build step and nothing in `app/`. This
-project holds no service-role key.
+straight from `supabase/` with esbuild. Two entries share `src/handler.ts`: `functions/[[path]].ts`
+(Pages Functions, for `wrangler pages dev` and any future Wrangler deployment) and `src/worker.ts`
+(advanced mode, bundled into the ZIP's `_worker.js`, because a dashboard upload compiles no
+`functions/` folder). Nothing in `app/`. This project holds no service-role key.
 
 ## Configuration
 
 | Name | Kind | Value |
 |---|---|---|
-| `SUPABASE_URL` | var (`wrangler.toml`) | `https://picvoavfxnajfjkqawju.supabase.co` for preview and production. Locally, a local stack. |
+| `SUPABASE_URL` | variable (dashboard; `wrangler.toml` locally) | `https://picvoavfxnajfjkqawju.supabase.co` in production. Locally, a local stack. |
 | `SUPABASE_ANON_KEY` | secret | The project's publishable key (`sb_publishable_…`), the same one as `EXPO_PUBLIC_SUPABASE_ANON_KEY`. It is public, but it stays out of git. |
 | `WEB_PROXY_KEY` | secret | 32 or more random characters, also set as the `web` function's `WEB_PROXY_KEY` secret. It lets the function trust the visitor address this host passes on. Without it, every visitor shares Cloudflare's one Worker address for the `web_event` limit, and `web_link_opened` is not logged. |
-| `ADMIN_HOST` | var | For example `admin.<domain>`. When set, the admin is served only on that host and the pages never are. Empty means `/admin` is served on every host (local development). |
-| `WEB_BASE_URL` | var | Where the admin's "web player" links point. Empty means the request's origin. |
-| `STORE_URL`, `WAITLIST_URL` | var, optional | The same fallbacks as the function (`https://shortcut.app`). |
+| `ADMIN_HOST` | variable | `admin.conga.churntech.com`. When set, the admin is served only on that host and the pages never are. Empty means `/admin` is served on every host (local development only: the dashboard entry, `src/worker.ts`, serves nothing but the association files until `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `ADMIN_HOST` are set). |
+| `WEB_BASE_URL` | variable | `https://conga.churntech.com`. Where the admin's "web player" links point. Empty means the request's origin. |
+| `STORE_URL`, `WAITLIST_URL` | variable, optional | The same fallbacks as the function (`https://conga.churntech.com`). |
 
 ## Tests (no network, no account)
 
 ```bash
 cd web
 npm ci                 # wrangler 4.146.0 and vitest 5.0.2, pinned in package-lock.json
-npm test               # vitest: 21 tests; upstream calls go to a recording fake fetch
+npm test               # vitest: 25 tests; upstream calls go to a recording fake fetch
 npm run build:check    # wrangler pages functions build: bundles functions/ and the shared supabase/ modules
+npm run build:dashboard   # dist/conga-web-dashboard.zip: _worker.js, _routes.json, _headers, .well-known/ (prints SHA-256)
+npm run verify:dashboard  # unzips that archive, serves it with the local Pages runtime against a fake Supabase: 29 checks
 ```
 
 ## Local run against a LOCAL stack
@@ -55,37 +62,16 @@ cd web && npm run dev                                  # http://127.0.0.1:8788/r
 
 ## Deploy (NOT run; each step needs Nemat's go-ahead)
 
-You need a Cloudflare account, a domain with its DNS on Cloudflare (needed for the apex; a
-subdomain can be a CNAME), and approval to deploy. In order:
+By dashboard upload only, in six approvals: [`docs/release/PAGES-ROLLOUT.md`](../docs/release/PAGES-ROLLOUT.md)
+for the order, [`docs/release/CLOUDFLARE-DASHBOARD.md`](../docs/release/CLOUDFLARE-DASHBOARD.md) for every
+click, setting and check. In short: create `conga-web` by uploading the ZIP; set the variables and the two
+encrypted secrets and upload it again; the same `WEB_PROXY_KEY` on Supabase and a redeploy of the `web`
+function; then the custom domains `conga.churntech.com` and `admin.conga.churntech.com`.
 
-```bash
-cd web
-npx wrangler login
-npx wrangler pages project create shortcut-web --production-branch main
-# Fill ADMIN_HOST (admin.<domain>) and WEB_BASE_URL (https://<domain>) in wrangler.toml [env.production.vars] and commit.
-printf '%s' "<publishable key>" | npx wrangler pages secret put SUPABASE_ANON_KEY --project-name shortcut-web
-printf '%s' "<random 64 hex>"   | npx wrangler pages secret put WEB_PROXY_KEY     --project-name shortcut-web
-# Supabase side: the same key for the web function, then redeploy it (it also carries render.ts):
-supabase secrets set WEB_PROXY_KEY=<random 64 hex> --project-ref picvoavfxnajfjkqawju
-supabase functions deploy web --no-verify-jwt --project-ref picvoavfxnajfjkqawju
-npx wrangler pages deploy public --project-name shortcut-web --branch main
-```
+When the paid Apple team and the Android signing key exist (B-3), replace `APPLE_TEAM_ID` and the
+fingerprint in `public/.well-known/`, rebuild the ZIP, then add `associatedDomains` and `intentFilters`
+in `app.config.ts` (the bundle id decision first: `docs/release/CONGA-RENAME.md` section 4).
 
-Then, in the Cloudflare dashboard, open Pages, then `shortcut-web`, then Custom domains. Add
-`<domain>` (the apex, for `/r/{id}`) and `admin.<domain>`. Check them:
-
-```bash
-curl -sI https://<domain>/r/<live response id>        # 200, content-type: text/html; charset=utf-8, x-robots-tag: noindex
-curl -sI https://<domain>/.well-known/apple-app-site-association   # 200, application/json, no redirect
-curl -sI https://admin.<domain>/admin                  # 200, text/html, content-security-policy with a nonce
-curl -sI https://admin.<domain>/r/<id>                 # 404 (no pages on the admin host)
-```
-
-After the checks: set `EXPO_PUBLIC_WEB_BASE_URL=https://<domain>` in the EAS environments and
-`app/.env`. When the paid Apple team and the Android signing key exist (B-3), replace
-`APPLE_TEAM_ID` and the fingerprint in `public/.well-known/`, then add `associatedDomains` and
-`intentFilters` in `app.config.ts`.
-
-Rollback: `npx wrangler pages deployment list --project-name shortcut-web`, then roll back in the
-dashboard. If needed, remove the custom domains. Nothing on Supabase depends on this project; with
-`WEB_PROXY_KEY` unset the `web` function behaves exactly as before.
+Rollback: in the dashboard, Deployments, roll back to an earlier deployment; if needed, remove the
+custom domains. Nothing on Supabase depends on this project; with `WEB_PROXY_KEY` unset the `web`
+function behaves exactly as before.

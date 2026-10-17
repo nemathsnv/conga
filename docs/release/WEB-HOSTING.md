@@ -3,6 +3,13 @@
 **For Nemat to decide.** Nothing has been deployed. No DNS, domain, account, Supabase setting or
 hosted resource was created or changed. The hosted project was not contacted.
 
+**Update, 17 Oct (after the rename, `CONGA-RENAME.md`):** option B is the path. `<domain>` below is
+`conga.churntech.com` (links) with the admin on `admin.conga.churntech.com`; `churntech.com` is already a
+Cloudflare zone, so nothing is bought. Nemat deploys from the dashboard by uploading
+`web/dist/conga-web-dashboard.zip` (an advanced-mode `_worker.js`; a dashboard upload compiles no
+`functions/` folder): `CLOUDFLARE-DASHBOARD.md`, approvals in `PAGES-ROLLOUT.md`. The comparison below is
+kept as written.
+
 **Recommendation: option B.** Cloudflare Pages, with Pages Functions serving `/r`, `/p`, `/i`, `/u`
 and the admin. Supabase stays the backend API. B is prepared and tested locally in `web/`.
 

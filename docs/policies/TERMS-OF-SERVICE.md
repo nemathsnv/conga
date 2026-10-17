@@ -8,7 +8,7 @@
 
 **Effective date:** [PLACEHOLDER: date]
 **Who these terms are with:** [PLACEHOLDER: Company legal name], [PLACEHOLDER: registered address and country]
-("we", "us"). [PLACEHOLDER: final product name; "Conga" is the working name.]
+("we", "us").
 
 ## 1. Agreeing to these terms
 

@@ -18,8 +18,8 @@ export type RenderConfig = {
   waitlistUrl: string;
 };
 
-/** The defaults the function has always used: STORE_URL falls back to https://conga.churntech.com, and
- *  WAITLIST_URL to the store URL. */
+/** The defaults: STORE_URL falls back to https://conga.churntech.com (https://shortcut.app before the
+ *  rename on 17 Oct), and WAITLIST_URL to the store URL. */
 export function renderConfig(base: string, env: { SUPABASE_URL?: string; STORE_URL?: string; WAITLIST_URL?: string }): RenderConfig {
   const storeUrl = env.STORE_URL ?? "https://conga.churntech.com";
   return { base, supabaseUrl: env.SUPABASE_URL, storeUrl, waitlistUrl: env.WAITLIST_URL ?? storeUrl };

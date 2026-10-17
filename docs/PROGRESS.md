@@ -69,3 +69,15 @@ provider rehearsal 8/8; auth integration 52/52; admin HTTP 4/4; typecheck and li
 
 Push, deploy, hosted changes, real Mux calls, continuous clean-up, EAS/Apple/Google accounts,
 TestFlight, the online master spec, unapproved UI (P1 to P9 wait for Nemat's visual approval).
+
+## 17 Oct 2026: rename to Conga and the dashboard package for Cloudflare Pages
+
+| Item | Status |
+|---|---|
+| Rename Shortcut to Conga in code, copy, boards, spec name and current docs; stable identifiers kept (`docs/release/CONGA-RENAME.md`) | implemented locally |
+| `web/dist/conga-web-dashboard.zip` (advanced-mode `_worker.js`, `_routes.json`, `_headers`, `.well-known`), `npm run build:dashboard`, `npm run verify:dashboard` | implemented locally; verified on the local Pages runtime only |
+| Dashboard instructions (`docs/release/CLOUDFLARE-DASHBOARD.md`), six approvals (`PAGES-ROLLOUT.md`) | prepared; nothing run on Cloudflare or Supabase |
+| `scripts/move-project-folder.sh` (folder move with worktree repair) | tested on a scratch replica; not run on the real folder |
+| Hosted sign-in email template and SMTP sender name still say Shortcut | blocked on Nemat (dashboard) |
+| Trademark and store-name check for Conga; bundle id, package and scheme decision | not started (Nemat) |
+

@@ -37,8 +37,8 @@ Apple Developer Program (paid) ─► App ID capabilities ─┬─► APNs key 
                                    │                   └─► App Store Connect record ─► eas submit ─► TestFlight
                                    ├─► Sign in with Apple, native (bundle id only) ─► Supabase Apple provider
                                    └─► [Android web flow only] Services ID ─► key ─► client-secret JWT ─► supabase/.env
-Domain (bought) ─► Cloudflare account (free) + the domain's DNS on Cloudflare ─► Pages project `conga-web` ─► Pages secrets
-   (SUPABASE_ANON_KEY, WEB_PROXY_KEY) ──┐                                    └─► custom domains `<domain>` and `admin.<domain>` ─► EXPO_PUBLIC_WEB_BASE_URL
+conga.churntech.com (chosen; churntech.com already on Cloudflare) ─► Pages project `conga-web` (ZIP upload) ─► Pages secrets
+   (SUPABASE_ANON_KEY, WEB_PROXY_KEY) ──┐                                    └─► custom domains `conga.churntech.com` and `admin.conga.churntech.com` ─► EXPO_PUBLIC_WEB_BASE_URL
    Supabase: same WEB_PROXY_KEY as a function secret ─► redeploy `web` ◄─┘
    Auth stays on `picvoavfxnajfjkqawju.supabase.co`, so the Services ID return URL and Google redirect URI do NOT wait for the domain
    Apple Team ID (from the Developer Program) ─► `.well-known/apple-app-site-association`;  signing SHA-256s ─► `.well-known/assetlinks.json`
@@ -62,12 +62,12 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 | S5 | Firebase project | account | OPTIONAL | no | Nemat | console.firebase.google.com | S4 optional | Android push |
 | S6 | Supabase Pro plan | paid plan | **OPTIONAL: Nemat decides.** Reasons: backups (none at the 9 Oct check), no project pausing, support. No longer needed for the domain | yes | Nemat | Supabase dashboard billing | none | backups for the policies (B2) |
 | S7 | Mux paid plan (card on file) | paid plan | REQUIRED | yes | Nemat | Mux dashboard billing | none | more than 10 assets |
-| S8 | Domain name (apex or a subdomain) | paid account | REQUIRED (web pages, admin) | yes | Nemat | a registrar; DNS on Cloudflare (needed for the apex; a subdomain can be a CNAME) | D2 name | W1 to W9 |
+| S8 | Domain: `conga.churntech.com` and `admin.conga.churntech.com` (subdomains of `churntech.com`, already owned, DNS already on Cloudflare) | decision | DONE 17 Oct (chosen; no purchase) | yes | Nemat | the `churntech.com` zone on Cloudflare | none | W5 |
 | S9 | Resend plan | account | already exists; upgrade OPTIONAL | yes | Nemat | Resend dashboard | none | email volume |
-| S10 | Cloudflare account (free plan) | account | REQUIRED (web pages, admin) | yes | Nemat | dash.cloudflare.com; `npx wrangler login` on the Mac | none | W2 to W7 |
+| S10 | Cloudflare account (free plan): the one that holds the `churntech.com` zone | account | REQUIRED (web pages, admin) | yes | Nemat | dash.cloudflare.com; dashboard only, no Wrangler login | none | W3 to W5 |
 | **Decisions** | | | | | | | | |
 | D1 | Seller: individual or company | decision | REQUIRED | yes | Nemat | Apple/Google enrolment; policies `[Company legal name]` | none | S2, S3 |
-| D2 | Product name, bundle id `app.shortcut`, package `app.shortcut` | decision | REQUIRED | yes | Nemat | `app.config.ts`, Apple, Google, App Store Connect | none | A2, A9, G3 |
+| D2 | Bundle id `app.shortcut` and package `app.shortcut`: confirm, or change them (for example `com.churntech.conga`) before any store record. The name is decided: Conga (17 Oct) | decision | REQUIRED | yes | Nemat | `app.config.ts`, Apple, Google, App Store Connect (`CONGA-RENAME.md` section 4) | none | A2, A9, G3 |
 | D3 | Reviewer access plan for Apple/Google review | decision | REQUIRED before external TestFlight | yes | Nemat | App Review notes | A9 | external TestFlight |
 | D4 | `STORE_URL`, `WAITLIST_URL` | decision | REQUIRED before the web pages go public | yes | Nemat | Supabase function secrets | A9 (store URL) | W6 |
 | D5 | Retention periods, backups plan, moderators, scanner yes/no | decisions | REQUIRED for the policies | yes | Nemat | `docs/policies`, `DECISIONS.md` | none | policy publication |
@@ -105,13 +105,13 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 | E3 | DMARC record | provider setting | REQUIRED before outside testers | yes | Nemat | DNS of the sending domain | E1 | deliverability |
 | E4 | Email rate limit before declaring SMTP in `config.toml` | provider setting | REQUIRED if SMTP is ever declared | yes | Lead | `config.toml` `email_sent`, then `config diff` | E1 | safe config push |
 | **Domain and web** | | | | | | | | |
-| W1 | Buy the domain | paid account | REQUIRED | yes | Nemat | registrar | D2 | W2 |
-| W2 | DNS on Cloudflare: bought through Cloudflare Registrar, or nameservers moved (up to a day), or a CNAME for a subdomain only | provider setting | REQUIRED | yes | Nemat | Cloudflare dashboard | W1, S10 | W6 |
-| W3 | Pages project `conga-web` (`wrangler pages project create`) | provider setting | REQUIRED | yes | Nemat, Lead | Cloudflare Pages | S10 | W4 |
-| W4 | Pages configuration: secrets `SUPABASE_ANON_KEY` (the publishable key, set as a Pages environment variable/secret binding, never in git) and `WEB_PROXY_KEY` (32+ random characters); variables `ADMIN_HOST=admin.<domain>`, `WEB_BASE_URL=https://<domain>` in `web/wrangler.toml` `[env.production.vars]` (committed, not secret), optional `STORE_URL`/`WAITLIST_URL` | credential, config | REQUIRED | yes | Nemat sets the secrets; Lead commits the vars | Cloudflare Pages secrets (`wrangler pages secret put`); `web/wrangler.toml` | W3, D2 (domain), D4 | W6 |
-| W5 | Supabase side: the **same** `WEB_PROXY_KEY` as a function secret (`supabase secrets set`), then **redeploy the `web` function** (it now carries `render.ts`); needs Nemat's approval | credential, deploy | REQUIRED | yes | Nemat sets the value; Lead deploys | Supabase function secret; hosted `web` | W4 (the value is generated once and used in both places) | per-visitor rate limits; `web_link_opened` events |
-| W6 | Deploy the Pages project and add custom domains `<domain>` and `admin.<domain>`; run the four checks in `web/README.md` (`text/html` on `/r/<id>`, JSON `.well-known`, `/admin` with a nonce CSP on the admin host, 404 for pages on the admin host) | provider setting | REQUIRED | yes | Nemat, Lead | Cloudflare Pages | W2, W4, W5 | `web` pages, `admin` (H7) |
-| W7 | `EXPO_PUBLIC_WEB_BASE_URL=https://<domain>` in the EAS `preview` and `production` environments and `app/.env` (after W6 passes). `ADMIN_AUTH_BASE` is not needed on this path: Auth stays on `supabase.co` | config | REQUIRED | yes | Lead | EAS variable | W6 | share links in the app |
+| W1 | Domain | decision | DONE 17 Oct: `conga.churntech.com`, no purchase | yes | Nemat | none | none | W5 |
+| W2 | DNS on Cloudflare | provider setting | DONE before 17 Oct: `churntech.com` already uses Cloudflare nameservers | yes | Nemat | none | none | W5 |
+| W3 | Pages project `conga-web` by Direct Upload of `web/dist/conga-web-dashboard.zip` (`CLOUDFLARE-DASHBOARD.md` part 1) | provider setting | REQUIRED | yes | Nemat | Cloudflare dashboard, Workers & Pages | S10 | W4 |
+| W4 | Pages settings: compatibility date 2026-10-01; variables `SUPABASE_URL`, `ADMIN_HOST=admin.conga.churntech.com`, `WEB_BASE_URL=https://conga.churntech.com`; encrypted `SUPABASE_ANON_KEY` (the publishable key) and `WEB_PROXY_KEY` (64 hex); then upload the ZIP again (part 2) | credential, config | REQUIRED | yes | Nemat | Cloudflare dashboard, Settings, Variables and Secrets | W3 | W5 |
+| W5 | Supabase side: the **same** `WEB_PROXY_KEY` as a function secret, then **redeploy the `web` function** from the renamed code (parts 3 and 4); then custom domains `conga.churntech.com` and `admin.conga.churntech.com` and the four checks (part 5) | credential, deploy, provider setting | REQUIRED | yes | Nemat (secret, domains), Lead (deploy, checks) | Supabase dashboard or CLI; Cloudflare dashboard | W4 | W7, H7 |
+| W6 | (merged into W5 on 17 Oct: the deploy is the ZIP upload of W3 and W4) | | | | | | | |
+| W7 | `EXPO_PUBLIC_WEB_BASE_URL=https://conga.churntech.com` in `app/.env.founder`, later the EAS `preview` and `production` environments (after W5 passes). `ADMIN_AUTH_BASE` is not needed on this path: Auth stays on `supabase.co` | config | REQUIRED | yes | Nemat | `app/.env.founder`, EAS | W5 | links in the app point at the domain |
 | W8 | The two `.well-known` files: Apple Team ID into `web/public/.well-known/apple-app-site-association` (input A13), Android signing SHA-256(s) into `assetlinks.json` (input G6) | provider setting | OPTIONAL | AASA optional, assetlinks **no** | Nemat gives the values (neither is a secret); Lead edits and redeploys Pages | `web/public/.well-known/` | W6, A1 / Android signing | universal and app links |
 | W9 | `associatedDomains` and `intentFilters` | repo edit after W8 | OPTIONAL | optional | Agent F on request | `app.config.ts` | W8 | links open the app |
 | **Mux** | | | | | | | | |
@@ -138,9 +138,10 @@ Mux paid plan ─► (nothing else waits on it, but the free plan caps at 10 ass
 
 1. Decide the seller (individual or company). A company account needs a legal entity (and for Apple a D-U-N-S number),
    which can take days to weeks: start it first (LONG-LEAD).
-2. Approve the product name. Then confirm or change `app.shortcut` (iOS bundle id and Android package). They cannot be
-   changed after the first App Store Connect or Play Console app is created (`IOS.md` section 2). Changing means
-   editing `app.config.ts`, `supabase/.env` (Apple client id) and the Google and Apple consoles.
+2. The product name is decided: Conga (17 Oct; a trademark and store-name check is still open, `CONGA-RENAME.md`
+   section 3). Confirm or change `app.shortcut` (iOS bundle id and Android package; the rename kept it on purpose).
+   They cannot be changed after the first App Store Connect or Play Console app is created (`IOS.md` section 2). What a
+   change touches, and the order for the URL scheme, is in `CONGA-RENAME.md` section 4.
 3. Decide D6, iPhone-only or both. It removes every item marked "no" in the iPhone-only column from the beta path.
 
 ### S1 Expo (free)
@@ -167,7 +168,7 @@ Billing pages of each provider, entered by Nemat. Reasons, each from the docs:
   on the free plan. Decide with B2.
 - Mux's free plan caps at 10 assets and the Beta environment has 2 plus the spike's 7 (BETA-READINESS sections 12 and 27,
   `PROVIDER-TESTS.md`).
-- The domain is needed for the web pages, link previews and the admin (W1); the Cloudflare account on the **free** plan covers
+- The domain (chosen 17 Oct: `conga.churntech.com`, no purchase) is needed for the web pages, link previews and the admin; the Cloudflare account on the **free** plan covers
   the Pages project (`WEB-HOSTING.md` section 3: 100,000 Function requests a day, static files free).
 
 ### S4 Google Cloud, S9 Resend
@@ -284,27 +285,31 @@ Pages with Pages Functions**, prepared and tested locally in `web/`, not deploye
 apex, serves the `.well-known` files, isolates the admin on its own host, and needs no Supabase plan change. Option A (the Supabase
 add-on, `CUSTOM-DOMAIN.md`) is not being bought. Each step below is on Nemat's go-ahead; the exact commands are in `web/README.md`.
 
-1. **W1** Buy the domain (D2). Not a domain of the provisional brand if it will also send email (DECISIONS 9 Oct).
-2. **S10** Create the Cloudflare account (free plan); on the Mac `cd web && npx wrangler login`.
-3. **W2** Put the domain's DNS on Cloudflare (Registrar purchase is immediate; a nameserver move from another registrar can take
-   up to a day). A subdomain-only setup can use a CNAME, but the apex (`https://<domain>/r/{id}`) needs Cloudflare DNS.
-4. **W3** `npx wrangler pages project create conga-web --production-branch main`.
-5. **W4** Generate `WEB_PROXY_KEY` (`openssl rand -hex 32`, kept in a shell variable, never printed). Then
-   `npx wrangler pages secret put SUPABASE_ANON_KEY --project-name conga-web` (the publishable key, from the dashboard; it is
-   public but kept out of git) and `... put WEB_PROXY_KEY ...`. In `web/wrangler.toml` `[env.production.vars]` fill `ADMIN_HOST`
-   (`admin.<domain>`) and `WEB_BASE_URL` (`https://<domain>`) and commit; optional `STORE_URL`, `WAITLIST_URL` (D4).
-6. **W5** Supabase side, with approval: `supabase secrets set WEB_PROXY_KEY=<the same value> --project-ref picvoavfxnajfjkqawju`,
-   then `supabase functions deploy web --no-verify-jwt --project-ref picvoavfxnajfjkqawju` (redeploy; it now carries `render.ts`).
-   Without the key the function behaves as before. The key lives in two places and must be rotated together (`WEB-HOSTING.md`
-   section 3).
-7. **W6** `npx wrangler pages deploy public --project-name conga-web --branch main`; Cloudflare dashboard, Pages,
-   `conga-web`, Custom domains: add `<domain>` and `admin.<domain>`. Check with `curl -sI`: `/r/<live id>` is 200
-   `text/html` with `x-robots-tag: noindex`; `/.well-known/apple-app-site-association` is 200 `application/json`; `admin.<domain>/admin`
-   is 200 with a nonce CSP; `admin.<domain>/r/<id>` is 404. Then open a `/r/<id>` link in a phone browser and check a link
-   preview shows thumbnail and prompt. Only then deploy the admin function (H7).
-8. **W7** `EXPO_PUBLIC_WEB_BASE_URL=https://<domain>` in the EAS `preview` and `production` environments and `app/.env`.
-9. **W8, OPTIONAL for a first beta.** Replace the placeholders in `web/public/.well-known/` with the Apple Team ID (A13) and the
-   Android SHA-256 (G6), redeploy Pages, then `associatedDomains` and `intentFilters` in `app.config.ts` (`IOS.md` section 3,
+Revised 17 Oct: the domain is chosen (`conga.churntech.com`, admin on `admin.conga.churntech.com`; `churntech.com` is
+already a Cloudflare zone, so nothing is bought and no nameserver moves), and every Cloudflare step is done by Nemat in the
+dashboard, with no Wrangler login. The click-by-click steps are in `CLOUDFLARE-DASHBOARD.md`; the approval order in
+`PAGES-ROLLOUT.md`.
+
+1. **W1, W2** Done (the domain and its DNS).
+2. **S10** The Cloudflare account that holds `churntech.com`.
+3. **W3** Build and check the package (`cd web && npm ci && npm test && npm run build:dashboard && npm run verify:dashboard`),
+   then create the Pages project `conga-web` by uploading `web/dist/conga-web-dashboard.zip`.
+4. **W4** In the project's settings: compatibility date 2026-10-01; variables `SUPABASE_URL`, `ADMIN_HOST`, `WEB_BASE_URL`;
+   encrypted `SUPABASE_ANON_KEY` (the publishable key) and `WEB_PROXY_KEY` (`openssl rand -hex 32`, kept in
+   `~/.conga-provider/web-proxy.key`, never printed); upload the ZIP again so they apply. Optional `STORE_URL`, `WAITLIST_URL` (D4).
+5. **W5** Supabase side, with approval: the same `WEB_PROXY_KEY` as a function secret, then
+   `supabase functions deploy web --no-verify-jwt --project-ref picvoavfxnajfjkqawju` from the renamed code. The key lives in
+   two places and must be rotated together (`WEB-HOSTING.md` section 3). Then the custom domains `conga.churntech.com` and
+   `admin.conga.churntech.com` in the Pages project (Cloudflare creates the CNAMEs in the zone). Check with `curl -sI`:
+   `/r/<live id>` is 200 `text/html` with `x-robots-tag: noindex`; `/.well-known/apple-app-site-association` is 200
+   `application/json`; `admin.conga.churntech.com/admin` is 200 with a nonce CSP; `admin.conga.churntech.com/r/<id>` is 404.
+   Then open a `/r/<id>` link in a phone browser and check a link preview shows thumbnail and prompt. Only then deploy the
+   admin function (H7).
+6. (W6 is part of W3 to W5.)
+7. **W7** `EXPO_PUBLIC_WEB_BASE_URL=https://conga.churntech.com` in `app/.env.founder`, then the EAS `preview` and
+   `production` environments.
+8. **W8, OPTIONAL for a first beta.** Replace the placeholders in `web/public/.well-known/` with the Apple Team ID (A13) and the
+   Android SHA-256 (G6), rebuild and upload the ZIP, then `associatedDomains` and `intentFilters` in `app.config.ts` (`IOS.md` section 3,
    `ANDROID.md` section 6). Without them the page's "Open in the app" button still opens the app through the `shortcut://`
    scheme. `assetlinks.json` is Android only.
 
