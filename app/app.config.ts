@@ -23,6 +23,22 @@ if (founderBuild) {
   }
 }
 
+/**
+ * Why a build or an over-the-air update that will reach a phone must not be made with these values
+ * (empty when it may). `founder`: the founder build's rules (app.config.ts top, scripts/founder-ios.sh);
+ * otherwise the tester and store rules. `update`: also needs the EAS project, which the update URL names.
+ */
+export function releaseProblems(env: Record<string, string | undefined>, opts: { founder: boolean; update: boolean }): string[] {
+  const problems: string[] = [];
+  if (!/^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(env.EXPO_PUBLIC_SUPABASE_URL ?? '')) problems.push('EXPO_PUBLIC_SUPABASE_URL must be the hosted https://<ref>.supabase.co URL');
+  if (!(env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').startsWith('sb_publishable_')) problems.push('EXPO_PUBLIC_SUPABASE_ANON_KEY must be the hosted sb_publishable_ key');
+  if (!/^https:\/\/[a-z0-9.-]+$/.test(env.EXPO_PUBLIC_WEB_BASE_URL ?? '')) problems.push('EXPO_PUBLIC_WEB_BASE_URL must be the links domain, https://<host> with no path');
+  if (env.EXPO_PUBLIC_DEV_TOOLS === '1') problems.push('EXPO_PUBLIC_DEV_TOOLS must not be 1');
+  if (opts.founder !== (env.EXPO_PUBLIC_FOUNDER_BUILD === '1')) problems.push(`EXPO_PUBLIC_FOUNDER_BUILD must ${opts.founder ? '' : 'not '}be 1`);
+  if (opts.update && !/^[0-9a-f-]{36}$/.test(env.EAS_PROJECT_ID ?? '')) problems.push('EAS_PROJECT_ID must be the EAS project id');
+  return problems;
+}
+
 // Store and tester builds on EAS (profiles `preview` and `production`, eas.json): fail the build,
 // not the first launch, when the public values are wrong. EAS_BUILD is "true" only on the EAS build
 // servers, so local prebuilds and `eas build` reading this file on a laptop are not affected.
@@ -30,15 +46,38 @@ if (founderBuild) {
 // environment variables of that profile (docs/release/BUILD.md).
 const easProfile = process.env.EAS_BUILD === 'true' ? process.env.EAS_BUILD_PROFILE : undefined;
 if (easProfile === 'preview' || easProfile === 'production') {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-  const problems: string[] = [];
-  if (!/^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url)) problems.push('EXPO_PUBLIC_SUPABASE_URL must be the hosted https://<ref>.supabase.co URL');
-  if (!key.startsWith('sb_publishable_')) problems.push('EXPO_PUBLIC_SUPABASE_ANON_KEY must be the hosted sb_publishable_ key');
-  if (process.env.EXPO_PUBLIC_DEV_TOOLS === '1') problems.push('EXPO_PUBLIC_DEV_TOOLS must not be 1');
-  if (process.env.EXPO_PUBLIC_FOUNDER_BUILD === '1') problems.push('EXPO_PUBLIC_FOUNDER_BUILD must not be 1');
+  const problems = releaseProblems(process.env, { founder: false, update: false });
   if (problems.length > 0) throw new Error(`EAS ${easProfile} build refused: ${problems.join('; ')}.`);
 }
+
+// Over-the-air updates (docs/release/OTA-UPDATES.md). The JavaScript bundle of an update is exported
+// on this Mac with whatever EXPO_PUBLIC_* values the shell and the EAS environment hold, and they are
+// inlined into the code phones run, so scripts/publish-update.sh sets CONGA_UPDATE_CHANNEL and the
+// export stops here, before anything uploads, when they are not the values that channel's builds have.
+const updateChannel = process.env.CONGA_UPDATE_CHANNEL;
+if (updateChannel !== undefined) {
+  const problems = ['founder', 'preview', 'production'].includes(updateChannel)
+    ? releaseProblems(process.env, { founder: updateChannel === 'founder', update: true })
+    : [`unknown channel "${updateChannel}"`];
+  if (problems.length > 0) throw new Error(`Update for ${updateChannel} refused: ${problems.join('; ')}.`);
+}
+
+// EAS Update is on only once the EAS project exists (`eas init`, EAS_PROJECT_ID); until then a build
+// runs the JavaScript it was built with and never asks for an update. The runtime version is the
+// fingerprint of the native project (dependencies, config plugins, this config), computed at build
+// time and again when an update is published: an update only reaches builds with the same native
+// code, so any native change needs a new build. EAS builds get their channel from eas.json; the
+// founder build, built on this Mac, asks for the `founder` channel.
+const easProjectId = process.env.EAS_PROJECT_ID;
+const updates: ExpoConfig['updates'] = easProjectId
+  ? {
+      enabled: true,
+      url: `https://u.expo.dev/${easProjectId}`,
+      checkAutomatically: 'ON_LOAD',
+      fallbackToCacheTimeout: 0,
+      ...(founderBuild ? { requestHeaders: { 'expo-channel-name': 'founder' } } : {}),
+    }
+  : { enabled: false };
 
 const CAMERA_USAGE = 'Conga uses the camera to record your video responses and video replies, and to take your profile photo.';
 const MICROPHONE_USAGE = 'Conga uses the microphone to record the sound of your video responses and video replies.';
@@ -50,6 +89,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'shortcut',
   version: '0.1.0',
   orientation: 'portrait',
+  runtimeVersion: { policy: 'fingerprint' },
+  updates,
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
   // Store builds (phase 7): EAS profiles in eas.json; build numbers are kept on EAS
@@ -117,6 +158,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     typedRoutes: true,
   },
   extra: {
-    ...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),
+    ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
   },
 });

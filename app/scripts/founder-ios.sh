@@ -38,11 +38,29 @@ case "${1:-}" in
   *) echo "usage: DEVICE=<udid> $0 debug|release" >&2; exit 1 ;;
 esac
 
+if [[ $CONFIGURATION == Release ]]; then
+  # The standalone build is the product: no development controls, whatever .env.founder says for Debug,
+  # and shared links on the links domain. publish-update.sh founder sets the same values, so an update
+  # for this build carries them too.
+  export EXPO_PUBLIC_DEV_TOOLS=0
+  export EXPO_PUBLIC_WEB_BASE_URL="${EXPO_PUBLIC_WEB_BASE_URL:-https://conga.churntech.com}"
+  [[ $EXPO_PUBLIC_WEB_BASE_URL =~ ^https://[a-z0-9.-]+$ ]] || { echo "EXPO_PUBLIC_WEB_BASE_URL must be https://<host>" >&2; exit 1; }
+  if [[ -z ${EAS_PROJECT_ID:-} ]]; then
+    echo "note: EAS_PROJECT_ID is not in .env.founder, so this build will not receive over-the-air updates (docs/release/OTA-UPDATES.md)" >&2
+  fi
+fi
+
 npx expo prebuild --platform ios --clean
 xcodebuild -workspace ios/Conga.xcworkspace -scheme Conga -configuration "$CONFIGURATION" \
   -destination "id=$DEVICE" -derivedDataPath ios/build \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
-xcrun devicectl device install app --device "$DEVICE" "ios/build/Build/Products/$CONFIGURATION-iphoneos/Conga.app"
+APP="ios/build/Build/Products/$CONFIGURATION-iphoneos/Conga.app"
+if [[ -f $APP/EXUpdates.bundle/fingerprint ]]; then
+  echo "runtime version (fingerprint) of this build: $(cat "$APP/EXUpdates.bundle/fingerprint")"
+fi
+# Installing over the installed app.shortcut.founder keeps its data (sign-in, waiting recordings), as long
+# as it is signed by the same team; iOS refuses, and deletes nothing, if the team differs.
+xcrun devicectl device install app --device "$DEVICE" "$APP"
 xcrun devicectl device process launch --device "$DEVICE" app.shortcut.founder
 
 # The Debug build loads its JS from Metro on this Mac (same Wi-Fi as the iPhone).
