@@ -81,3 +81,12 @@ TestFlight, the online master spec, unapproved UI (P1 to P9 wait for Nemat's vis
 | Hosted sign-in email template and SMTP sender name still say Shortcut | blocked on Nemat (dashboard) |
 | Trademark and store-name check for Conga; bundle id, package and scheme decision | not started (Nemat) |
 
+
+Tests on 3636abd (17 Oct, isolated stack `shortcut-int`, `CONTINUE=1 scripts/full-local-verification.sh int`):
+every step PASS: pgTAP 1662/1662 (rollback check's old suite 1089), Deno unit and integration suites,
+admin HTTP, rollback check, scheduler 13/13, C1 and provider rehearsals, auth integration 52/52 (the
+three templates now send "Your Conga sign-in code"), app typecheck, lint, Jest 350/350. `web/`: vitest
+25/25, `build:check` compiles, `build:dashboard` reproducible, `verify:dashboard` 29/29 on the unzipped
+archive in the local Pages runtime. `expo prebuild --no-install --platform ios`: `ios/Conga`, display name
+Conga, schemes `shortcut`, `app.shortcut`, `exp+conga` (generated folder removed). Not run: anything on
+Cloudflare, Supabase hosted, Mux, a phone, or Android.
