@@ -402,3 +402,39 @@ describe('C3: an unconfirmed discard is asked again, bounded, spaced, never twic
     expect(a.deps.track).not.toHaveBeenCalledWith('upload_retried', expect.anything());
   });
 });
+
+describe('Restore at launch: a recording whose file is gone shows P3 at once (review N2)', () => {
+  async function storedFailedPost(w: World) {
+    const a = memberOf(w, 'A', { createRow: jest.fn(() => Promise.reject(noAnswer())) });
+    await a.m.post(a.postArgs()); // the answer is lost: an Upload failed post with its URL
+    a.m.stop(); // the app closes
+    return w.slots.get('A')!;
+  }
+
+  test('file missing: restored as recording_missing, stored so, nothing asked or sent', async () => {
+    const w = world();
+    const before = await storedFailedPost(w);
+    expect(before.failedReason).not.toBe('recording_missing');
+    w.files.delete('rec-1');
+    const relaunched = memberOf(w, 'A');
+    await relaunched.m.resumeOnLaunch();
+    await flush();
+    expect(relaunched.shown).toEqual([{ kind: 'failed', post: expect.objectContaining({ state: 'failed', failedReason: 'recording_missing', recording: before.recording }) }]);
+    expect(w.slots.get('A')).toMatchObject({ failedReason: 'recording_missing', uploadId: before.uploadId });
+    expect(relaunched.deps.abandon).not.toHaveBeenCalled();
+    expect(relaunched.deps.upload.status).not.toHaveBeenCalled();
+    expect(relaunched.deps.upload.put).not.toHaveBeenCalled();
+    expect(relaunched.deps.upload.mint).not.toHaveBeenCalled();
+  });
+
+  test('file present: restored exactly as stored (Retry offered as before)', async () => {
+    const w = world();
+    const before = await storedFailedPost(w);
+    const relaunched = memberOf(w, 'A');
+    await relaunched.m.resumeOnLaunch();
+    await flush();
+    expect(relaunched.shown).toEqual([{ kind: 'failed', post: { ...before, state: 'failed', failedReason: before.failedReason } }]);
+    expect(w.slots.get('A')).toEqual(before);
+    expect(relaunched.deps.save).not.toHaveBeenCalled();
+  });
+});
