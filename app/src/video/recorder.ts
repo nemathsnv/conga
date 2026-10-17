@@ -7,9 +7,8 @@
 import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { MAX_DURATION_MS, MIN_DURATION_MS, type CameraFacing, type Recording, type RecordingSegment } from './types';
+import { MAX_DURATION_MS, MIN_DURATION_MS, RECORDINGS_DIR, type CameraFacing, type Recording, type RecordingSegment } from './types';
 
-const RECORDINGS_DIR = 'recordings';
 /** Segments of a take in progress or waiting to be stitched. Anything left here belongs to no recording. */
 const TAKE_DIR = 'take';
 

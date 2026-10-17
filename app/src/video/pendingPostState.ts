@@ -1,5 +1,5 @@
 // Pure state rules for a pending post (no storage imports).
-import type { Recording } from './types';
+import { RECORDINGS_DIR, type Recording } from './types';
 
 export type PendingPost = {
   /** The member who posted it. Only they see its banner or can Retry it; another member signed in
@@ -86,6 +86,32 @@ export function resumeState(post: PendingPost): PendingPost {
 export function pendingPostFor(post: PendingPost | null, ownerId: string | null): PendingPost | null {
   if (!post || !ownerId || typeof post.ownerId !== 'string') return null;
   return post.ownerId === ownerId ? post : null;
+}
+
+/**
+ * Where a stored recording file is now. iOS can move the app to a new container (a new id in the
+ * path) when a build is installed over another, so an absolute URI stored under Documents/recordings/
+ * names nothing while the file is still there, under the new Documents folder. Such a URI is rebuilt
+ * under `documentDirUri` (any subfolder kept) and used if that file exists. Any other URI, or one
+ * whose file exists, is returned unchanged; one found nowhere stays as it is (P3, as before).
+ */
+export function resolveRecordingUri(uri: string, documentDirUri: string, exists: (uri: string) => boolean): string {
+  const at = uri.indexOf(`/${RECORDINGS_DIR}/`);
+  if (at < 0 || exists(uri)) return uri;
+  const moved = documentDirUri.replace(/\/+$/, '') + uri.slice(at);
+  return moved !== uri && exists(moved) ? moved : uri;
+}
+
+/** The stored post with each recording file where it is now (resolveRecordingUri). Same shape as stored. */
+export function withRecordingFilesFound(post: PendingPost, documentDirUri: string, exists: (uri: string) => boolean): PendingPost {
+  let moved = false;
+  const segments = post.recording.segments.map((segment) => {
+    const uri = resolveRecordingUri(segment.uri, documentDirUri, exists);
+    if (uri === segment.uri) return segment;
+    moved = true;
+    return { ...segment, uri };
+  });
+  return moved ? { ...post, recording: { ...post.recording, segments } } : post;
 }
 
 export function uploadUrlUsable(post: PendingPost, now: number = Date.now()): boolean {

@@ -7,8 +7,9 @@
 // for another. A post stored under the single key builds before 13 Oct used has no owner and is
 // left where it is.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File, Paths } from 'expo-file-system';
 
-import { pendingPostFor, type PendingPost } from './pendingPostState';
+import { pendingPostFor, withRecordingFilesFound, type PendingPost } from './pendingPostState';
 
 export type { PendingPost } from './pendingPostState';
 
@@ -34,9 +35,31 @@ export async function loadPendingPostOrThrow(ownerId: string | null): Promise<Pe
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as PendingPost;
-    return parsed && (typeof parsed.responseId === 'string' || parsed.responseId === null) ? pendingPostFor(parsed, ownerId) : null;
+    const post = parsed && (typeof parsed.responseId === 'string' || parsed.responseId === null) ? pendingPostFor(parsed, ownerId) : null;
+    return post ? onThisPhone(post) : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The post with its recording found again after an app update moved the app's folders
+ * (withRecordingFilesFound). Only the copy in memory changes: the next save stores it, in the same
+ * format older builds read.
+ */
+function onThisPhone(post: PendingPost): PendingPost {
+  try {
+    return withRecordingFilesFound(post, Paths.document.uri, fileExists);
+  } catch {
+    return post;
+  }
+}
+
+function fileExists(uri: string): boolean {
+  try {
+    return new File(uri).exists;
+  } catch {
+    return false;
   }
 }
 

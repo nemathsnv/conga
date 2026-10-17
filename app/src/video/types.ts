@@ -29,6 +29,9 @@ export type Recording = {
   createdAt: number;
 };
 
+/** The folder under the app's Documents folder that keeps recordings until they post (recorder.ts). */
+export const RECORDINGS_DIR = 'recordings';
+
 /** Spec limits (SPEC.md Section 6). */
 export const MIN_DURATION_MS = 2000;
 export const MAX_DURATION_MS = 30000;
