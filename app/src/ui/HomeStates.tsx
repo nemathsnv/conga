@@ -9,6 +9,7 @@ import { avatarUrl } from '@/lib/api';
 import type { Conversation, FollowSuggestion } from '@/lib/content';
 import { agoLabel, responsesLabel } from '@/lib/format';
 import { Avatar, Button, Glass } from '@/ui/components';
+import { RecordingStill } from '@/ui/RecordingStill';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { ChevronRightIcon, OfflineIcon, PlacePinIcon, PlusSlotIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
@@ -169,7 +170,7 @@ export function PostingBanner({ state, onRetry, onDiscard, busy = false, topInse
   return (
     <Glass style={[s.banner, { top: topInset + 53 }]}>
       <View style={s.bannerRow} accessibilityLiveRegion="polite">
-        {thumb ? <Image source={{ uri: thumb }} style={s.bannerThumb} contentFit="cover" /> : <View style={[s.bannerThumb, { backgroundColor: 'rgba(255,255,255,0.14)' }]} />}
+        <RecordingStill uri={thumb} style={s.bannerThumb} />
         <View style={{ flex: 1, minWidth: 0 }}>
           {failed ? (
             <>

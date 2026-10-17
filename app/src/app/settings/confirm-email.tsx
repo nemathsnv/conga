@@ -129,7 +129,8 @@ const s = StyleSheet.create({
   codeInput: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, color: 'transparent', backgroundColor: 'transparent', fontSize: 1 },
   errorText: { marginTop: 12, ...type.caption13, lineHeight: 18, color: colors.danger, fontFamily },
   resendLink: { marginTop: 8, ...type.caption13, fontWeight: '600', color: colors.text, fontFamily },
-  footer: { position: 'absolute', left: 20, right: 20, bottom: 0 },
+  // In the flow, at the bottom (as on the sign-in code screen), so the keyboard avoidance moves it above the number pad.
+  footer: { marginTop: 'auto', paddingHorizontal: layout.controlInset },
   deleteButton: { height: 52, borderRadius: 26, backgroundColor: colors.dangerBorder, alignItems: 'center', justifyContent: 'center' },
   deleteText: { ...type.button16, letterSpacing: -0.2, color: colors.white, fontFamily },
 });
