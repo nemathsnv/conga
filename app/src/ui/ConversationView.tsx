@@ -15,10 +15,12 @@ import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, PromptLabel, RailAction, VideoGradients } from '@/ui/dark';
 import { ChevronRightIcon, CommentIcon, HeartIcon, MoreIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
+import { useOpenRecord } from '@/ui/recordEntry';
 import { VideoSurface } from '@/ui/VideoSurface';
 
 export function ConversationView({ item, active, topInset }: { item: Conversation; active: boolean; topInset: number }) {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const [progress, setProgress] = useState(0);
   const [following, setFollowing] = useState(item.response?.following_author ?? false);
@@ -31,7 +33,7 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
 
   const openPlayer = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id } });
   const openProfile = () => router.push({ pathname: '/profile/[id]', params: { id: response.author.id } });
-  const respond = () => router.push({ pathname: '/record/[promptId]', params: { promptId: prompt.id } });
+  const respond = () => openRecord.open({ pathname: '/record/[promptId]', params: { promptId: prompt.id } });
   const openComments = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id, openComments: '1' } });
   const openReplies = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id, openReplies: '1' } });
   // SF-Menu for someone else's response; SF-Delete (… → Delete) for your own.

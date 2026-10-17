@@ -8,11 +8,13 @@ import { requestReview } from '@/lib/content';
 import { useSession } from '@/lib/session';
 import { Button } from '@/ui/components';
 import { CheckIcon, PersonIcon } from '@/ui/Icons';
+import { useSignOutWarning } from '@/ui/SignOutWarning';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 export default function SuspendedScreen() {
   const insets = useSafeAreaInsets();
-  const { state, refresh, signOut } = useSession();
+  const { state, refresh } = useSession();
+  const signOutWarning = useSignOutWarning();
   const [busy, setBusy] = useState(false);
   const suspension = state?.suspension ?? null;
 
@@ -59,11 +61,18 @@ export default function SuspendedScreen() {
         ) : (
           <Button title="Request a review" onPress={() => void review()} disabled={busy} />
         )}
-        <Pressable accessibilityRole="button" onPress={() => void signOut()} style={s.signOut}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={async () => {
+            if (await signOutWarning.confirm()) await signOutWarning.signOut();
+          }}
+          style={s.signOut}
+        >
           <Text style={s.signOutText}>Sign out</Text>
         </Pressable>
         <Text style={s.signedAs}>Signed in as {state?.email ?? ''}</Text>
       </View>
+      {signOutWarning.sheet}
     </View>
   );
 }

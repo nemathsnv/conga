@@ -11,12 +11,14 @@ import { deleteAccount } from '@/lib/content';
 import { useSession } from '@/lib/session';
 import { Button } from '@/ui/components';
 import { CheckIcon, ChevronLeft, PersonIcon, VideoReplyIcon } from '@/ui/Icons';
+import { useSignOutWarning } from '@/ui/SignOutWarning';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 export default function DeleteAccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, state, signOut } = useSession();
+  const { session, state } = useSession();
+  const signOutWarning = useSignOutWarning();
   const [busy, setBusy] = useState(false);
   const provider = (session?.user.app_metadata?.provider as string | undefined) ?? 'email';
   const username = state?.profile?.username ? `@${state.profile.username}` : 'Your username';
@@ -31,8 +33,11 @@ export default function DeleteAccountScreen() {
         router.push('/settings/confirm-email');
         return;
       }
+      // P9: deleting ends in a sign-out. Asked here, once the person is confirmed and before anything
+      // is deleted, so Cancel really cancels.
+      if (!(await signOutWarning.confirm())) return;
       await deleteAccount();
-      await signOut();
+      await signOutWarning.signOut();
     } catch (e) {
       if (!(e instanceof SignInCancelled)) console.error('delete account failed', e);
     } finally {
@@ -63,6 +68,7 @@ export default function DeleteAccountScreen() {
         </Pressable>
         <Button title="Cancel" variant="text" onPress={() => router.back()} style={{ marginTop: 6 }} textStyle={{ fontSize: 16, fontWeight: '500' }} />
       </View>
+      {signOutWarning.sheet}
     </View>
   );
 }

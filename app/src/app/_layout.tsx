@@ -11,6 +11,7 @@ import { launchTap, onNotificationTap, registerTokenIfAllowed, syncTimezone, typ
 import { claimPush } from '@/lib/pushRoutes';
 import { SessionProvider, useSession } from '@/lib/session';
 import { resetAccountScopedUi } from '@/ui/accountScope';
+import { RecordEntryProvider } from '@/ui/recordEntry';
 import { PostingProvider } from '@/video/posting';
 
 void SplashScreen.preventAutoHideAsync();
@@ -23,7 +24,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <SessionProvider>
         <PostingProvider>
-          <RootNavigator />
+          <RecordEntryProvider>
+            <RootNavigator />
+          </RecordEntryProvider>
         </PostingProvider>
       </SessionProvider>
     </SafeAreaProvider>

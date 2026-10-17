@@ -1,7 +1,6 @@
 // Home's non-video states: X-Loading, Z-Empty (prompt with no responses), X-Following-Empty,
 // the posting banners PR-Posting / X-Upload-Failed, and A-Offline.
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -10,11 +9,14 @@ import { avatarUrl } from '@/lib/api';
 import type { Conversation, FollowSuggestion } from '@/lib/content';
 import { agoLabel, responsesLabel } from '@/lib/format';
 import { Avatar, Button, Glass } from '@/ui/components';
+import { useOpenRecord } from '@/ui/recordEntry';
 import { ChevronRightIcon, OfflineIcon, PlacePinIcon, PlusSlotIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
+import type { PendingPost } from '@/video/pendingPostState';
 import type { PostingState } from '@/video/posting';
 import { uploadFailedDetail } from '@/video/postingFlow';
+import { failedDetail, failedTitle, failedView, offlineDetail, postingTitle } from '@/ui/failedPost';
 
 export function Spinner({ size = 28, light = true }: { size?: number; light?: boolean }) {
   const [spin] = useState(() => new Animated.Value(0));
@@ -64,7 +66,7 @@ export function HomeLoading({ topInset, bottomSpace }: { topInset: number; botto
 
 /** Board Z-Empty: a prompt with no responses. */
 export function EmptyPrompt({ item, next, topInset, bottomSpace }: { item: Conversation; next: Conversation | null; topInset: number; bottomSpace: number }) {
-  const router = useRouter();
+  const openRecord = useOpenRecord();
   const p = item.prompt;
   const nextThumb = next?.response?.playback_id ? thumbnailUrl(next.response.playback_id, { width: 80, height: 96 }) : null;
   return (
@@ -80,7 +82,7 @@ export function EmptyPrompt({ item, next, topInset, bottomSpace }: { item: Conve
           <PlusSlotIcon />
         </View>
         <Text style={s.noResponses}>No responses yet.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/record/[promptId]', params: { promptId: p.id } })} style={({ pressed }) => [s.firstButton, pressed && { opacity: 0.8 }]}>
+        <Pressable accessibilityRole="button" onPress={() => openRecord.open({ pathname: '/record/[promptId]', params: { promptId: p.id } })} style={({ pressed }) => [s.firstButton, pressed && { opacity: 0.8 }]}>
           <RecordDotIcon color={colors.black} />
           <Text style={s.firstButtonText}>Be the first to respond</Text>
         </Pressable>
@@ -136,7 +138,7 @@ export function FollowingEmpty({ suggestions, onFollow, onBack, topInset }: { su
 }
 
 /** Board A-Offline: the banner at the top of Home while the phone has no connection. */
-export function OfflineBanner({ topInset }: { topInset: number }) {
+export function OfflineBanner({ topInset, kind = null }: { topInset: number; kind?: PendingPost['kind'] | null }) {
   useEffect(() => {
     track('offline_shown');
   }, []);
@@ -148,20 +150,21 @@ export function OfflineBanner({ topInset }: { topInset: number }) {
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.bannerTitle}>You&apos;re offline</Text>
-          <Text style={s.bannerSub}>Your response stays saved on this phone. Post when you&apos;re back online.</Text>
+          <Text style={s.bannerSub}>{offlineDetail(kind)}</Text>
         </View>
       </View>
     </Glass>
   );
 }
 
-/** Boards PR-Posting and X-Upload-Failed: the banner at the top of Home. */
-export function PostingBanner({ state, onRetry, topInset }: { state: PostingState; onRetry: () => void; topInset: number }) {
+/** Boards PR-Posting, X-Upload-Failed and P1 to P3, P5, P8-R: the banner at the top of Home. */
+export function PostingBanner({ state, onRetry, onDiscard, busy = false, topInset }: { state: PostingState; onRetry: () => void; onDiscard: () => void; busy?: boolean; topInset: number }) {
   // 'waiting' (Post tapped offline) is drawn by A-Offline, not here.
   if (state.kind === 'idle' || state.kind === 'live' || state.kind === 'waiting') return null;
   const post = state.post;
   const thumb = post.recording.segments[0]?.uri;
   const failed = state.kind === 'failed';
+  const view = failed ? failedView(post) : 'retry';
   const progress = state.kind === 'uploading' ? state.progress : state.kind === 'processing' ? 1 : 0;
   return (
     <Glass style={[s.banner, { top: topInset + 53 }]}>
@@ -170,13 +173,13 @@ export function PostingBanner({ state, onRetry, topInset }: { state: PostingStat
         <View style={{ flex: 1, minWidth: 0 }}>
           {failed ? (
             <>
-              <Text style={s.bannerTitle}>Your {post.kind === 'draft' ? 'draft' : 'response'} didn&apos;t {post.kind === 'draft' ? 'save' : 'post'}</Text>
-              <Text style={s.bannerSub}>{uploadFailedDetail(post.failedReason)}</Text>
+              <Text style={s.bannerTitle}>{failedTitle(post.kind, view)}</Text>
+              <Text style={s.bannerSub}>{view === 'retry' ? uploadFailedDetail(post.failedReason) : failedDetail(view)}</Text>
             </>
           ) : (
             <>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={s.bannerTitle}>{post.kind === 'draft' ? 'Saving your draft' : 'Posting your response'}</Text>
+                <Text style={s.bannerTitle}>{postingTitle(post.kind)}</Text>
                 <Text style={s.bannerPct}>{Math.round(progress * 100)}%</Text>
               </View>
               <View style={s.bannerTrack} accessible accessibilityRole="progressbar" accessibilityLabel="Upload progress" accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}>
@@ -186,10 +189,17 @@ export function PostingBanner({ state, onRetry, topInset }: { state: PostingStat
             </>
           )}
         </View>
-        {failed ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Retry" onPress={onRetry} style={({ pressed }) => [s.retry, pressed && { opacity: 0.7 }]}>
-            <Text style={s.retryText}>Retry</Text>
-          </Pressable>
+        {failed && view !== 'discarding' ? (
+          <View style={s.bannerActions}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Discard" disabled={busy} onPress={onDiscard} hitSlop={8} style={({ pressed }) => [s.discard, (pressed || busy) && { opacity: 0.6 }]}>
+              <Text style={s.discardText}>Discard</Text>
+            </Pressable>
+            {view === 'retry' ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Retry" disabled={busy} onPress={onRetry} style={({ pressed }) => [s.retry, (pressed || busy) && { opacity: 0.7 }]}>
+                <Text style={s.retryText}>Retry</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
       </View>
     </Glass>
@@ -234,6 +244,9 @@ const s = StyleSheet.create({
   bannerTrack: { marginTop: 7, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.22)' },
   bannerFill: { height: 3, borderRadius: 2, backgroundColor: colors.white },
   bannerSub: { ...type.caption12, marginTop: 6, color: 'rgba(255,255,255,0.75)', fontFamily },
+  bannerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  discard: { minHeight: 32, paddingHorizontal: 6, justifyContent: 'center' },
+  discardText: { ...type.semi14, color: colors.white, fontFamily },
   retry: { height: 32, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.white, justifyContent: 'center' },
   retryText: { ...type.semi14, color: colors.black, fontFamily },
 });

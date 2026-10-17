@@ -20,6 +20,7 @@ import { useOverlayWhileMounted } from '@/ui/playerOverlay';
 import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 const COMMENT_MAX = 300;
 
@@ -35,6 +36,7 @@ function ago(iso: string): string {
 
 export default function CommentsScreen() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -106,7 +108,7 @@ export default function CommentsScreen() {
 
   const videoReply = (replyToId: string) => {
     if (!sheet) return;
-    router.replace({ pathname: '/record/[promptId]', params: { promptId: sheet.response.prompt_id, replyTo: replyToId } });
+    openRecord.open({ pathname: '/record/[promptId]', params: { promptId: sheet.response.prompt_id, replyTo: replyToId } }, 'replace');
   };
 
   const sheetTop = Math.round(height * (250 / 844));

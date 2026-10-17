@@ -16,6 +16,7 @@ import { useSession } from '@/lib/session';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool, ProgressLine, VideoGradients } from '@/ui/dark';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
+import { useOpenRecord } from '@/ui/recordEntry';
 import { ReplyCard } from '@/ui/ReplyCard';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
@@ -31,6 +32,7 @@ const CAPTION_MAX = 150;
 
 export default function ReviewScreen() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const posting = usePosting();
   const { session, state: sessionState, refresh } = useSession();
@@ -106,6 +108,11 @@ export default function ReviewScreen() {
         const actionId = fresh?.restriction?.action_id ?? sessionState?.restriction?.action_id;
         if (actionId) router.replace({ pathname: '/notice/[actionId]', params: { actionId } });
         else router.dismissTo('/(tabs)');
+        return;
+      }
+      // P7 / P8: another recording of this member is waiting or posting; Post refuses to replace it.
+      if (message.includes('post_pending') && openRecord.showBlock()) {
+        setBusy(false);
         return;
       }
       console.error('post failed', e);

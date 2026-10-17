@@ -13,9 +13,11 @@ import { Button, Glass } from '@/ui/components';
 import { CheckIcon, CloseIcon, PlacePinIcon, PlayIcon, PlusSlotIcon, RecordDotIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 export default function SuggestionOutcomeScreen() {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [sg, setSg] = useState<Suggestion | null>(null);
@@ -103,7 +105,7 @@ export default function SuggestionOutcomeScreen() {
         <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
           <Button title="Publish response" variant="white" onPress={() => void publish()} disabled={busy || !sg.draft.ready} />
           <View style={{ marginTop: 10, flexDirection: 'row', gap: 10 }}>
-            <Pressable accessibilityRole="button" onPress={() => { track('draft_rerecorded', { prompt_id: prompt.id }); router.replace({ pathname: '/record/[promptId]', params: { promptId: 'draft', draftFor: sg.id } }); }} style={{ flex: 1 }}>
+            <Pressable accessibilityRole="button" onPress={() => { track('draft_rerecorded', { prompt_id: prompt.id }); openRecord.open({ pathname: '/record/[promptId]', params: { promptId: 'draft', draftFor: sg.id } }, 'replace'); }} style={{ flex: 1 }}>
               <Glass style={s.halfButton} radius={22}>
                 <Text style={s.halfText}>Re-record</Text>
               </Glass>
@@ -145,7 +147,7 @@ export default function SuggestionOutcomeScreen() {
           <PlusSlotIcon />
         </View>
         <Text style={s.noResponses}>No responses yet.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace({ pathname: '/record/[promptId]', params: { promptId: prompt.id } })} style={({ pressed }) => [s.firstButton, pressed && { opacity: 0.8 }]}>
+        <Pressable accessibilityRole="button" onPress={() => openRecord.open({ pathname: '/record/[promptId]', params: { promptId: prompt.id } }, 'replace')} style={({ pressed }) => [s.firstButton, pressed && { opacity: 0.8 }]}>
           <RecordDotIcon color={colors.black} />
           <Text style={s.firstButtonText}>Be the first to respond</Text>
         </Pressable>

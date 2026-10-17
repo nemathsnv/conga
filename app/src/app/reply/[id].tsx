@@ -19,6 +19,7 @@ import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
+import { useOpenRecord } from '@/ui/recordEntry';
 
 type Page = RoomReply & { context?: Video['context'] };
 
@@ -143,6 +144,7 @@ export default function ReplyPlayerScreen() {
 
 function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProgress, onEnd, onNext }: { reply: Page; active: boolean; rootAuthor: ResponseCard['author'] | null; orphan: boolean; promptText: string; next: Page | null; onProgress: (f: number) => void; onEnd: () => void; onNext: () => void }) {
   const router = useRouter();
+  const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const [following, setFollowing] = useState(reply.following_author);
   const [liked, setLiked] = useState(reply.liked);
@@ -268,7 +270,7 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
           <RecordDotIcon />
           <Text style={pillText}>{orphan ? 'All responses' : `${rootFirst}'s response`}</Text>
         </GlassPillButton>
-        <GlassPillButton label={`Reply to ${firstName}`} onPress={() => router.push({ pathname: '/record/[promptId]', params: { promptId: reply.prompt_id, replyTo: reply.id } })}>
+        <GlassPillButton label={`Reply to ${firstName}`} onPress={() => openRecord.open({ pathname: '/record/[promptId]', params: { promptId: reply.prompt_id, replyTo: reply.id } })}>
           <VideoReplyIcon size={17} />
           <Text style={pillText}>Reply to {firstName}</Text>
         </GlassPillButton>
