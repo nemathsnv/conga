@@ -1,5 +1,5 @@
 // Startup configuration (env.ts configError, thrown by supabase.ts): no silent fallback server.
-import { configError } from '@/lib/env';
+import { authStorageKey, configError } from '@/lib/env';
 
 const HOSTED = 'https://abcdefghijklmnopqrst.supabase.co';
 
@@ -52,6 +52,15 @@ describe('supabase.ts at startup', () => {
     });
   });
 
+  it("pins the session's storage key to supabase-js's own default, so stored sessions survive", () => {
+    const { createClient } = jest.requireActual<typeof import('@supabase/supabase-js')>('@supabase/supabase-js');
+    for (const url of [HOSTED, 'http://192.168.1.20:54321', 'http://127.0.0.1:54321']) {
+      const client = createClient(url, 'sb_publishable_x', { auth: { persistSession: false, autoRefreshToken: false } });
+      expect(authStorageKey(url)).toBe((client as unknown as { storageKey: string }).storageKey);
+    }
+    expect(authStorageKey(HOSTED)).toBe('sb-abcdefghijklmnopqrst-auth-token');
+  });
+
   it('creates the client with exactly the configured values', () => {
     process.env.EXPO_PUBLIC_SUPABASE_URL = 'http://192.168.1.20:54321/';
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'local-anon';
@@ -63,6 +72,8 @@ describe('supabase.ts at startup', () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('@/lib/supabase');
       expect(create).toHaveBeenCalledWith('http://192.168.1.20:54321', 'local-anon', expect.anything());
+      const options = (create.mock.calls[0] as unknown[])[2] as { auth: { storageKey: string } };
+      expect(options.auth.storageKey).toBe('sb-192-auth-token');
     });
   });
 });

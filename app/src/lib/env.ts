@@ -6,6 +6,15 @@ export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 export const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
 export const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
 export const DEV_TOOLS = process.env.EXPO_PUBLIC_DEV_TOOLS === '1';
+
+/**
+ * Where supabase-js keeps the session: its own default key, `sb-<first label of the host>-auth-token`
+ * (SupabaseClient's constructor), computed the same way. Changing it would sign every phone out.
+ */
+export function authStorageKey(url: string): string {
+  return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
+}
+
 const HOSTED_URL = /^https:\/\/[a-z0-9]{20}\.supabase\.co$/;
 // Founder-only iPhone build signed by a free Personal Team (scripts/founder-ios.sh): no Sign in
 // with Apple and no push, against the hosted project. Never set for a build anyone else gets.

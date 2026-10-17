@@ -9,7 +9,8 @@ import { setSuspendedHandler } from './content';
 import { getOnboardingState } from './api';
 import { loadPendingInvite, savePendingInvite, type PendingInvite } from './pendingInvite';
 import { type OnboardingState, type OnboardingStep, resolveStep } from './onboarding';
-import { supabase } from './supabase';
+import { retryStateLoad } from './stateRetry';
+import { removeLocalSession, supabase } from './supabase';
 
 type SessionContextValue = {
   ready: boolean;
@@ -62,7 +63,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         void supabase.auth.signOut({ scope: 'local' });
         return null;
       }
-      // Keep the splash up; the auth listener retries when the session changes.
+      // Keep the splash up; retryStateLoad (below) tries again until it arrives.
       console.warn('get_onboarding_state failed', e);
       return null;
     }
@@ -70,9 +71,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // Session changes come from Supabase (an external system); state resets and loads
   // happen in those callbacks, never in an effect body.
-  useEffect(() => {
-    let cancelled = false;
-    const apply = (next: Session | null) => {
+  const apply = useCallback(
+    (next: Session | null) => {
       const userId = next?.user.id ?? null;
       const changed = latestUser.current !== userId;
       // The account that was signed in has left this phone: drop what was kept for it.
@@ -87,7 +87,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } else if (changed) {
         void load(userId);
       }
-    };
+    },
+    [load],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
     void supabase.auth.getSession().then(({ data }) => {
       if (!cancelled) apply(data.session);
     });
@@ -98,7 +103,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, [load]);
+  }, [apply]);
+
+  // Signed in, but the state for this account has not loaded yet (the splash stays up until it
+  // has): keep trying until it arrives.
+  const userId = session?.user.id ?? null;
+  const stateMissing = userId !== null && stateLoadedFor !== userId;
+  useEffect(() => {
+    if (!stateMissing || !userId) return;
+    return retryStateLoad(() => load(userId));
+  }, [stateMissing, userId, load]);
 
   const refresh = useCallback(async () => {
     const userId = latestUser.current;
@@ -116,11 +130,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // While the session is still there: this phone stops getting the account's pushes, and its
     // queued events go out under it. Bounded; never stops the sign-out.
     await beforeSignOut();
-    await supabase.auth.signOut();
-  }, []);
+    // supabase-js refreshes an expired access token before it signs out, and when that fails (no
+    // connection) returns the error and keeps the session. The person asked to sign out, so the
+    // session goes from this phone anyway, with the same steps as a SIGNED_OUT event.
+    const { error } = await supabase.auth.signOut().catch((e: unknown) => ({ error: e }));
+    if (error) {
+      console.warn('signOut failed; removing the session on this phone', error);
+      await removeLocalSession().catch((e: unknown) => console.warn('removeLocalSession failed', e));
+      apply(null);
+    }
+  }, [apply]);
 
   const signedIn = !!session;
-  const ready = sessionLoaded && (!signedIn || stateLoadedFor === session?.user.id);
+  const ready = sessionLoaded && !stateMissing;
   const step = resolveStep(signedIn, state, photoStepPending);
 
   const value = useMemo<SessionContextValue>(

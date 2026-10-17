@@ -40,6 +40,30 @@ export function resolveStep(
   return 'home';
 }
 
+const STEP_ROUTES = {
+  age: '/(onboarding)/age',
+  invite: '/(onboarding)/invite',
+  waitlist: '/(onboarding)/waitlist',
+  profile: '/(onboarding)/profile',
+  photo: '/(onboarding)/photo',
+  suspended: '/(onboarding)/suspended',
+} as const;
+
+/**
+ * Where a signed-in person goes after an onboarding step went through, from the state re-read
+ * after it. Null means stay: the state could not be re-read (no connection), which says nothing
+ * about the step, so it never sends them to Welcome; or 'home', where the root layout swaps to
+ * the tabs by itself.
+ */
+export function nextOnboardingRoute(
+  state: OnboardingState | null,
+  photoStepPending: boolean,
+): (typeof STEP_ROUTES)[keyof typeof STEP_ROUTES] | null {
+  if (!state) return null;
+  const step = resolveStep(true, state, photoStepPending);
+  return step === 'home' || step === 'welcome' ? null : STEP_ROUTES[step];
+}
+
 export function parseOnboardingState(raw: unknown): OnboardingState {
   const r = (raw ?? {}) as Record<string, unknown>;
   const p = r.profile as Record<string, unknown> | null | undefined;
