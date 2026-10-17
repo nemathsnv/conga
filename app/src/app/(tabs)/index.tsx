@@ -9,6 +9,7 @@ import { useSafeAreaInfo } from '@/ui/safeArea';
 import { followSuggestions, followUser, followingFeed, getNotificationState, homeFeed, type Conversation, type FollowSuggestion } from '@/lib/content';
 import { track } from '@/lib/analytics';
 import { useOnline } from '@/lib/connectivity';
+import { createLatest } from '@/lib/latest';
 import { shouldAsk } from '@/lib/notificationAsk';
 import { takeFeedDirty } from '@/ui/feedStore';
 import { ActionSheet } from '@/ui/ActionSheet';
@@ -32,7 +33,7 @@ export default function HomeTab() {
   const [focused, setFocused] = useState(true);
   const [suggestions, setSuggestions] = useState<FollowSuggestion[]>([]);
   const seen = useRef<string[]>([]);
-  const loading = useRef(false);
+  const loads = useRef(createLatest());
   // P4 (Discard confirmation) and P6 (it already reached Conga). While a Discard runs ('running')
   // the banner's buttons wait; once it has answered ('done') the posting state tells the outcome,
   // for that recording only (a later recording that processes is not P6).
@@ -58,24 +59,32 @@ export default function HomeTab() {
       .then(() => setDiscard({ status: 'done', recordingId }));
   };
 
+  // A reset (tab switch, refresh) always loads and makes a running load stale; a next page is
+  // skipped while a load runs; only the latest load's answer lands (lib/latest.ts).
   const load = useCallback(async (which: Tab, reset: boolean) => {
-    if (loading.current) return;
-    loading.current = true;
+    const ticket = loads.current.begin(reset);
+    if (ticket === null) return;
+    const current = () => loads.current.isCurrent(ticket);
     try {
       if (which === 'foryou') {
         const exclude = reset ? [] : seen.current;
         const page = await homeFeed(exclude, 10);
+        if (!current()) return;
         setItems((prev) => (reset || !prev ? page : [...prev, ...page.filter((c) => !prev.some((p) => p.prompt.id === c.prompt.id))]));
       } else {
         const page = await followingFeed(null, 20);
+        if (!current()) return;
         setItems(page);
-        if (page.length === 0) setSuggestions(await followSuggestions(seen.current));
+        if (page.length === 0) {
+          const people = await followSuggestions(seen.current);
+          if (current()) setSuggestions(people);
+        }
       }
     } catch (e) {
       console.error('feed failed', e);
-      setItems((prev) => prev ?? []);
+      if (current()) setItems((prev) => prev ?? []);
     } finally {
-      loading.current = false;
+      loads.current.end(ticket);
     }
   }, []);
 
