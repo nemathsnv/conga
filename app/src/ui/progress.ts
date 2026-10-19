@@ -12,12 +12,13 @@ export type ProgressSource = {
   subscribe: (listener: () => void) => () => void;
 };
 
-export function createProgress(): ProgressSource {
-  let value = 0;
+/** A number that changes often (a take's elapsed time), read by small leaves only. */
+export function createLiveValue(initial = 0, normalize: (n: number) => number = (n) => n): ProgressSource {
+  let value = initial;
   const listeners = new Set<() => void>();
   return {
-    set: (fraction) => {
-      const next = Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
+    set: (n) => {
+      const next = normalize(n);
       if (next === value) return;
       value = next;
       listeners.forEach((l) => l());
@@ -30,7 +31,12 @@ export function createProgress(): ProgressSource {
   };
 }
 
-/** The current fraction; re-renders the caller (keep it a small leaf) when it changes. */
+/** A fraction from 0 to 1. */
+export function createProgress(): ProgressSource {
+  return createLiveValue(0, (f) => (Number.isFinite(f) ? Math.max(0, Math.min(1, f)) : 0));
+}
+
+/** The current value; re-renders the caller (keep it a small leaf) when it changes. */
 export function useProgress(source: ProgressSource): number {
   return useSyncExternalStore(source.subscribe, source.get);
 }

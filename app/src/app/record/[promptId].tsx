@@ -22,6 +22,7 @@ import { ReplyCard } from '@/ui/ReplyCard';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool } from '@/ui/dark';
 import { CameraOffIcon, CloseIcon, FlipIcon, LightIcon, MicOffIcon } from '@/ui/Icons';
+import { createLiveValue, useProgress, type ProgressSource } from '@/ui/progress';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { formatTimer } from '@/video/limits';
 import {
@@ -69,7 +70,9 @@ export default function RecordScreen() {
   // The take in progress (one segment per camera); null between takes.
   const take = useRef<Take | null>(null);
   const [recording, setRecording] = useState(false);
-  const [elapsedMs, setElapsedMs] = useState(0);
+  // The take's elapsed time, read only by the timer and the ring (TakeTimer, RecordRing): set ten
+  // times a second, it re-rendered the whole screen, the camera view included, during a take.
+  const [elapsed] = useState(() => createLiveValue(0));
   const [shortToast, setShortToast] = useState(false);
   const [ready, setReady] = useState(false);
   // iOS: expo-camera reports ready only when its view mounts, so a flip during a take mounts a
@@ -225,21 +228,21 @@ export default function RecordScreen() {
       discard: deleteFileQuietly,
       now: Date.now,
       platform: Platform.OS,
-      onChange: () => setElapsedMs(t.elapsedMs()),
+      onChange: () => elapsed.set(t.elapsedMs()),
       onFinish: finished,
     });
     take.current = t;
     setRecording(true);
-    setElapsedMs(0);
+    elapsed.set(0);
     track('record_started', { kind });
     timer.current = setInterval(() => {
       const ms = t.elapsedMs();
-      setElapsedMs(ms);
+      elapsed.set(ms);
       // The 30 seconds are the total across segments; the camera's own limit is the backstop.
       if (ms >= MAX_DURATION_MS) t.stop('limit');
     }, 100);
     t.start();
-  }, [ready, prompt, facing, router, replyTo, target, draftFor, switchCamera, blinkTorchIfBack]);
+  }, [ready, prompt, facing, router, replyTo, target, draftFor, switchCamera, blinkTorchIfBack, elapsed]);
 
   const stop = () => {
     take.current?.stop('stop');
@@ -308,8 +311,6 @@ export default function RecordScreen() {
   useEffect(() => {
     if (micOff) track('permission_denied', { permission: 'microphone' });
   }, [micOff]);
-  const progress = elapsedMs / MAX_DURATION_MS;
-  const circumference = Math.PI * (RING - RING_STROKE);
 
   const rootName = target?.context.kind === 'reply' ? target.context.root?.author.name ?? null : null;
   const promptCard = replyTo ? (
@@ -339,7 +340,7 @@ export default function RecordScreen() {
       {recording ? (
         <View style={s.timer}>
           <View style={s.timerDot} />
-          <Text style={s.timerText}>{formatTimer(elapsedMs)}</Text>
+          <TakeTimer elapsed={elapsed} />
         </View>
       ) : (
         <View />
@@ -445,32 +446,7 @@ export default function RecordScreen() {
         <GlassTool label="Light" onPress={() => setLight((v) => !v)}>
           <LightIcon on={light} />
         </GlassTool>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={recording ? `Stop recording, ${Math.round(elapsedMs / 1000)} of 30 seconds` : micOff ? 'Record, unavailable' : 'Record'}
-          disabled={recording ? false : micOff || !ready}
-          onPress={recording ? stop : start}
-          style={s.recordButton}
-        >
-          <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
-            <Circle cx={RING / 2} cy={RING / 2} r={(RING - RING_STROKE) / 2} stroke={recording ? 'rgba(255,255,255,0.35)' : micOff ? 'rgba(255,255,255,0.35)' : '#FFFFFF'} strokeWidth={RING_STROKE} fill="none" />
-            {recording ? (
-              <Circle
-                cx={RING / 2}
-                cy={RING / 2}
-                r={(RING - RING_STROKE) / 2}
-                stroke="#FFFFFF"
-                strokeWidth={RING_STROKE}
-                fill="none"
-                strokeDasharray={`${circumference} ${circumference}`}
-                strokeDashoffset={circumference * (1 - progress)}
-                strokeLinecap="round"
-                transform={`rotate(-90 ${RING / 2} ${RING / 2})`}
-              />
-            ) : null}
-          </Svg>
-          {recording ? <View style={s.stopSquare} /> : <View style={[s.recordDot, micOff && { opacity: 0.35 }]} />}
-        </Pressable>
+        <RecordButton elapsed={elapsed} recording={recording} micOff={micOff} disabled={recording ? false : micOff || !ready} onPress={recording ? stop : start} />
         {/* Flip works during a take too (SPEC.md Section 6; Nemat, 6 Oct; docs/BLOCKERS.md B-1). */}
         <GlassTool label="Flip camera" onPress={flip}>
           <FlipIcon />
@@ -483,6 +459,46 @@ export default function RecordScreen() {
       </View>
       <Text style={[s.upTo, { bottom: Math.max(insets.bottom, 12) + 6 }]}>Up to 0:30</Text>
     </View>
+  );
+}
+
+/** The red timer's text during a take. */
+function TakeTimer({ elapsed }: { elapsed: ProgressSource }) {
+  return <Text style={s.timerText}>{formatTimer(useProgress(elapsed))}</Text>;
+}
+
+/** Record / Stop with its ring; the only part of the controls drawn as the take runs. */
+function RecordButton({ elapsed, recording, micOff, disabled, onPress }: { elapsed: ProgressSource; recording: boolean; micOff: boolean; disabled: boolean; onPress: () => void }) {
+  const elapsedMs = useProgress(elapsed);
+  const progress = elapsedMs / MAX_DURATION_MS;
+  const circumference = Math.PI * (RING - RING_STROKE);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={recording ? `Stop recording, ${Math.round(elapsedMs / 1000)} of 30 seconds` : micOff ? 'Record, unavailable' : 'Record'}
+      disabled={disabled}
+      onPress={onPress}
+      style={s.recordButton}
+    >
+      <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
+        <Circle cx={RING / 2} cy={RING / 2} r={(RING - RING_STROKE) / 2} stroke={recording ? 'rgba(255,255,255,0.35)' : micOff ? 'rgba(255,255,255,0.35)' : '#FFFFFF'} strokeWidth={RING_STROKE} fill="none" />
+        {recording ? (
+          <Circle
+            cx={RING / 2}
+            cy={RING / 2}
+            r={(RING - RING_STROKE) / 2}
+            stroke="#FFFFFF"
+            strokeWidth={RING_STROKE}
+            fill="none"
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={circumference * (1 - progress)}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${RING / 2} ${RING / 2})`}
+          />
+        ) : null}
+      </Svg>
+      {recording ? <View style={s.stopSquare} /> : <View style={[s.recordDot, micOff && { opacity: 0.35 }]} />}
+    </Pressable>
   );
 }
 
