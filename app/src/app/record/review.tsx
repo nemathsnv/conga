@@ -7,7 +7,7 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { BackHandler, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, BackHandler, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -16,6 +16,7 @@ import { isPostingRestriction, restrictionTarget } from '@/lib/restriction';
 import { useSession } from '@/lib/session';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool, ProgressLine, VideoGradients } from '@/ui/dark';
+import { failedTitle } from '@/ui/failedPost';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { ReplyCard } from '@/ui/ReplyCard';
@@ -126,15 +127,24 @@ export default function ReviewScreen() {
         else router.replace(target);
         return;
       }
-      // P7 / P8: another recording of this member is waiting or posting; Post refuses to replace it.
-      if (message.includes('post_pending') && openRecord.showBlock()) {
-        setBusy(false);
+      setBusy(false);
+      // A-Disclosure: the server has no acknowledgement (the check below could not be made).
+      if (message.includes('disclosure_required')) {
+        setDisclosure(true);
         return;
       }
+      // P7 / P8: another recording of this member is waiting or posting; Post refuses to replace it.
+      if (message.includes('post_pending') && openRecord.showBlock()) return;
+      // Anything else (a failed stitch, the phone's storage): the recording stays here, Post can be
+      // tapped again. Never a silent Post. Refusals of the post itself are Upload failed (submitPost).
       console.error('post failed', e);
-      setBusy(false);
+      notPosted();
     }
   };
+
+  // NOT APPROVED AS A STATE: a system alert with the Upload failed banner's own first line, for a
+  // Post that failed before anything was kept on the phone (founder iPhone test, 19 Oct).
+  const notPosted = () => Alert.alert(failedTitle(draftFor ? 'draft' : replyTo ? 'reply' : 'response', 'retry'));
 
   const onPost = () => gate(async () => {
     if (busy) return;
@@ -151,8 +161,9 @@ export default function ReviewScreen() {
         return;
       }
     } catch (e) {
-      console.error('disclosure check failed', e);
-      return;
+      // No answer (offline, a blip): the server checks the acknowledgement itself when the post is
+      // made, and Post goes on as any Post would (it waits offline, A-Offline).
+      console.warn('disclosure check failed', e);
     }
     await submit();
   });
@@ -165,6 +176,7 @@ export default function ReviewScreen() {
       await submit();
     } catch (e) {
       console.error('acknowledge_disclosure failed', e);
+      notPosted();
     }
   });
 

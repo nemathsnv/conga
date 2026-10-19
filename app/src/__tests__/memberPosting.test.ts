@@ -438,3 +438,31 @@ describe('Restore at launch: a recording whose file is gone shows P3 at once (re
     expect(relaunched.deps.save).not.toHaveBeenCalled();
   });
 });
+
+// Founder iPhone test (19 Oct): Respond → Post did nothing (post_response refused with
+// already_responded and the refusal was only logged), while a video reply posted.
+describe('Post refused by the server, from a response and from a video reply', () => {
+  test.each([
+    { entry: 'response', extra: {}, reason: 'already_responded' },
+    { entry: 'video reply', extra: { replyTo: { id: 'video-9', name: 'Sofia' } }, reason: 'video_not_found' },
+  ])('$entry refused with $reason: Post resolves, the banner shows it failed, the recording stays, Discard removes it without the server', async ({ extra, reason }) => {
+    const w = world();
+    const a = memberOf(w, 'A', { createRow: jest.fn(async () => Promise.reject(refused(reason))) });
+    await expect(a.m.post({ ...a.postArgs(), ...extra })).resolves.toBeUndefined();
+    expect(a.shown[a.shown.length - 1]).toMatchObject({ kind: 'failed', post: { failedReason: reason, responseId: null } });
+    expect(w.files.has('rec-1')).toBe(true);
+    expect(a.deps.upload.put).not.toHaveBeenCalled();
+    await a.m.discard({ resume: true });
+    expect(a.deps.abandon).not.toHaveBeenCalled();
+    expect(w.files.has('rec-1')).toBe(false);
+    expect(w.slots.get('A')).toBeUndefined();
+    expect(a.shown[a.shown.length - 1]).toEqual({ kind: 'idle' });
+  });
+
+  test('a restriction is still thrown for Post Review (A-Restricted), with nothing kept', async () => {
+    const w = world();
+    const a = memberOf(w, 'A', { createRow: jest.fn(async () => Promise.reject(refused('posting_paused'))) });
+    await expect(a.m.post(a.postArgs())).rejects.toThrow('posting_paused');
+    expect(w.slots.get('A')).toBeUndefined();
+  });
+});

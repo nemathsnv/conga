@@ -5,7 +5,8 @@ import { createGate } from '@/video/postingFlow';
 import { createTicketStore } from '@/video/ticketStore';
 import type { Recording } from '@/video/types';
 import type { UploadStatus, UploadTicket } from '@/video/upload';
-import { runPendingPost, submitPost, type PostingState, type RunDeps, type SubmitDeps } from '@/video/uploadRun';
+import { failedView } from '@/ui/failedPost';
+import { discardPost, runPendingPost, submitPost, type PostingState, type RunDeps, type SubmitDeps } from '@/video/uploadRun';
 
 /** What lib/content throws: refused (the server answered with an error code) or not (no answer). */
 const serverError = (message: string, refused: boolean) => Object.assign(new Error(message), { refused });
@@ -441,11 +442,83 @@ describe('Post: one waiting recording per member, stored before the request, a l
     expect(last()).toBeNull();
   });
 
-  test.each(['already_responded', 'prompt_not_found', 'posting_paused', 'submission_conflict'])('a refusal (%s): thrown as before, and the record of this attempt is removed', async (reason) => {
+  test.each(['posting_paused', 'suspended', 'disclosure_required'])('a refusal Post Review answers (%s): thrown, and the record of this attempt is removed', async (reason) => {
     const { box, deps, writes, args } = posting({ createRow: () => Promise.reject(serverError(reason, true)) });
     await expect(submitPost(args(), deps)).rejects.toThrow(reason);
     expect(box.slot).toBeNull();
     expect(writes[writes.length - 1]).toBeNull();
+  });
+
+  // Founder iPhone test (19 Oct): Home → + → Respond → record → Post did nothing, while a video
+  // reply posted. The hosted prompt already had Nemat's response, post_response refused with
+  // already_responded (one response per prompt, SPEC.md Section 6), and the refusal was only logged.
+  describe('a refusal of the post itself is never a silent Post, from either entry point', () => {
+    const reply = { id: 'video-9', name: 'Sofia' };
+    const entryPoints = [
+      { entry: 'a response (Home → + → Respond)', extra: {}, kind: 'response', reasons: ['already_responded', 'prompt_not_live', 'prompt_not_found'] },
+      { entry: 'a video reply (a video → Reply)', extra: { replyTo: reply }, kind: 'reply', reasons: ['video_not_found', 'response_removed'] },
+    ] as const;
+
+    describe.each(entryPoints)('$entry', ({ extra, kind, reasons }) => {
+      test.each(reasons)('refused with %s: kept on the phone as Upload failed, P2 (Discard only), nothing to abandon', async (reason) => {
+        const { box, deps, args } = posting({ createRow: () => Promise.reject(serverError(reason, true)) });
+        const result = await submitPost({ ...args(), ...extra }, deps);
+        expect(result?.show).toMatchObject({ kind: 'failed', post: { kind, state: 'failed', failedReason: reason, responseId: null, uploadId: '' } });
+        expect(result?.upload).toBeUndefined();
+        expect(box.slot).toBe(result?.show.kind === 'failed' ? result.show.post : undefined);
+        expect(failedView(box.slot as PendingPost)).toBe('cannot_post');
+        expect(deps.track).toHaveBeenCalledWith('upload_failed', { reason });
+        // Discard: the refusal rolled back, so the recording goes at once and the server is not asked.
+        const abandon = jest.fn();
+        const deleteFiles = jest.fn();
+        await expect(discardPost(box.slot as PendingPost, { persist: async () => undefined, deleteFiles, abandon })).resolves.toEqual({ kind: 'gone' });
+        expect(abandon).not.toHaveBeenCalled();
+        expect(deleteFiles).toHaveBeenCalledWith(recording());
+      });
+
+      test('a refusal Retry may fix (a busy server): Upload failed with Retry (P1)', async () => {
+        const { box, deps, args } = posting({ createRow: () => Promise.reject(serverError('canceling statement due to lock timeout', true)) });
+        await submitPost({ ...args(), ...extra }, deps);
+        expect(box.slot).toMatchObject({ kind, state: 'failed' });
+        expect(failedView(box.slot as PendingPost)).toBe('retry');
+      });
+
+      test('after a refusal the URL Post Review asked for is kept for the next recording: no extra mint', async () => {
+        const { deps, mint, store, args } = posting({ createRow: () => Promise.reject(serverError('already_responded', true)) });
+        await submitPost({ ...args(), ...extra }, deps);
+        expect(mint).toHaveBeenCalledTimes(1);
+        await expect(store.forOwner('A').get()).resolves.toMatchObject({ ticket: ticket(1) });
+      });
+
+      test('the post is made for the right row (post_response for a response, post_reply for a video reply)', async () => {
+        const { deps, args } = posting();
+        const result = await submitPost({ ...args(), ...extra }, deps);
+        expect(result?.upload).toMatchObject({ kind, replyToId: kind === 'reply' ? 'video-9' : null, promptId: 'p1', responseId: 'row-U1' });
+      });
+    });
+
+    test('a refusal while the Post was being stopped (Discard, Sign out anyway) stores nothing: the discard owns the slot', async () => {
+      const { box, deps, writes, args } = posting({
+        createRow: () => {
+          box.aborted = true;
+          return Promise.reject(serverError('already_responded', true));
+        },
+      });
+      await expect(submitPost(args(), deps)).rejects.toThrow('already_responded');
+      expect(writes.filter((w) => w?.state === 'failed')).toEqual([]);
+    });
+
+    test('a refusal that cannot be kept (storage fails) is thrown, for Post Review to say so', async () => {
+      let n = 0;
+      const { deps, args } = posting({
+        createRow: () => Promise.reject(serverError('already_responded', true)),
+        store: async () => {
+          n += 1;
+          if (n > 1) throw new Error('storage_failed');
+        },
+      });
+      await expect(submitPost(args(), deps)).rejects.toThrow('storage_failed');
+    });
   });
 
   test('another attempt at the same recording (after a refusal) is not blocked by its own record', async () => {

@@ -2,7 +2,7 @@
 // no network). posting.tsx supplies the effects, so interruption, Retry and signing out can be
 // tested with mocks.
 import type { EventName, EventProps } from '@/lib/analytics';
-import { ensureUploadRow, errorReason, prepareUpload, type SentUrl } from './postingFlow';
+import { ensureUploadRow, errorReason, isRefusal, isRestriction, prepareUpload, type SentUrl } from './postingFlow';
 import { newPendingPost, UPLOAD_URL_TTL_MS, uploadUrlUsable, type PendingPost } from './pendingPostState';
 import type { TicketSource } from './ticketStore';
 import type { Recording } from './types';
@@ -178,6 +178,11 @@ export type SubmitDeps = {
   aborted: () => boolean;
 };
 
+/** Refusals Post Review answers itself: A-Restricted, LV-Suspended, A-Disclosure. */
+export function answeredOnPostReview(reason: string): boolean {
+  return isRestriction(reason) || reason.includes('disclosure_required');
+}
+
 /** What Post leaves: the banner state to show, and a post to upload now. Null: nothing to show. */
 export type Submitted = { show: PostingState; upload?: PendingPost } | null;
 
@@ -189,8 +194,12 @@ export type Submitted = { show: PostingState; upload?: PendingPost } | null;
  *   or the app closing mid-request, leaves an Upload failed post whose Retry sends the same
  *   request, and the server returns the row it made.
  * - No answer from the server: an Upload failed post (waiting, if offline), not a silent Post.
- * - A refusal: the stored record of this attempt is removed and the refusal thrown, as before
- *   (A-Restricted, LV-Suspended, or Post Review staying open).
+ * - A restriction or `disclosure_required`: the stored record of this attempt is removed and the
+ *   refusal thrown, for Post Review to answer (A-Restricted, LV-Suspended, A-Disclosure).
+ * - Any other refusal (for example `already_responded`: one response per prompt, SPEC.md Section
+ *   6): an Upload failed post with the reason, never a silent Post (founder iPhone test, 19 Oct).
+ *   The refusal rolled back, so it holds no URL: Discard removes it at once, and the view
+ *   (failedPost.ts) is P2 for a refusal Retry cannot fix, P1 otherwise.
  */
 export async function submitPost(args: SubmitArgs, deps: SubmitDeps): Promise<Submitted> {
   // Nothing is asked of the server for a recording that is not on the phone (I2).
@@ -211,10 +220,20 @@ export async function submitPost(args: SubmitArgs, deps: SubmitDeps): Promise<Su
       },
     });
   } catch (e) {
-    // Refused: the request rolled back, nothing was made. Post Review keeps the recording. A Post
-    // stopped meanwhile (Discard, Sign out anyway) leaves storage to the discard that stopped it.
-    if (recorded && !deps.aborted()) await deps.clear().catch(() => undefined);
-    throw e;
+    // A Post stopped meanwhile (Discard, Sign out anyway) leaves storage to the discard that stopped it.
+    if (deps.aborted()) throw e;
+    const reason = errorReason(e);
+    if (!isRefusal(e) || answeredOnPostReview(reason)) {
+      // Refused for Post Review to answer (or no request was made): nothing was made, and Post
+      // Review keeps the recording.
+      if (recorded) await deps.clear().catch(() => undefined);
+      throw e;
+    }
+    // Refused: the request rolled back, nothing was made with the URL. Kept as Upload failed.
+    deps.track('upload_failed', { reason: reason.slice(0, 80) });
+    const refused: PendingPost = { ...base, state: 'failed', failedReason: reason };
+    await deps.store(refused);
+    return { show: { kind: 'failed', post: refused } };
   }
   if (deps.aborted()) return null;
   if (!prepared.ok) {
