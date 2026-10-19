@@ -1,4 +1,5 @@
-// Board LV-Followers: Followers / Following tabs; Follow back / Following pills.
+// Board LV-Followers: Followers / Following tabs; Follow back / Following pills. Swipe sideways or tap
+// the tabs to change list (ui/SwipePages.tsx).
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -9,14 +10,15 @@ import { avatarUrl } from '@/lib/api';
 import { followList, followUser, unfollowUser, type FollowRow } from '@/lib/content';
 import { Avatar, Separator } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
+import { SwipePages } from '@/ui/SwipePages';
 import { ChevronLeft } from '@/ui/Icons';
 import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 type Kind = 'followers' | 'following';
+const KINDS: readonly Kind[] = ['followers', 'following'];
 
 export default function FollowsScreen() {
-  const router = useRouter();
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id: string; kind?: string; username?: string }>();
@@ -43,7 +45,6 @@ export default function FollowsScreen() {
     }
   };
 
-  const list = rows[kind];
   const counts = { followers: rows.followers?.length, following: rows.following?.length };
 
   return (
@@ -57,7 +58,7 @@ export default function FollowsScreen() {
         <View style={s.headerButton} />
       </View>
       <View style={s.tabs}>
-        {(['followers', 'following'] as Kind[]).map((k) => (
+        {KINDS.map((k) => (
           <Pressable key={k} accessibilityRole="tab" accessibilityState={{ selected: kind === k }} onPress={() => setKind(k)} style={s.tab}>
             <Text style={[s.tabText, kind !== k && s.tabOff]}>
               {k === 'followers' ? 'Followers' : 'Following'}
@@ -68,34 +69,43 @@ export default function FollowsScreen() {
         ))}
       </View>
       <Separator inset={0} />
-      {list === null ? (
-        <View style={{ alignItems: 'center', marginTop: 40 }}>
-          <Spinner light={false} />
-        </View>
-      ) : (
-        <FlatList
-          data={list}
-          keyExtractor={(r) => r.id}
-          renderItem={({ item }) => (
-            <View style={s.row}>
-              <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/profile/[id]', params: { id: item.id } })} style={s.rowMain}>
-                <Avatar uri={avatarUrl(item.photo_path)} size={40} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={s.rowName}>{item.name}</Text>
-                  <Text style={s.rowSub}>@{item.username}</Text>
-                </View>
-              </Pressable>
-              {item.is_self ? null : (
-                <Pressable accessibilityRole="button" onPress={() => void toggle(item)} style={({ pressed }) => [s.pill, item.is_following ? s.pillGrey : s.pillBlack, pressed && { opacity: 0.7 }]}>
-                  <Text style={[s.pillText, item.is_following && { color: colors.text }]}>{item.is_following ? 'Following' : item.follows_you ? 'Follow back' : 'Follow'}</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        />
-      )}
+      {/* Swipe sideways between Followers and Following, or tap the tabs (founder iPhone test, 19 Oct). */}
+      <SwipePages pages={KINDS} selected={kind} onSelect={setKind} edgeGuard renderPage={(k) => <FollowList rows={rows[k]} onToggle={(row) => void toggle(row)} />} />
     </View>
+  );
+}
+
+function FollowList({ rows, onToggle }: { rows: FollowRow[] | null; onToggle: (row: FollowRow) => void }) {
+  const router = useRouter();
+  if (rows === null) {
+    return (
+      <View style={{ alignItems: 'center', marginTop: 40 }}>
+        <Spinner light={false} />
+      </View>
+    );
+  }
+  return (
+    <FlatList
+      data={rows}
+      keyExtractor={(r) => r.id}
+      renderItem={({ item }) => (
+        <View style={s.row}>
+          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/profile/[id]', params: { id: item.id } })} style={s.rowMain}>
+            <Avatar uri={avatarUrl(item.photo_path)} size={40} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.rowName}>{item.name}</Text>
+              <Text style={s.rowSub}>@{item.username}</Text>
+            </View>
+          </Pressable>
+          {item.is_self ? null : (
+            <Pressable accessibilityRole="button" onPress={() => onToggle(item)} style={({ pressed }) => [s.pill, item.is_following ? s.pillGrey : s.pillBlack, pressed && { opacity: 0.7 }]}>
+              <Text style={[s.pillText, item.is_following && { color: colors.text }]}>{item.is_following ? 'Following' : item.follows_you ? 'Follow back' : 'Follow'}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    />
   );
 }
 

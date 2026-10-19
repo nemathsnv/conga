@@ -10,10 +10,13 @@ import { followUser, getProfile, profileReplies, profileResponses, unfollowUser,
 import { countNoun, followedByLabel, formatCount } from '@/lib/format';
 import { Avatar, Separator } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
+import { SwipePages } from '@/ui/SwipePages';
 import { PinIcon, PlusSlotIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
 import { shouldLoadReplies } from '@/ui/profileRules';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
+
+const PROFILE_TABS = ['responses', 'replies'] as const;
 
 export function useProfile(args: { id?: string; username?: string }) {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
@@ -140,81 +143,93 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
       </View>
       <Separator inset={0} />
 
-      {tab === 'replies' ? (
-        replies === null ? (
-          <View style={{ alignItems: 'center', marginTop: 40 }}>
-            <Spinner light={false} />
-          </View>
-        ) : (
-          <View style={s.grid}>
-            {replies.map((r) => (
-              <Pressable
-                key={r.id}
-                accessibilityRole="button"
-                accessibilityLabel={r.reply_to_name ? `Reply to ${r.reply_to_name}` : 'Video reply'}
-                disabled={r.status !== 'live'}
-                onPress={() => router.push({ pathname: '/reply/[id]', params: { id: r.id } })}
-                style={[s.cell, { width: cell, height: 206 }]}
-              >
-                {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-                {r.status === 'processing' ? (
-                  <View style={s.processing}>
-                    <Spinner size={22} />
-                    <Text style={s.processingText}>Processing</Text>
-                  </View>
-                ) : (
-                  <View style={s.cap}>
-                    <Text style={s.capText} numberOfLines={2}>{r.reply_to_name ? `Replying to ${r.reply_to_name.split(' ')[0]}` : r.prompt_text}</Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
-          </View>
-        )
-      ) : empty ? (
-        // Board X-Me-Empty
-        <View style={s.emptyBlock}>
-          <View style={s.emptySlot}>
-            <PlusSlotIcon color={colors.textTertiary} />
-          </View>
-          <Text style={s.emptyText}>Your responses show up here.</Text>
-          <Pressable accessibilityRole="button" onPress={onTonight} style={({ pressed }) => [s.tonight, pressed && { opacity: 0.8 }]}>
-            <RecordDotIcon />
-            <Text style={s.tonightText}>Respond to tonight&apos;s prompt</Text>
-          </Pressable>
-        </View>
-      ) : responses === null ? (
-        <View style={{ alignItems: 'center', marginTop: 40 }}>
-          <Spinner light={false} />
-        </View>
-      ) : (
-        <View style={s.grid}>
-          {responses.map((r) => (
-            <Pressable
-              key={r.id}
-              accessibilityRole="button"
-              disabled={r.status !== 'live'}
-              onPress={() => router.push({ pathname: '/player/[promptId]', params: { promptId: r.prompt_id, entry: r.id } })}
-              style={[s.cell, { width: cell, height: 206 }]}
-            >
-              {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-              {r.status === 'processing' ? (
-                <View style={s.processing}>
-                  <Spinner size={22} />
-                  <Text style={s.processingText}>Processing</Text>
+      {/* Swipe sideways between Responses and Replies, or tap the tabs (founder iPhone test, 19 Oct). */}
+      <SwipePages
+        pages={PROFILE_TABS}
+        selected={tab}
+        onSelect={setTab}
+        fitHeight
+        edgeGuard
+        renderPage={(page) =>
+          page === 'replies' ? (
+            replies === null ? (
+              <View style={{ alignItems: 'center', marginTop: 40 }}>
+                <Spinner light={false} />
+              </View>
+            ) : (
+              <View style={s.grid}>
+                {replies.map((r) => (
+                  <Pressable
+                    key={r.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={r.reply_to_name ? `Reply to ${r.reply_to_name}` : 'Video reply'}
+                    disabled={r.status !== 'live'}
+                    onPress={() => router.push({ pathname: '/reply/[id]', params: { id: r.id } })}
+                    style={[s.cell, { width: cell, height: 206 }]}
+                  >
+                    {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+                    {r.status === 'processing' ? (
+                      <View style={s.processing}>
+                        <Spinner size={22} />
+                        <Text style={s.processingText}>Processing</Text>
+                      </View>
+                    ) : (
+                      <View style={s.cap}>
+                        <Text style={s.capText} numberOfLines={2}>{r.reply_to_name ? `Replying to ${r.reply_to_name.split(' ')[0]}` : r.prompt_text}</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )
+          ) : (
+            empty ? (
+              // Board X-Me-Empty
+              <View style={s.emptyBlock}>
+                <View style={s.emptySlot}>
+                  <PlusSlotIcon color={colors.textTertiary} />
                 </View>
-              ) : (
-                <>
-                  {r.pinned ? <View style={s.pin}><PinIcon /></View> : null}
-                  <View style={s.cap}>
-                    <Text style={s.capText} numberOfLines={2}>{r.prompt_text}</Text>
-                  </View>
-                </>
-              )}
-            </Pressable>
-          ))}
-        </View>
-      )}
+                <Text style={s.emptyText}>Your responses show up here.</Text>
+                <Pressable accessibilityRole="button" onPress={onTonight} style={({ pressed }) => [s.tonight, pressed && { opacity: 0.8 }]}>
+                  <RecordDotIcon />
+                  <Text style={s.tonightText}>Respond to tonight&apos;s prompt</Text>
+                </Pressable>
+              </View>
+            ) : responses === null ? (
+              <View style={{ alignItems: 'center', marginTop: 40 }}>
+                <Spinner light={false} />
+              </View>
+            ) : (
+              <View style={s.grid}>
+                {responses.map((r) => (
+                  <Pressable
+                    key={r.id}
+                    accessibilityRole="button"
+                    disabled={r.status !== 'live'}
+                    onPress={() => router.push({ pathname: '/player/[promptId]', params: { promptId: r.prompt_id, entry: r.id } })}
+                    style={[s.cell, { width: cell, height: 206 }]}
+                  >
+                    {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+                    {r.status === 'processing' ? (
+                      <View style={s.processing}>
+                        <Spinner size={22} />
+                        <Text style={s.processingText}>Processing</Text>
+                      </View>
+                    ) : (
+                      <>
+                        {r.pinned ? <View style={s.pin}><PinIcon /></View> : null}
+                        <View style={s.cap}>
+                          <Text style={s.capText} numberOfLines={2}>{r.prompt_text}</Text>
+                        </View>
+                      </>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )
+          )
+        }
+      />
     </ScrollView>
   );
 }
