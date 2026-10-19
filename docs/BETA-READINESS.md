@@ -4888,6 +4888,23 @@ Base `4b2fe3f`; 23 commits to `c12724e`. Nothing pushed, deployed, installed on 
   files in `Documents/recordings/` never swept; sign-out scope global vs local (Nemat). Android still never
   run.
 
+## 31. iPhone bugs and mobile UX from Nemat's device test (19 Oct; local only, nothing installed or published)
+
+Base `22a8f7a`; branch `claude/conga-iphone-bugs-ux-6cf82a`. Full report: `release/IPHONE-BUGS-19OCT.md`.
+
+- *P0, Respond → Post did nothing:* `post_response` refuses `already_responded` (one response per prompt;
+  Nemat already has a live response on the hosted prompt), and Post Review only logged refusals. A refusal is now
+  an Upload failed post (P2 / P1 banner on Home, Discard), never silent; regression tests for responses and video
+  replies (`817ce93`). Closes the "Post refused while creating the row" row of section 1 for refusals; a failed
+  stitch or storage error shows an unapproved system alert (Nemat to decide).
+- *P1, zoom:* pinch and a 1×/2× button during a take, through a new local native module (`camera-zoom`); flip moved
+  beside Record (`a471142`). **Native change: needs a new founder build.**
+- *P2:* horizontal swipe on Home, profiles and Followers (`00df105`); Home and player bottom overlay 34 to 72 pt lower
+  (Home had the tab bar counted twice) (`3bd9a1d`).
+- *Verified:* typecheck, lint, Jest 39 suites 481/481; simulator Debug build and walk (layout, swipes, back swipe,
+  record controls); the refusal on an isolated stack. **Not run:** anything with a camera (zoom, flip with zoom,
+  recording, stitching) and the P2 banner after a real Post. Decisions for Nemat are listed in the report.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
