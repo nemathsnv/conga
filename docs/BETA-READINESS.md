@@ -4907,7 +4907,7 @@ Base `22a8f7a`; branch `claude/conga-iphone-bugs-ux-6cf82a`. Full report: `relea
 - *Founder build installed (19 Oct, Nemat approved):* fingerprint `a64bc144…`, over the existing app with `devicectl`
   ("App installed" on the second attempt). The first launch was refused (phone locked); after unlocking, launched 05:59:08 UTC and still running a minute later (pid 20045, new install path), no crash log. Signed-in state to be confirmed by Nemat on the phone.
 
-## 32. iPhone stability and interactions from Nemat's second device test (19 Oct; nothing published, deployed or installed)
+## 32. iPhone stability and interactions from Nemat's second device test (19 Oct; EAS Update to `founder` published, Nemat approved; nothing deployed or installed)
 
 Base `c757dfd`; branch `claude/conga-iphone-stability-3988b9`. Full report: `release/IPHONE-STABILITY-19OCT.md`.
 
@@ -4924,6 +4924,9 @@ Base `c757dfd`; branch `claude/conga-iphone-stability-3988b9`. Full report: `rel
 - *Verified:* typecheck, lint, Jest 41 suites 507/507; simulator walks on an isolated stack with a fake Mux. Founder
   update dry run: fingerprint `a64bc144…`, the installed build's, so an EAS Update can carry it (needs Nemat's approval).
   **Not run:** the iPhone, anything with a camera, a real Mux upload.
+- *Published (Nemat approved):* EAS Update group `95dfedbb-c7b8-4939-849b-e03920eaafd6` (iOS update
+  `01a1531a-3d96-7d71-a3d8-19bf9bf1d597`) to `founder` only, runtime `a64bc144…`, from `c5e326b`. It is the channel's first
+  update, so rollback is to the embedded bundle (command in the report, section 9). Loading on the phone not yet confirmed.
 
 ## Gates
 

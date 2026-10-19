@@ -4,7 +4,7 @@ Fixes for Nemat's second real-device test on the iPhone 17 Pro (founder Release 
 
 - **Base:** `c757dfd`, the tip of `claude/conga-iphone-bugs-ux-6cf82a` (the latest Conga commit; checked).
 - **Branch:** `claude/conga-iphone-stability-3988b9`, seven commits plus this report.
-- **What did not happen:** nothing was pushed, published (no EAS Update), deployed or installed. The hosted project, Mux and the founder's local stack `shortcut` were not touched. The phone was not used.
+- **What did not happen:** nothing was pushed, deployed or installed. One EAS Update was published to `founder` after Nemat approved it (section 9). The hosted project, Mux and the founder's local stack `shortcut` were not touched. The phone was not used.
 
 | Commit | What |
 | --- | --- |
@@ -284,8 +284,44 @@ It is a swap within the approved R-Record board's geometry, not a redesign. It n
    - Board drift on R-Record.
    - The unapproved Post Review system alert.
 
+## 9. Published: EAS Update to `founder` (19 Oct, Nemat approved)
+
+Before publishing:
+
+- **Target:** `@nemathsnv/conga` (project `89a7bb41-ee22-4358-9ab1-75299a5ae2f9`), header `expo-channel-name: founder`, bundle `app.shortcut.founder`.
+- **Runtime fingerprint:** `a64bc144e306e405f6845ff316e48968dd83bf84`. This equals the installed founder build's `EXUpdates.bundle/fingerprint`, built at `3bd9a1d`.
+- **No native changes:** nothing in `package.json`, the lockfile, `app.config.ts`, `app.json`, `eas.json`, `plugins/` or `modules/` changed since `3bd9a1d`. Only the seven commits above touch `app/`; `c757dfd` added docs only.
+- **Environment:** `.env.founder`, hosted project `picv…supabase.co` (the same one the installed build's bundle uses), an `sb_publishable_` key, links `https://conga.churntech.com`, dev tools off.
+- **Checks:** typecheck clean, lint exit 0, Jest 41 suites 507/507, dry run OK, clean tree.
+- **Rollback point:** the `founder` channel (branch `founder`) had no updates. The phone was running the bundle embedded in the 19 Oct build.
+
+Published from `c5e326b`:
+
+| | |
+| --- | --- |
+| Branch / channel | `founder` / `founder` only |
+| Update group ID | `95dfedbb-c7b8-4939-849b-e03920eaafd6` |
+| iOS update ID | `01a1531a-3d96-7d71-a3d8-19bf9bf1d597` |
+| Runtime version | `a64bc144e306e405f6845ff316e48968dd83bf84` |
+| Message | Stability: sheets, players, profile swipe, responded (c5e326b) |
+| Dashboard | https://expo.dev/accounts/nemathsnv/projects/conga/updates/95dfedbb-c7b8-4939-849b-e03920eaafd6 |
+
+Not done: no other channel, no Git push, nothing changed in Supabase, Cloudflare or Mux.
+
+**Rollback** (back to the bundle embedded in the installed build), only if needed:
+
+```bash
+cd app && npx --yes eas-cli@25.1.1 update:roll-back-to-embedded --branch founder --runtime-version a64bc144e306e405f6845ff316e48968dd83bf84 --platform ios --message "Roll back to embedded"
+```
+
+**On the iPhone:** the build checks for an update at launch (`ON_LOAD`, `fallbackToCacheTimeout: 0`). It downloads in the background and runs from the next cold start.
+
+1. Open Conga and wait about 10 s on Wi-Fi or mobile data.
+2. Force-quit it (swipe it away in the app switcher), then open it again.
+3. Confirm with the **+** sheet: prompts you have already responded to now show a grey **Responded** pill instead of Respond. The installed bundle never shows that.
+
 ## Not changed
 
 - No backend, migration or Edge Function deployed. `supabase/migrations/` is untouched.
-- Nothing published, pushed or installed.
+- Published only the `founder` EAS Update in section 9; nothing pushed or installed.
 - The local stack `shortcut-st` and its fake Mux ran from the scratchpad and were stopped. The founder stack `shortcut` was not touched.
