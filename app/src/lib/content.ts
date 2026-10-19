@@ -18,9 +18,6 @@ export type PromptCard = {
   /** Phase 6: "Suggested by …" when the member kept their name on it. */
   suggested_by?: ProfileCard | null;
   is_own_suggestion?: boolean;
-  /** The signed-in member already has their one primary response on this prompt (the server's
-   *  slot rule). Not deployed yet (supabase/proposed); absent until it is. */
-  viewer_responded?: boolean;
 };
 
 export type ResponseCard = {

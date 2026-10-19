@@ -152,14 +152,14 @@ describe('camera entry (P7, P8)', () => {
   });
 });
 
-describe('camera entry: one primary response per prompt', () => {
+describe('camera entry: several responses per prompt (Nemat, 19 Oct 2026)', () => {
   let entry!: ReturnType<typeof useOpenRecord>;
   function Capture() {
     entry = useOpenRecord();
     return null;
   }
 
-  it('Respond on a prompt already responded to opens the sheet route, not the camera; a reply still opens', async () => {
+  it('Respond on a prompt already responded to opens the camera, as on any other prompt', async () => {
     mockPostingKind = 'idle';
     mockResponded.clear();
     mockResponded.add('p1');
@@ -170,12 +170,28 @@ describe('camera entry: one primary response per prompt', () => {
       tree = renderer.create(<RecordEntryProvider><Capture /></RecordEntryProvider>);
     });
     entry.open({ pathname: '/record/[promptId]', params: { promptId: 'p1' } });
-    expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/camera-blocked', params: { kind: 'responded' } });
-    expect(mockPush).not.toHaveBeenCalled();
     entry.open({ pathname: '/record/[promptId]', params: { promptId: 'p1', replyTo: 'v1' } });
     entry.open({ pathname: '/record/[promptId]', params: { promptId: 'p2' } });
-    expect(mockPush).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledTimes(3);
+    expect(mockPush).toHaveBeenNthCalledWith(1, { pathname: '/record/[promptId]', params: { promptId: 'p1' } });
     tree.unmount();
+  });
+
+  it('a recording still waiting blocks every camera entry (P7), answered prompt or not', async () => {
+    mockPostingKind = 'failed';
+    mockResponded.clear();
+    mockNavigate.mockReset();
+    mockPush.mockReset();
+    let tree!: ReturnType<typeof renderer.create>;
+    await renderer.act(() => {
+      tree = renderer.create(<RecordEntryProvider><Capture /></RecordEntryProvider>);
+    });
+    entry.open({ pathname: '/record/[promptId]', params: { promptId: 'p1' } });
+    expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/camera-blocked', params: { kind: 'waiting' } });
+    expect(mockPush).not.toHaveBeenCalled();
+    tree.unmount();
+    mockPostingKind = 'idle';
   });
 });
 

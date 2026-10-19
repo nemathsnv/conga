@@ -111,7 +111,7 @@ export default function SafetyScreen() {
     try {
       await deleteVideo(p.id);
       markFeedDirty();
-      // A deleted response frees its prompt for a new one (lib/responded.ts).
+      // What the + sheet labels "Respond again" is read again (lib/responded.ts).
       void afterOwnVideoDeleted();
       router.dismissTo('/(tabs)');
     } catch (e) {

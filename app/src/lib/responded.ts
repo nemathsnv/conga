@@ -1,29 +1,22 @@
-// The prompts the signed-in member already has their one primary response on (SPEC.md Section 6:
-// "One primary response per person per prompt. To change it, the person deletes it and records
-// again."), so the + sheet can say so and Respond does not open the camera for a recording the
-// server will refuse (founder iPhone test, 19 Oct: the + sheet offered answered prompts and the
-// refusal came only after recording).
+// The prompts the signed-in member has responded to at least once, so the + sheet can offer
+// "Respond again" on them instead of "Respond". A member may respond to the same prompt any number
+// of times (Nemat, 19 Oct 2026; SPEC.md Section 6); this decides a label only, never whether the
+// camera opens. The server is the only judge of a post.
 //
-// Read from the server, never guessed. For each prompt the newest of:
-// - `viewer_responded` on a prompt card, when the server sends it (supabase/proposed: not deployed
-//   yet). It applies the server's own rule, true or false.
-// - A refusal `already_responded`, or a response of theirs going live, on this phone.
-// - The member's own responses (profile_responses: live and processing). Being listed there means
-//   responded; not being listed proves nothing (a response a moderator removed holds the slot but
-//   is not listed), so it never overrides the other two.
-// A deletion of the member's own video forgets all but the list, which is then read again.
-// The server stays the only judge: this only decides what the app offers.
+// Read from the server, never guessed:
+// - The member's own responses (profile_responses: live and processing).
+// - What happened on this phone: a response of theirs accepted or live, or (an older server, before
+//   20261019000200) a refusal `already_responded`.
+// A deletion of the member's own video forgets the marks and reads the list again.
 import { useSyncExternalStore } from 'react';
 
-import { profileResponses, type PromptCard } from './content';
-
-type Evidence = { responded: boolean; at: number };
+import { profileResponses } from './content';
 
 /** From the member's own responses, read at `listedAt`. */
 let listed = new Set<string>();
 let listedAt = 0;
-/** From prompt cards and from what happened on this phone. */
-let evidence = new Map<string, Evidence>();
+/** From what happened on this phone, with when. */
+let marked = new Map<string, number>();
 let owner: string | null = null;
 let version = 0;
 const listeners = new Set<() => void>();
@@ -37,7 +30,7 @@ function changed(): void {
 function clear(): void {
   listed = new Set();
   listedAt = 0;
-  evidence = new Map();
+  marked = new Map();
 }
 
 /** Loads the member's own responses. Keeps what it had if the server cannot answer. */
@@ -54,43 +47,31 @@ export async function refreshResponded(ownerId: string | null): Promise<void> {
     if (owner !== ownerId || startedAt < listedAt) return;
     listed = new Set(mine.filter((r) => r.status === 'live' || r.status === 'processing').map((r) => r.prompt_id));
     listedAt = startedAt;
+    // A mark the list has caught up with is no longer needed; a newer one (a post the list was
+    // read before) stays.
+    for (const [promptId, at] of marked) if (at <= startedAt) marked.delete(promptId);
     changed();
   } catch {
-    // Offline or a blip: what was known stays; the server still refuses a second response.
+    // Offline or a blip: what was known stays.
   }
 }
 
-function record(promptId: string, responded: boolean): boolean {
-  const before = hasResponded(promptId);
-  evidence.set(promptId, { responded, at: now() });
-  return before !== hasResponded(promptId);
-}
-
-/** Cards carry the server's answer once `viewer_responded` is deployed. */
-export function applyPromptCards(cards: readonly Pick<PromptCard, 'id' | 'viewer_responded'>[]): void {
-  let any = false;
-  for (const c of cards) {
-    if (typeof c.viewer_responded === 'boolean' && record(c.id, c.viewer_responded)) any = true;
-  }
-  if (any) changed();
-}
-
-/** The server refused with already_responded, or the member's response went live. */
+/** A response of the member's to this prompt was accepted or went live on this phone. */
 export function markResponded(promptId: string): void {
-  if (record(promptId, true)) changed();
+  const before = hasResponded(promptId);
+  marked.set(promptId, now());
+  if (!before) changed();
 }
 
-/** The member deleted one of their videos: the slot may be free again. */
+/** The member deleted one of their videos: the list is read again. */
 export function afterOwnVideoDeleted(): Promise<void> {
-  evidence = new Map();
+  marked = new Map();
   changed();
   return refreshResponded(owner);
 }
 
 export function hasResponded(promptId: string): boolean {
-  const e = evidence.get(promptId);
-  if (listed.has(promptId) && (!e || listedAt >= e.at)) return true;
-  return e?.responded ?? false;
+  return listed.has(promptId) || marked.has(promptId);
 }
 
 /** Re-renders when what is known changes. */

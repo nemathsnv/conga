@@ -1,15 +1,11 @@
-// What the app knows about the member's one primary response per prompt (lib/responded.ts), and
-// where it stops the camera (ui/recordEntry.tsx respondTarget). Founder iPhone test, 19 Oct: the +
-// sheet offered prompts already responded to; Post was refused only after recording.
-import { afterOwnVideoDeleted, applyPromptCards, hasResponded, markResponded, refreshResponded, resetResponded, _setClockForTests } from '@/lib/responded';
-import { failedDetailFor } from '@/ui/failedPost';
-import { respondTarget } from '@/ui/recordEntry';
+// What the app knows about the prompts the member has responded to (lib/responded.ts): only the
+// + sheet's "Respond again" label reads it. A member may respond to a prompt any number of times
+// (Nemat, 19 Oct 2026), so nothing here stops the camera (sheetsWithoutModal.test.tsx).
+import { afterOwnVideoDeleted, hasResponded, markResponded, refreshResponded, resetResponded, _setClockForTests } from '@/lib/responded';
+import { failedDetailFor, RESPONDED_COPY } from '@/ui/failedPost';
 
 const mockProfileResponses = jest.fn();
 jest.mock('@/lib/content', () => ({ profileResponses: (...a: unknown[]) => mockProfileResponses(...a) }));
-jest.mock('expo-router', () => ({ useRouter: () => ({}) }));
-jest.mock('@/video/posting', () => ({ usePosting: () => ({ state: { kind: 'idle' } }) }));
-jest.mock('@/lib/session', () => ({ useSession: () => ({ session: null }) }));
 
 let clock = 1000;
 const tick = () => (clock += 10);
@@ -31,43 +27,51 @@ describe('responded prompts', () => {
     expect([hasResponded('p1'), hasResponded('p2'), hasResponded('p3'), hasResponded('p4')]).toEqual([true, true, false, false]);
   });
 
-  it('keeps the server\'s card answer over a later list that cannot see a removed response', async () => {
-    mockProfileResponses.mockResolvedValue([]);
+  it('several responses on one prompt are one answered prompt', async () => {
+    mockProfileResponses.mockResolvedValue([own('p1', 'live'), own('p1', 'live'), own('p1', 'processing')]);
     await refreshResponded('me');
-    tick();
-    applyPromptCards([{ id: 'removed', viewer_responded: true }]);
-    tick();
-    await refreshResponded('me');
-    expect(hasResponded('removed')).toBe(true);
+    expect(hasResponded('p1')).toBe(true);
   });
 
-  it('a refusal (already_responded) is remembered across a refresh', async () => {
+  it('a response posted on this phone counts before the list has caught up', async () => {
     mockProfileResponses.mockResolvedValue([]);
     await refreshResponded('me');
     tick();
     markResponded('p9');
-    tick();
+    expect(hasResponded('p9')).toBe(true);
+    // A list whose read started before the post does not forget it.
+    _setClockForTests(() => clock - 5);
     await refreshResponded('me');
+    _setClockForTests(() => clock);
     expect(hasResponded('p9')).toBe(true);
   });
 
-  it('a newer card saying false wins over an older list (the response was deleted elsewhere)', async () => {
-    mockProfileResponses.mockResolvedValue([own('p1', 'live')]);
+  it('a list read after the post is believed (the response was deleted elsewhere)', async () => {
+    mockProfileResponses.mockResolvedValue([]);
     await refreshResponded('me');
+    markResponded('p9');
     tick();
-    applyPromptCards([{ id: 'p1', viewer_responded: false }]);
-    expect(hasResponded('p1')).toBe(false);
+    await refreshResponded('me');
+    expect(hasResponded('p9')).toBe(false);
   });
 
-  it('a deletion forgets marks and cards and reads the list again', async () => {
+  it('deleting one of several responses keeps the prompt answered when the list still has one', async () => {
+    mockProfileResponses.mockResolvedValue([own('p1', 'live'), own('p1', 'live')]);
+    await refreshResponded('me');
+    tick();
+    mockProfileResponses.mockResolvedValue([own('p1', 'live')]);
+    await afterOwnVideoDeleted();
+    expect(hasResponded('p1')).toBe(true);
+  });
+
+  it('deleting the last one reads the list again and forgets marks', async () => {
     mockProfileResponses.mockResolvedValue([own('p1', 'live')]);
     await refreshResponded('me');
     markResponded('p2');
-    applyPromptCards([{ id: 'p3', viewer_responded: true }]);
     tick();
     mockProfileResponses.mockResolvedValue([]);
     await afterOwnVideoDeleted();
-    expect([hasResponded('p1'), hasResponded('p2'), hasResponded('p3')]).toEqual([false, false, false]);
+    expect([hasResponded('p1'), hasResponded('p2')]).toEqual([false, false]);
   });
 
   it('a list that cannot load keeps what was known', async () => {
@@ -86,27 +90,14 @@ describe('responded prompts', () => {
     await refreshResponded('someone-else');
     expect([hasResponded('p1'), hasResponded('p2')]).toEqual([false, false]);
   });
-
-  it('cards without the field (not deployed) change nothing', () => {
-    markResponded('p1');
-    applyPromptCards([{ id: 'p1' }, { id: 'p2' }]);
-    expect([hasResponded('p1'), hasResponded('p2')]).toEqual([true, false]);
-  });
 });
 
-describe('which camera links are a primary response', () => {
-  it('a response to a prompt', () => {
-    expect(respondTarget({ pathname: '/record/[promptId]', params: { promptId: 'p1' } })).toBe('p1');
+describe('copy', () => {
+  it('the + sheet says Respond again on an answered prompt', () => {
+    expect(RESPONDED_COPY.label).toBe('Respond again');
   });
-  it('never a video reply, a draft or another screen', () => {
-    expect(respondTarget({ pathname: '/record/[promptId]', params: { promptId: 'p1', replyTo: 'v1' } })).toBeNull();
-    expect(respondTarget({ pathname: '/record/[promptId]', params: { promptId: 'draft', draftFor: 's1' } })).toBeNull();
-    expect(respondTarget('/plus')).toBeNull();
-  });
-});
 
-describe('the refusal says why (P2)', () => {
-  it('already_responded explains the one-response rule; other refusals keep the board line', () => {
+  it('an older server\'s already_responded refusal still says why; other refusals keep the board line', () => {
     expect(failedDetailFor('cannot_post', 'already_responded')).toBe("You've already responded to this prompt.");
     expect(failedDetailFor('cannot_post', 'prompt_not_live')).toBe("This recording can't be posted.");
     expect(failedDetailFor('file_gone', 'already_responded')).toBe('This recording is no longer on this phone.');

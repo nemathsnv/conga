@@ -11,7 +11,6 @@ import { followSuggestions, followUser, followingFeed, getNotificationState, hom
 import { track } from '@/lib/analytics';
 import { useOnline } from '@/lib/connectivity';
 import { createLatest } from '@/lib/latest';
-import { applyPromptCards } from '@/lib/responded';
 import { shouldAsk } from '@/lib/notificationAsk';
 import { takeFeedDirty } from '@/ui/feedStore';
 import { ActionSheet } from '@/ui/ActionSheet';
@@ -184,7 +183,6 @@ const FeedPage = memo(function FeedPage({ which, shown, focused, reloads, seen, 
     const current = () => loads.current.isCurrent(ticket);
     fetchFeed(which, reset ? [] : seen.current, seen.current)
       .then(({ page, people }) => {
-        applyPromptCards(page.map((c) => c.prompt));
         if (!current()) return;
         setItems((prev) => (which === 'following' || reset || !prev ? page : [...prev, ...page.filter((c) => !prev.some((p) => p.prompt.id === c.prompt.id))]));
         if (people) setSuggestions(people);

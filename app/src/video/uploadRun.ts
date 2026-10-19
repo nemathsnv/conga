@@ -196,8 +196,8 @@ export type Submitted = { show: PostingState; upload?: PendingPost } | null;
  * - No answer from the server: an Upload failed post (waiting, if offline), not a silent Post.
  * - A restriction or `disclosure_required`: the stored record of this attempt is removed and the
  *   refusal thrown, for Post Review to answer (A-Restricted, LV-Suspended, A-Disclosure).
- * - Any other refusal (for example `already_responded`: one response per prompt, SPEC.md Section
- *   6): an Upload failed post with the reason, never a silent Post (founder iPhone test, 19 Oct).
+ * - Any other refusal (for example `prompt_not_found`, or `already_responded` from a server before
+ *   20261019000200): an Upload failed post with the reason, never a silent Post (founder iPhone test, 19 Oct).
  *   The refusal rolled back, so it holds no URL: Discard removes it at once, and the view
  *   (failedPost.ts) is P2 for a refusal Retry cannot fix, P1 otherwise.
  */

@@ -57,11 +57,11 @@ function createRow(post: Pick<PendingPost, 'draftFor' | 'replyToId' | 'promptId'
   return postResponse(post.promptId, t.uploadId, post.caption, durationMs, submissionId, signal);
 }
 
-/** What a posting state says about the member's one response to its prompt (lib/responded.ts). */
+/** A response of the member's accepted or live: the + sheet offers "Respond again" (lib/responded.ts). */
 function noteResponded(s: PostingState): void {
-  if (s.kind !== 'failed' && s.kind !== 'live') return;
+  if (s.kind !== 'failed' && s.kind !== 'processing' && s.kind !== 'live') return;
   if (s.post.kind !== 'response' || s.post.replyToId || s.post.draftFor) return;
-  if (s.kind === 'live' || (s.post.failedReason ?? '').includes('already_responded')) markResponded(s.post.promptId);
+  if (s.kind !== 'failed' || (s.post.failedReason ?? '').includes('already_responded')) markResponded(s.post.promptId);
 }
 
 function memberFor(ownerId: string, show: (s: PostingState) => void): MemberPosting {

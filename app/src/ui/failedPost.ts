@@ -61,17 +61,13 @@ export function failedDetailFor(view: Exclude<FailedView, 'retry'>, reason: stri
   return failedDetail(view);
 }
 
-// PROPOSED COPY, NOT ON A BOARD (founder iPhone test, 19 Oct; needs Nemat's approval, or boards):
-// the one-response rule said before recording, and after a refusal. SPEC.md Section 6: "One primary
-// response per person per prompt. To change it, the person deletes it and records again."
+// NOT ON A BOARD. "Respond again" is Nemat's wording (19 Oct 2026, several responses per prompt);
+// the P2 line is proposed copy from 19 Oct (founder iPhone test), still awaiting approval or a board.
 export const RESPONDED_COPY = {
-  /** The + sheet's pill in place of Respond, on a prompt the member has responded to. */
-  label: 'Responded',
-  /** Respond on a prompt the member has responded to (Home, a player, the + sheet). */
-  sheetTitle: "You've already responded to this prompt",
-  sheetLine: 'One response per prompt. To record a new one, delete your response first.',
-  ok: 'OK',
-  /** P2's second line when the refusal was already_responded (instead of "This recording can't be posted."). */
+  /** The + sheet's pill in place of Respond, on a prompt the member has responded to before. */
+  label: 'Respond again',
+  /** P2's second line when an older server (before 20261019000200) refused with already_responded,
+   *  instead of "This recording can't be posted.". The current server never refuses so. */
   refused: "You've already responded to this prompt.",
 } as const;
 
