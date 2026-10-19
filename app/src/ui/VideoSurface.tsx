@@ -3,7 +3,13 @@
 // - A video that cannot load or play tells its page (`onFailed`), which shows X-Unavailable's
 //   "Try again"; `retryKey` changing loads the source again.
 // - The video on screen starts again when the app returns from the background (the phone pauses it).
-import { useVideoPlayer, VideoView } from 'expo-video';
+// - `load` false (a list that is not on screen): only the still is drawn and no stream is opened,
+//   so the list beside the one on screen does not compete with it for the network and the
+//   decoders (founder iPhone test, 19 Oct). Turning it on opens the stream.
+// - The callbacks are read through refs: a parent that passes a new function on each render
+//   (every progress tick, in the players) no longer removes and adds the player's listeners each
+//   time.
+import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -11,7 +17,7 @@ import { Image } from 'expo-image';
 import { isPlaybackFailure, shouldResumeOnForeground } from '@/ui/playbackRules';
 import { applyPlaybackSettings, hlsUrl, rewind, setLooping, thumbnailUrl } from '@/video/playback';
 
-export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFailed, retryKey = 0, localUri }: {
+export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFailed, retryKey = 0, localUri, load = true }: {
   playbackId: string | null;
   /** Plays only when active; preloads otherwise. */
   active: boolean;
@@ -24,8 +30,10 @@ export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFa
   retryKey?: number;
   /** A local file instead of Mux (Post Review). */
   localUri?: string;
+  /** Whether to open the stream at all (see the top of the file). */
+  load?: boolean;
 }) {
-  const source = localUri ? { uri: localUri } : playbackId ? { uri: hlsUrl(playbackId) } : null;
+  const source = !load ? null : localUri ? { uri: localUri } : playbackId ? { uri: hlsUrl(playbackId) } : null;
   const player = useVideoPlayer(source, (p) => {
     applyPlaybackSettings(p);
     p.loop = loop;
@@ -35,12 +43,17 @@ export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFa
   useEffect(() => {
     setLooping(player, loop);
   }, [player, loop]);
-  const [firstFrame, setFirstFrame] = useState(false);
-  // The latest `active`, for the AppState and retry callbacks (they outlive a render).
+  // The still shows until this player, for this load (retryKey), is ready: a new player (the
+  // stream turned on, another source) or a Try again has not drawn a frame yet.
+  const [ready, setReady] = useState<{ player: VideoPlayer; retryKey: number } | null>(null);
+  const firstFrame = ready !== null && ready.player === player && ready.retryKey === retryKey;
+  // The latest props, for the listeners and callbacks (they outlive a render).
   const activeNow = useRef(active);
+  const latest = useRef({ onEnd, onProgress, onFailed, retryKey });
   useEffect(() => {
     activeNow.current = active;
-  }, [active]);
+    latest.current = { onEnd, onProgress, onFailed, retryKey };
+  });
 
   useEffect(() => {
     if (active) player.play();
@@ -63,38 +76,37 @@ export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFa
   useEffect(() => {
     if (firstRetryKey.current === retryKey) return;
     firstRetryKey.current = retryKey;
-    setFirstFrame(false);
     void player
       .replaceAsync(source)
       .then(() => {
         if (activeNow.current) player.play();
       })
-      .catch(() => onFailed?.());
+      .catch(() => latest.current.onFailed?.());
     // `source` is derived from props that do not change on a retry.
   }, [retryKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const t = player.addListener('timeUpdate', (e) => {
-      if (player.duration > 0) onProgress?.(e.currentTime / player.duration);
+      if (player.duration > 0) latest.current.onProgress?.(e.currentTime / player.duration);
     });
-    const end = player.addListener('playToEnd', () => onEnd?.());
+    const end = player.addListener('playToEnd', () => latest.current.onEnd?.());
     const status = player.addListener('statusChange', (e) => {
-      if (e.status === 'readyToPlay') setFirstFrame(true);
-      else if (isPlaybackFailure(e.status)) onFailed?.();
+      if (e.status === 'readyToPlay') setReady({ player, retryKey: latest.current.retryKey });
+      else if (isPlaybackFailure(e.status)) latest.current.onFailed?.();
     });
     return () => {
       t.remove();
       end.remove();
       status.remove();
     };
-  }, [player, onEnd, onProgress, onFailed]);
+  }, [player]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
       {playbackId && !firstFrame ? (
         <Image source={{ uri: thumbnailUrl(playbackId, { width: 540, height: 960 }) }} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
       ) : null}
-      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+      {source ? <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} /> : null}
     </View>
   );
 }

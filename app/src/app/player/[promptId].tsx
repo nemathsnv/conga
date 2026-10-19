@@ -5,7 +5,7 @@ import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,7 +13,7 @@ import { avatarUrl } from '@/lib/api';
 import { followUser, homeFeed, likeVideo, promptResponses, unfollowUser, unlikeVideo, type Conversation, type PromptCard, type ResponseCard } from '@/lib/content';
 import { responsesLabel, timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
-import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
+import { GlassPillButton, LiveProgressLine, pillText, RailAction, VideoGradients } from '@/ui/dark';
 import { CheckIcon, ChevronLeft, ChevronRightIcon, ChevronUpIcon, CommentIcon, HeartIcon, MoreIcon, PlusSlotIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { EmptyPrompt, Spinner } from '@/ui/HomeStates';
 import { autoSheet, endsToNext, pageShowsChrome, playerPageActive, sheetOverPage } from '@/ui/playbackRules';
@@ -25,6 +25,7 @@ import { NEXT_ROW, playerOverlay } from '@/ui/videoLayout';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { thumbnailUrl } from '@/video/playback';
 import { useOpenRecord } from '@/ui/recordEntry';
+import { createProgress, useProgress, type ProgressSource } from '@/ui/progress';
 
 type Page = { kind: 'response'; response: ResponseCard } | { kind: 'end' } | { kind: 'empty' } | { kind: 'unavailable' };
 
@@ -43,7 +44,9 @@ export default function PlayerScreen() {
   const [prompt, setPrompt] = useState<PromptCard | null>(null);
   const [pages, setPages] = useState<Page[] | null>(null);
   const [index, setIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
+  // The playing response's progress for the strip, outside this screen's state (ui/progress.ts):
+  // kept in state, it drew the whole list and every page four times a second.
+  const [progress] = useState(createProgress);
   const [nextConversation, setNextConversation] = useState<Conversation | null>(null);
   const list = useRef<FlatList<Page>>(null);
   const seen = useRef<string[]>([]);
@@ -123,7 +126,7 @@ export default function PlayerScreen() {
     const first = viewableItems.find((v) => v.isViewable);
     if (first && typeof first.index === 'number') {
       setIndex(first.index);
-      setProgress(0);
+      progress.set(0);
       endView();
       if (first.item.kind === 'response') {
         viewing.current = { id: first.item.response.id, position: first.index, since: Date.now(), durationMs: first.item.response.duration_ms ?? 0 };
@@ -132,7 +135,7 @@ export default function PlayerScreen() {
         track('player_end_reached', { prompt_id: promptId ?? '' });
       }
     }
-  }, [endView, promptId]);
+  }, [endView, promptId, progress]);
 
   const goTo = (i: number) => {
     track('player_jump', { prompt_id: promptId ?? '' });
@@ -177,9 +180,7 @@ export default function PlayerScreen() {
               {thumb ? <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
             </View>
             {playing ? (
-              <View style={s.thumbProgress}>
-                <View style={[s.thumbProgressFill, { width: `${progress * 100}%` }]} />
-              </View>
+              <StripProgress source={progress} />
             ) : null}
           </Pressable>
         );
@@ -213,7 +214,7 @@ export default function PlayerScreen() {
                   active={playerPageActive({ isCurrentPage: i === index, screenFocused: focused, overlay, responseId: item.response.id })}
                   chrome={pageShowsChrome(i === index, sheet)}
                   next={pages[i + 1]?.kind === 'response' ? (pages[i + 1] as Extract<Page, { kind: 'response' }>).response : null}
-                  onProgress={setProgress}
+                  onProgress={progress.set}
                   onEnd={advance}
                   onNext={advance}
                 />
@@ -239,7 +240,7 @@ export default function PlayerScreen() {
           pagingEnabled
           showsVerticalScrollIndicator={false}
           onViewableItemsChanged={onViewable}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+          viewabilityConfig={VIEWABILITY}
           windowSize={3}
           getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
         />
@@ -251,7 +252,18 @@ export default function PlayerScreen() {
   );
 }
 
-function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEnd, onNext }: { response: ResponseCard; prompt: PromptCard | null; active: boolean; chrome: boolean; next: ResponseCard | null; onProgress: (f: number) => void; onEnd: () => void; onNext: () => void }) {
+/** The playing face's progress in the strip; the only part of the strip drawn as the video plays. */
+function StripProgress({ source }: { source: ProgressSource }) {
+  const fraction = useProgress(source);
+  return (
+    <View style={s.thumbProgress}>
+      <View style={[s.thumbProgressFill, { width: `${fraction * 100}%` }]} />
+    </View>
+  );
+}
+
+/** Memoized: the list draws its pages again only when a page's own props change. */
+const ResponsePage = memo(function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEnd, onNext }: { response: ResponseCard; prompt: PromptCard | null; active: boolean; chrome: boolean; next: ResponseCard | null; onProgress: (f: number) => void; onEnd: () => void; onNext: () => void }) {
   const router = useRouter();
   const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
@@ -259,7 +271,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
   const [following, setFollowing] = useState(response.following_author);
   const [liked, setLiked] = useState(response.liked);
   const [likes, setLikes] = useState(response.like_count);
-  const [progress, setProgress] = useState(0);
+  const [progress] = useState(createProgress);
   // A video that fails to load shows X-Unavailable with its Try again (SPEC.md Section 20).
   const [failed, setFailed] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -276,7 +288,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
     }
   };
   const report = (f: number) => {
-    setProgress(f);
+    progress.set(f);
     if (active) onProgress(f);
   };
   const toggleFollow = async () => {
@@ -352,7 +364,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
           <Text style={pillText}>Respond</Text>
         </GlassPillButton>
       </View>
-      <ProgressLine fraction={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: overlay.progress }} />
+      <LiveProgressLine source={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: overlay.progress }} />
       {next ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Next response: ${next.author.name}`} onPress={onNext} style={[s.next, { bottom: overlay.next }]}>
           <ChevronRightIcon color="rgba(255,255,255,0.86)" />
@@ -366,7 +378,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
       )}
     </View>
   );
-}
+});
 
 function EndCard({ prompt, total, faces, background, next, onWatchAgain, onNextConversation }: { prompt: PromptCard | null; total: number; faces: { id: string; photo_path: string | null }[]; background: string | null; next: Conversation | null; onWatchAgain: () => void; onNextConversation: () => void }) {
   const openRecord = useOpenRecord();
@@ -445,6 +457,8 @@ function SwipeUpToNext({ enabled, onNext, children }: { enabled: boolean; onNext
     </View>
   );
 }
+
+const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.black },

@@ -3,7 +3,7 @@
 import { track } from '@/lib/analytics';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,7 +11,7 @@ import { avatarUrl } from '@/lib/api';
 import { followUser, getVideo, likeVideo, replyRoom, unfollowUser, unlikeVideo, type ResponseCard, type RoomReply, type Video } from '@/lib/content';
 import { timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
-import { GlassPillButton, pillText, ProgressLine, RailAction, VideoGradients } from '@/ui/dark';
+import { GlassPillButton, LiveProgressLine, pillText, RailAction, VideoGradients } from '@/ui/dark';
 import { Spinner } from '@/ui/HomeStates';
 import { ChevronLeft, HeartIcon, MoreIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { OrphanCard, ReplyCard } from '@/ui/ReplyCard';
@@ -21,6 +21,7 @@ import { playerPageActive } from '@/ui/playbackRules';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { useOpenRecord } from '@/ui/recordEntry';
+import { createProgress } from '@/ui/progress';
 
 type Page = RoomReply & { context?: Video['context'] };
 
@@ -33,7 +34,6 @@ export default function ReplyPlayerScreen() {
   const [unavailable, setUnavailable] = useState(false);
   const [pages, setPages] = useState<Page[] | null>(null);
   const [index, setIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
   const list = useRef<FlatList<Page>>(null);
   // Covered by another screen (a profile, the recorder, another player): stop playing.
   const focused = useIsFocused();
@@ -74,7 +74,6 @@ export default function ReplyPlayerScreen() {
     const first = viewableItems.find((v) => v.isViewable);
     if (first && typeof first.index === 'number') {
       setIndex(first.index);
-      setProgress(0);
     }
   }, []);
   const advance = useCallback(() => {
@@ -111,7 +110,6 @@ export default function ReplyPlayerScreen() {
                 orphan={!!orphan}
                 promptText={video.context.kind === 'reply' ? video.context.prompt_text : video.prompt.text}
                 next={pages[i + 1] ?? null}
-                onProgress={setProgress}
                 onEnd={advance}
                 onNext={advance}
               />
@@ -120,7 +118,7 @@ export default function ReplyPlayerScreen() {
           pagingEnabled
           showsVerticalScrollIndicator={false}
           onViewableItemsChanged={onViewable}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+          viewabilityConfig={VIEWABILITY}
           windowSize={3}
           initialScrollIndex={index}
           getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
@@ -140,19 +138,20 @@ export default function ReplyPlayerScreen() {
           </Glass>
         ) : null}
       </View>
-      {progress >= 0 ? null : null}
     </View>
   );
 }
 
-function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProgress, onEnd, onNext }: { reply: Page; active: boolean; rootAuthor: ResponseCard['author'] | null; orphan: boolean; promptText: string; next: Page | null; onProgress: (f: number) => void; onEnd: () => void; onNext: () => void }) {
+/** Memoized: the list draws its pages again only when a page's own props change. */
+const ReplyPage = memo(function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onEnd, onNext }: { reply: Page; active: boolean; rootAuthor: ResponseCard['author'] | null; orphan: boolean; promptText: string; next: Page | null; onEnd: () => void; onNext: () => void }) {
   const router = useRouter();
   const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
   const [following, setFollowing] = useState(reply.following_author);
   const [liked, setLiked] = useState(reply.liked);
   const [likes, setLikes] = useState(reply.like_count);
-  const [progress, setProgress] = useState(0);
+  // The 2pt line's progress, outside this page's state (ui/progress.ts).
+  const [progress] = useState(createProgress);
   const [target, setTarget] = useState<Video | null>(null);
   // A video that fails to load shows X-Unavailable with its Try again (SPEC.md Section 20).
   const [failed, setFailed] = useState(false);
@@ -174,10 +173,6 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
     };
   }, [reply.reply_to_id, orphan]);
 
-  const report = (f: number) => {
-    setProgress(f);
-    if (active) onProgress(f);
-  };
   const toggleFollow = async () => {
     const nextValue = !following;
     setFollowing(nextValue);
@@ -215,7 +210,7 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
 
   return (
     <View style={s.root}>
-      <VideoSurface playbackId={reply.playback_id} active={active && !failed} loop={false} onProgress={report} onEnd={onEnd} onFailed={onFailed} retryKey={retryKey} />
+      <VideoSurface playbackId={reply.playback_id} active={active && !failed} loop={false} onProgress={progress.set} onEnd={onEnd} onFailed={onFailed} retryKey={retryKey} />
       <VideoGradients top={240} bottom={420} topAlpha={0.6} bottomAlpha={0.72} />
       <View style={[s.cardWrap, { top: insets.top + 57 }]}>
         {orphan ? (
@@ -278,7 +273,7 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
           <Text style={pillText}>Reply to {firstName}</Text>
         </GlassPillButton>
       </View>
-      <ProgressLine fraction={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: 844 - 735 - 2 + lift }} />
+      <LiveProgressLine source={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: 844 - 735 - 2 + lift }} />
       {orphan ? (
         <Text style={[s.footer, { bottom: Math.max(insets.bottom, 10) + 26 }]}>From {firstName}&apos;s profile</Text>
       ) : next ? (
@@ -302,7 +297,9 @@ function ReplyPage({ reply, active, rootAuthor, orphan, promptText, next, onProg
       ) : null}
     </View>
   );
-}
+});
+
+const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.black },

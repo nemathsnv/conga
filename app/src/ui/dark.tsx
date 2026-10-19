@@ -8,6 +8,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { responsesLabel } from '@/lib/format';
+import { useProgress, type ProgressSource } from './progress';
 import { Glass } from './components';
 import { PlacePinIcon, PromptBubbleIcon, SearchIcon } from './Icons';
 import { colors, fontFamily, type } from './theme';
@@ -51,7 +52,9 @@ export function FeedHeader({ tab, onTab }: { tab: 'following' | 'foryou'; onTab:
   const insets = useSafeAreaInsets();
   const router = useRouter();
   return (
-    <View style={[s.feedHeader, { top: insets.top + 7 }]}>
+    // box-none: only the two tabs and Search take touches; a swipe that starts beside them still
+    // reaches the lists under the header.
+    <View pointerEvents="box-none" style={[s.feedHeader, { top: insets.top + 7 }]}>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'following' }} onPress={() => onTab('following')} hitSlop={8}>
         <Text style={[s.feedTab, tab === 'following' && s.feedTabOn]}>Following</Text>
         {tab === 'following' ? <View style={s.feedTabLine} /> : null}
@@ -109,6 +112,11 @@ export function ProgressLine({ fraction, style }: { fraction: number; style?: St
       <View style={[s.progressFill, { width: `${Math.max(0, Math.min(1, fraction)) * 100}%` }]} />
     </View>
   );
+}
+
+/** The progress line fed by a progress source: only this line re-renders as the video plays (ui/progress.ts). */
+export function LiveProgressLine({ source, style }: { source: ProgressSource; style?: StyleProp<ViewStyle> }) {
+  return <ProgressLine fraction={useProgress(source)} style={style} />;
 }
 
 const s = StyleSheet.create({

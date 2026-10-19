@@ -2,7 +2,7 @@
 // rail, author block, "N more responses" strip and Respond. Also draws Z-First for the
 // person's own first response.
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,18 +12,25 @@ import { followUser, likeVideo, unfollowUser, unlikeVideo, type Conversation } f
 import { promptLink } from '@/lib/links';
 import { moreResponsesLabel, responsesLabel, timeAgo } from '@/lib/format';
 import { Avatar, Glass } from '@/ui/components';
-import { GlassPillButton, pillText, ProgressLine, PromptLabel, RailAction, VideoGradients } from '@/ui/dark';
+import { GlassPillButton, LiveProgressLine, pillText, PromptLabel, RailAction, VideoGradients } from '@/ui/dark';
 import { ChevronRightIcon, CommentIcon, HeartIcon, MoreIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
 import { homeOverlay } from '@/ui/videoLayout';
+import { createProgress } from '@/ui/progress';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { VideoSurface } from '@/ui/VideoSurface';
 
-export function ConversationView({ item, active, topInset }: { item: Conversation; active: boolean; topInset: number }) {
+/**
+ * Memoized: the feed re-renders its rows when the conversation on screen changes, and only the
+ * rows whose `active` or `load` changed need to draw again.
+ * `load`: whether this row's video stream is opened (false while its list is off screen).
+ */
+export const ConversationView = memo(function ConversationView({ item, active, load = true, topInset }: { item: Conversation; active: boolean; load?: boolean; topInset: number }) {
   const router = useRouter();
   const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
-  const [progress, setProgress] = useState(0);
+  // The 2pt line's progress, outside this view's state (ui/progress.ts).
+  const [progress] = useState(createProgress);
   const [following, setFollowing] = useState(item.response?.following_author ?? false);
   const [liked, setLiked] = useState(item.response?.liked ?? false);
   const [likes, setLikes] = useState(item.response?.like_count ?? 0);
@@ -75,7 +82,7 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
 
   return (
     <View style={s.root}>
-      <VideoSurface playbackId={response.playback_id} active={active} loop onProgress={setProgress} />
+      <VideoSurface playbackId={response.playback_id} active={active} load={load} loop onProgress={progress.set} />
       <VideoGradients top={200} bottom={isFirstOwn ? 440 : 420} bottomAlpha={isFirstOwn ? 0.66 : 0.62} />
 
       <PromptLabel
@@ -147,11 +154,11 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
         </View>
       )}
 
-      <ProgressLine fraction={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: overlay.progress }} />
+      <LiveProgressLine source={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: overlay.progress }} />
       <Text style={s.hidden} accessibilityElementsHidden>{responsesLabel(prompt.response_count)}</Text>
     </View>
   );
-}
+});
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.black },
