@@ -15,6 +15,7 @@ import { Avatar, Glass } from '@/ui/components';
 import { GlassPillButton, pillText, ProgressLine, PromptLabel, RailAction, VideoGradients } from '@/ui/dark';
 import { ChevronRightIcon, CommentIcon, HeartIcon, MoreIcon, RecordDotIcon, ShareIcon, VideoReplyIcon } from '@/ui/Icons';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
+import { homeOverlay } from '@/ui/videoLayout';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { VideoSurface } from '@/ui/VideoSurface';
 
@@ -30,6 +31,8 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
   const prompt = item.prompt;
   const isFirstOwn = response.is_own && prompt.response_count === 1;
   const tabBarSpace = layout.tabBarHeight - 34 + Math.max(insets.bottom, 8);
+  // The bottom overlay, from the tab bar up (ui/videoLayout.ts).
+  const overlay = homeOverlay(tabBarSpace, isFirstOwn);
 
   const openPlayer = () => router.push({ pathname: '/player/[promptId]', params: { promptId: prompt.id, entry: response.id } });
   const openProfile = () => router.push({ pathname: '/profile/[id]', params: { id: response.author.id } });
@@ -85,14 +88,14 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
         style={{ position: 'absolute', left: 16, top: topInset + 57 }}
       />
 
-      <View style={[s.rail, { top: isFirstOwn ? 432 : 404 }]}>
+      <View style={[s.rail, { bottom: overlay.rail }]}>
         <RailAction icon={<HeartIcon filled={liked} color={liked ? '#FF375F' : colors.white} />} count={likes} label={liked ? `Liked, ${likes}` : `Like, ${likes}`} onPress={() => void toggleLike()} />
         <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" onPress={openComments} />
         <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" onPress={openReplies} />
         {response.is_own ? <RailAction icon={<MoreIcon />} label="More" onPress={openDelete} /> : <RailAction icon={<ShareIcon />} label="Share" onPress={openShare} />}
       </View>
 
-      <View style={[s.author, { bottom: tabBarSpace + (isFirstOwn ? 150 : 90) + 44 + 32 }]}>
+      <View style={[s.author, { bottom: overlay.author }]}>
         <View style={s.authorRow}>
           <Pressable accessibilityRole="button" onPress={openProfile} style={s.authorPress}>
             <Avatar uri={avatarUrl(response.author.photo_path)} size={34} borderWidth={1} borderColor="rgba(255,255,255,0.5)" />
@@ -114,7 +117,7 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
 
       {isFirstOwn ? (
         // Board Z-First
-        <Glass style={[s.firstCard, { bottom: tabBarSpace + 90 + 14 }]}>
+        <Glass style={[s.firstCard, { bottom: overlay.firstCard }]}>
           <View style={s.firstRow}>
             <View style={{ flex: 1 }}>
               <Text style={s.firstTitle}>You&apos;re the first response.</Text>
@@ -127,7 +130,7 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
           </View>
         </Glass>
       ) : (
-        <View style={[s.bottomRow, { bottom: tabBarSpace + 90 + 10 }]}>
+        <View style={[s.bottomRow, { bottom: overlay.row }]}>
           <Pressable accessibilityRole="button" onPress={openPlayer} style={({ pressed }) => [s.more, pressed && { opacity: 0.7 }]}>
             <View style={{ flexDirection: 'row' }}>
               {prompt.faces.slice(0, 3).map((f, i) => (
@@ -144,7 +147,7 @@ export function ConversationView({ item, active, topInset }: { item: Conversatio
         </View>
       )}
 
-      <ProgressLine fraction={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: tabBarSpace + 15 }} />
+      <ProgressLine fraction={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: overlay.progress }} />
       <Text style={s.hidden} accessibilityElementsHidden>{responsesLabel(prompt.response_count)}</Text>
     </View>
   );

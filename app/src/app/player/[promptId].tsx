@@ -21,6 +21,7 @@ import { useOverlay } from '@/ui/playerOverlay';
 import { Unavailable } from '@/ui/Unavailable';
 import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
+import { NEXT_ROW, playerOverlay } from '@/ui/videoLayout';
 import { VideoSurface } from '@/ui/VideoSurface';
 import { thumbnailUrl } from '@/video/playback';
 import { useOpenRecord } from '@/ui/recordEntry';
@@ -254,6 +255,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
   const router = useRouter();
   const openRecord = useOpenRecord();
   const insets = useSafeAreaInsets();
+  const overlay = playerOverlay(insets.bottom);
   const [following, setFollowing] = useState(response.following_author);
   const [liked, setLiked] = useState(response.liked);
   const [likes, setLikes] = useState(response.like_count);
@@ -305,7 +307,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
       {!chrome || failed ? null : (
       <>
       <VideoGradients top={220} bottom={440} topAlpha={0.6} bottomAlpha={0.72} />
-      <View style={[s.rail, { top: 392 }]}>
+      <View style={[s.rail, { bottom: overlay.rail }]}>
         <RailAction icon={<HeartIcon filled={liked} color={liked ? '#FF375F' : colors.white} />} count={likes} label={liked ? `Liked, ${likes}` : `Like, ${likes}`} onPress={() => void toggleLike()} />
         <RailAction icon={<CommentIcon />} count={response.comment_count} label="Comments" onPress={() => router.push({ pathname: '/comments/[responseId]', params: { responseId: response.id } })} />
         <RailAction icon={<VideoReplyIcon />} count={response.reply_count} label="Video replies" onPress={() => router.push({ pathname: '/replies/[rootId]', params: { rootId: response.id } })} />
@@ -321,7 +323,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
           />
         )}
       </View>
-      <View style={[s.author, { bottom: 844 - 536 - 90 + Math.max(insets.bottom - 34, 0) }]}>
+      <View style={[s.author, { bottom: overlay.author }]}>
         <View style={s.authorRow}>
           <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/profile/[id]', params: { id: response.author.id } })} style={s.authorRow}>
             <Avatar uri={avatarUrl(response.author.photo_path)} size={34} borderWidth={1} borderColor="rgba(255,255,255,0.5)" />
@@ -340,7 +342,7 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
         <Text style={s.time}>{timeAgo(response.live_at)}</Text>
         {response.caption ? <Text style={s.caption}>{response.caption}</Text> : null}
       </View>
-      <View style={[s.buttons, { bottom: 844 - 680 - 36 + Math.max(insets.bottom - 34, 0) }]}>
+      <View style={[s.buttons, { bottom: overlay.buttons }]}>
         <GlassPillButton label={`Reply to ${firstName}`} onPress={() => prompt && openRecord.open({ pathname: '/record/[promptId]', params: { promptId: prompt.id, replyTo: response.id } })}>
           <VideoReplyIcon size={17} />
           <Text style={pillText}>Reply to {firstName}</Text>
@@ -350,9 +352,9 @@ function ResponsePage({ response, prompt, active, chrome, next, onProgress, onEn
           <Text style={pillText}>Respond</Text>
         </GlassPillButton>
       </View>
-      <ProgressLine fraction={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: 844 - 735 - 2 + Math.max(insets.bottom - 34, 0) }} />
+      <ProgressLine fraction={progress} style={{ position: 'absolute', left: 0, right: 0, bottom: overlay.progress }} />
       {next ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Next response: ${next.author.name}`} onPress={onNext} style={[s.next, { bottom: Math.max(insets.bottom, 10) + 26 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Next response: ${next.author.name}`} onPress={onNext} style={[s.next, { bottom: overlay.next }]}>
           <ChevronRightIcon color="rgba(255,255,255,0.86)" />
           <Avatar uri={avatarUrl(next.author.photo_path)} size={22} />
           <Text style={s.nextText}>
@@ -469,7 +471,7 @@ const s = StyleSheet.create({
   time: { ...type.caption13, marginTop: 8, color: 'rgba(255,255,255,0.82)', fontFamily },
   caption: { ...type.label15, lineHeight: 21, letterSpacing: -0.1, marginTop: 8, color: colors.white, fontFamily },
   buttons: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  next: { position: 'absolute', left: 0, right: 0, height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  next: { position: 'absolute', left: 0, right: 0, height: NEXT_ROW, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   nextText: { ...type.caption13, color: 'rgba(255,255,255,0.86)', fontFamily },
   endBlock: { position: 'absolute', left: 24, right: 24, top: 300, alignItems: 'center' },
   endTitle: { marginTop: 20, fontSize: 28, lineHeight: 33, fontWeight: '600', letterSpacing: -0.6, color: colors.white, textAlign: 'center', fontFamily },
