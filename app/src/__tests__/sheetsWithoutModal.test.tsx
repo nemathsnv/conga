@@ -4,10 +4,19 @@
 // (reproduced on the simulator: "Attempt to present RCTFabricModalHostViewController … which is
 // already presenting RNSScreen"). The sheets are now overlays in the view tree (OverlaySheet),
 // Home's are drawn above the tab bar by the tabs layout (tabsOverlay), and P7/P8 is a route.
-import fs from 'fs';
-import path from 'path';
 import type { ReactElement, ReactNode } from 'react';
 import { Text } from 'react-native';
+
+import { OverlaySheet } from '@/ui/OverlaySheet';
+import { RecordEntryProvider, useOpenRecord } from '@/ui/recordEntry';
+import { TabsOverlayOutlet, useTabsOverlay } from '@/ui/tabsOverlay';
+
+// Node's fs and path, without Node's type definitions (not a dependency of the app).
+declare const __dirname: string;
+/* eslint-disable @typescript-eslint/no-require-imports */
+const fs = require('fs') as { readdirSync: (dir: string, opts: { withFileTypes: true }) => { name: string; isDirectory: () => boolean }[]; readFileSync: (file: string, encoding: string) => string };
+const path = require('path') as { join: (...parts: string[]) => string; relative: (from: string, to: string) => string };
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 // react-test-renderer comes with jest-expo; it has no type declarations here.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -34,10 +43,6 @@ const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ navigate: mockNavigate, push: mockPush, replace: mockReplace, back: jest.fn() }) }));
 let mockPostingKind = 'idle';
 jest.mock('@/video/posting', () => ({ usePosting: () => ({ state: { kind: mockPostingKind } }) }));
-
-import { OverlaySheet } from '@/ui/OverlaySheet';
-import { RecordEntryProvider, useOpenRecord } from '@/ui/recordEntry';
-import { TabsOverlayOutlet, useTabsOverlay } from '@/ui/tabsOverlay';
 
 function texts(tree: { root: { findAllByType: (t: unknown) => unknown[] } }): string[] {
   return (tree.root.findAllByType(Text) as { props: { children: ReactNode } }[]).map((t) => String(t.props.children));
