@@ -2,8 +2,8 @@
 // X-Me-Empty (own, no responses). SPEC.md Section 9.
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 
 import { avatarUrl } from '@/lib/api';
 import { followUser, getProfile, profileReplies, profileResponses, unfollowUser, type Profile, type ProfileReply, type ProfileResponse } from '@/lib/content';
@@ -12,11 +12,12 @@ import { Avatar, Separator } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { SwipePages } from '@/ui/SwipePages';
 import { PinIcon, PlusSlotIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
-import { shouldLoadReplies } from '@/ui/profileRules';
+import { profileAlignedOffset, shouldLoadReplies } from '@/ui/profileRules';
 import { colors, fontFamily, type } from '@/ui/theme';
 import { thumbnailUrl } from '@/video/playback';
 
 const PROFILE_TABS = ['responses', 'replies'] as const;
+type ProfileTab = (typeof PROFILE_TABS)[number];
 
 export function useProfile(args: { id?: string; username?: string }) {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
@@ -40,11 +41,18 @@ export function useProfile(args: { id?: string; username?: string }) {
   return { profile, responses, reload, setProfile };
 }
 
-export function ProfileBody({ profile, responses, own, onTonight }: { profile: Profile; responses: ProfileResponse[] | null; own: boolean; onTonight?: () => void }) {
+/**
+ * The profile under the screen's top bar. Responses and Replies are the two pages of a sideways
+ * pager, and each page scrolls the whole profile (header, tabs, grid), so a sideways swipe starts
+ * anywhere on it (founder iPhone test, 19 Oct: only a swipe that began on the videos worked). The
+ * page coming on screen is first scrolled to match the header's position on the page leaving.
+ * `edgeGuard`: on a pushed screen, the left edge stays the back swipe (ui/SwipePages.tsx).
+ */
+export function ProfileBody({ profile, responses, own, onTonight, edgeGuard = false }: { profile: Profile; responses: ProfileResponse[] | null; own: boolean; onTonight?: () => void; edgeGuard?: boolean }) {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [following, setFollowing] = useState(profile.is_following);
-  const [tab, setTab] = useState<'responses' | 'replies'>('responses');
+  const [tab, setTab] = useState<ProfileTab>('responses');
   const [replies, setReplies] = useState<ProfileReply[] | null>(null);
   // Replies load when the tab is first opened, and again whenever the profile is reloaded
   // (shouldLoadReplies).
@@ -77,8 +85,36 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
     }
   };
 
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+  // Each page's vertical position, and the height of the header above the tabs (the same on both).
+  const lists = useRef<Partial<Record<ProfileTab, ScrollView | null>>>({});
+  const offsets = useRef<Record<ProfileTab, number>>({ responses: 0, replies: 0 });
+  const headerHeight = useRef(0);
+  const recordOffset = (page: ProfileTab) => (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    offsets.current[page] = e.nativeEvent.contentOffset.y;
+  };
+  // Before the other page shows (a sideways drag begins, or a tab tap): while the header is
+  // partly on screen it takes the same position; once it has scrolled away, the other page's tabs
+  // stay at the top too, without losing how far down that page was.
+  const alignOther = () => {
+    const to: ProfileTab = tab === 'responses' ? 'replies' : 'responses';
+    const y = offsets.current[tab];
+    const target = profileAlignedOffset(y, offsets.current[to], headerHeight.current);
+    if (target === offsets.current[to]) return;
+    lists.current[to]?.scrollTo({ y: target, animated: false });
+    offsets.current[to] = target;
+  };
+  const selectTab = (next: ProfileTab) => {
+    if (next === tab) return;
+    alignOther();
+    setTab(next);
+  };
+
+  const header = (
+    <View
+      onLayout={(e) => {
+        headerHeight.current = e.nativeEvent.layout.height;
+      }}
+    >
       <View style={[s.head, own && !empty && { paddingTop: 0 }]}>
         <Avatar uri={avatarUrl(profile.photo_path)} size={own && !empty ? 84 : 92} />
         <Text style={[s.name, own && !empty && { fontSize: 22, lineHeight: 26, marginTop: 10 }]}>{profile.name}</Text>
@@ -126,113 +162,133 @@ export function ProfileBody({ profile, responses, own, onTonight }: { profile: P
           ) : null}
         </>
       )}
-
-      <View style={[s.tabs, { marginTop: own ? 10 : 20 }]}>
-        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'responses' }} onPress={() => setTab('responses')} style={s.tab}>
-          <Text style={[s.tabText, tab !== 'responses' && s.tabOff]}>
-            Responses{profile.response_count > 0 ? <Text style={s.tabCount}> {profile.response_count}</Text> : null}
-          </Text>
-          {tab === 'responses' ? <View style={s.tabLine} /> : null}
-        </Pressable>
-        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'replies' }} onPress={() => setTab('replies')} style={s.tab}>
-          <Text style={[s.tabText, tab !== 'replies' && s.tabOff]}>
-            Replies{profile.reply_count > 0 ? <Text style={s.tabCount}> {profile.reply_count}</Text> : null}
-          </Text>
-          {tab === 'replies' ? <View style={s.tabLine} /> : null}
-        </Pressable>
-      </View>
-      <Separator inset={0} />
-
-      {/* Swipe sideways between Responses and Replies, or tap the tabs (founder iPhone test, 19 Oct). */}
-      <SwipePages
-        pages={PROFILE_TABS}
-        selected={tab}
-        onSelect={setTab}
-        fitHeight
-        edgeGuard
-        renderPage={(page) =>
-          page === 'replies' ? (
-            replies === null ? (
-              <View style={{ alignItems: 'center', marginTop: 40 }}>
-                <Spinner light={false} />
-              </View>
-            ) : (
-              <View style={s.grid}>
-                {replies.map((r) => (
-                  <Pressable
-                    key={r.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={r.reply_to_name ? `Reply to ${r.reply_to_name}` : 'Video reply'}
-                    disabled={r.status !== 'live'}
-                    onPress={() => router.push({ pathname: '/reply/[id]', params: { id: r.id } })}
-                    style={[s.cell, { width: cell, height: 206 }]}
-                  >
-                    {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-                    {r.status === 'processing' ? (
-                      <View style={s.processing}>
-                        <Spinner size={22} />
-                        <Text style={s.processingText}>Processing</Text>
-                      </View>
-                    ) : (
-                      <View style={s.cap}>
-                        <Text style={s.capText} numberOfLines={2}>{r.reply_to_name ? `Replying to ${r.reply_to_name.split(' ')[0]}` : r.prompt_text}</Text>
-                      </View>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
-            )
-          ) : (
-            empty ? (
-              // Board X-Me-Empty
-              <View style={s.emptyBlock}>
-                <View style={s.emptySlot}>
-                  <PlusSlotIcon color={colors.textTertiary} />
+    </View>
+  );
+  const tabsRow = (
+    <View style={[s.tabs, { marginTop: own ? 10 : 20 }]}>
+      <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'responses' }} onPress={() => selectTab('responses')} style={s.tab}>
+        <Text style={[s.tabText, tab !== 'responses' && s.tabOff]}>
+          Responses{profile.response_count > 0 ? <Text style={s.tabCount}> {profile.response_count}</Text> : null}
+        </Text>
+        {tab === 'responses' ? <View style={s.tabLine} /> : null}
+      </Pressable>
+      <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'replies' }} onPress={() => selectTab('replies')} style={s.tab}>
+        <Text style={[s.tabText, tab !== 'replies' && s.tabOff]}>
+          Replies{profile.reply_count > 0 ? <Text style={s.tabCount}> {profile.reply_count}</Text> : null}
+        </Text>
+        {tab === 'replies' ? <View style={s.tabLine} /> : null}
+      </Pressable>
+    </View>
+  );
+  const grid = (page: ProfileTab) =>
+    page === 'replies' ? (
+      replies === null ? (
+        <View style={{ alignItems: 'center', marginTop: 40 }}>
+          <Spinner light={false} />
+        </View>
+      ) : (
+        <View style={s.grid}>
+          {replies.map((r) => (
+            <Pressable
+              key={r.id}
+              accessibilityRole="button"
+              accessibilityLabel={r.reply_to_name ? `Reply to ${r.reply_to_name}` : 'Video reply'}
+              disabled={r.status !== 'live'}
+              onPress={() => router.push({ pathname: '/reply/[id]', params: { id: r.id } })}
+              style={[s.cell, { width: cell, height: 206 }]}
+            >
+              {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+              {r.status === 'processing' ? (
+                <View style={s.processing}>
+                  <Spinner size={22} />
+                  <Text style={s.processingText}>Processing</Text>
                 </View>
-                <Text style={s.emptyText}>Your responses show up here.</Text>
-                <Pressable accessibilityRole="button" onPress={onTonight} style={({ pressed }) => [s.tonight, pressed && { opacity: 0.8 }]}>
-                  <RecordDotIcon />
-                  <Text style={s.tonightText}>Respond to tonight&apos;s prompt</Text>
-                </Pressable>
-              </View>
-            ) : responses === null ? (
-              <View style={{ alignItems: 'center', marginTop: 40 }}>
-                <Spinner light={false} />
-              </View>
-            ) : (
-              <View style={s.grid}>
-                {responses.map((r) => (
-                  <Pressable
-                    key={r.id}
-                    accessibilityRole="button"
-                    disabled={r.status !== 'live'}
-                    onPress={() => router.push({ pathname: '/player/[promptId]', params: { promptId: r.prompt_id, entry: r.id } })}
-                    style={[s.cell, { width: cell, height: 206 }]}
-                  >
-                    {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-                    {r.status === 'processing' ? (
-                      <View style={s.processing}>
-                        <Spinner size={22} />
-                        <Text style={s.processingText}>Processing</Text>
-                      </View>
-                    ) : (
-                      <>
-                        {r.pinned ? <View style={s.pin}><PinIcon /></View> : null}
-                        <View style={s.cap}>
-                          <Text style={s.capText} numberOfLines={2}>{r.prompt_text}</Text>
-                        </View>
-                      </>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
-            )
-          )
-        }
-      />
-    </ScrollView>
+              ) : (
+                <View style={s.cap}>
+                  <Text style={s.capText} numberOfLines={2}>{r.reply_to_name ? `Replying to ${r.reply_to_name.split(' ')[0]}` : r.prompt_text}</Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </View>
+      )
+    ) : (
+      empty ? (
+        // Board X-Me-Empty
+        <View style={s.emptyBlock}>
+          <View style={s.emptySlot}>
+            <PlusSlotIcon color={colors.textTertiary} />
+          </View>
+          <Text style={s.emptyText}>Your responses show up here.</Text>
+          <Pressable accessibilityRole="button" onPress={onTonight} style={({ pressed }) => [s.tonight, pressed && { opacity: 0.8 }]}>
+            <RecordDotIcon />
+            <Text style={s.tonightText}>Respond to tonight&apos;s prompt</Text>
+          </Pressable>
+        </View>
+      ) : responses === null ? (
+        <View style={{ alignItems: 'center', marginTop: 40 }}>
+          <Spinner light={false} />
+        </View>
+      ) : (
+        <View style={s.grid}>
+          {responses.map((r) => (
+            <Pressable
+              key={r.id}
+              accessibilityRole="button"
+              disabled={r.status !== 'live'}
+              onPress={() => router.push({ pathname: '/player/[promptId]', params: { promptId: r.prompt_id, entry: r.id } })}
+              style={[s.cell, { width: cell, height: 206 }]}
+            >
+              {r.playback_id ? <Image source={{ uri: thumbnailUrl(r.playback_id, { width: 260, height: 412 }) }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+              {r.status === 'processing' ? (
+                <View style={s.processing}>
+                  <Spinner size={22} />
+                  <Text style={s.processingText}>Processing</Text>
+                </View>
+              ) : (
+                <>
+                  {r.pinned ? <View style={s.pin}><PinIcon /></View> : null}
+                  <View style={s.cap}>
+                    <Text style={s.capText} numberOfLines={2}>{r.prompt_text}</Text>
+                  </View>
+                </>
+              )}
+            </Pressable>
+          ))}
+        </View>
+      )
+    );
+
+  return (
+    // Swipe sideways between Responses and Replies anywhere on the profile, or tap the tabs.
+    <SwipePages
+      pages={PROFILE_TABS}
+      selected={tab}
+      onSelect={setTab}
+      onDragStart={alignOther}
+      edgeGuard={edgeGuard}
+      renderPage={(page, shown) => (
+        <ScrollView
+          ref={(r) => {
+            lists.current[page] = r;
+          }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          scrollsToTop={shown}
+          onScrollEndDrag={recordOffset(page)}
+          onMomentumScrollEnd={recordOffset(page)}
+        >
+          {header}
+          {tabsRow}
+          <Separator inset={0} />
+          {grid(page)}
+        </ScrollView>
+      )}
+    />
   );
 }
+
 
 const s = StyleSheet.create({
   head: { paddingHorizontal: 24, paddingTop: 2, alignItems: 'center' },

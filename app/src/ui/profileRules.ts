@@ -6,3 +6,14 @@
 export function shouldLoadReplies(tab: 'responses' | 'replies', repliesLoaded: boolean): boolean {
   return tab === 'replies' || repliesLoaded;
 }
+
+/**
+ * Where the page coming on screen scrolls to, from the page leaving (y), its own position (own)
+ * and the header's height: the same position while the header shows; once it has scrolled away,
+ * at least past the header (the tabs at the top), keeping a position further down.
+ */
+export function profileAlignedOffset(y: number, own: number, header: number): number {
+  if (header <= 0) return own;
+  if (y < header) return y;
+  return Math.max(own, header);
+}

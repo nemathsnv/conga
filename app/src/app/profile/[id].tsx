@@ -38,7 +38,8 @@ export default function ProfileScreen() {
           <Spinner light={false} />
         </View>
       ) : profile ? (
-        <ProfileBody profile={profile} responses={responses} own={profile.is_own} />
+        // Pushed: the left edge stays the back swipe.
+        <ProfileBody profile={profile} responses={responses} own={profile.is_own} edgeGuard />
       ) : null}
     </View>
   );

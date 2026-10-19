@@ -3,12 +3,14 @@
 // works: it moves the pager. A native paging ScrollView, so UIKit (and Android's nested scrolling)
 // tells a sideways swipe from the vertical scroll of the list inside by the first movement, and no
 // JavaScript gesture competes with the video feed, the stack's back swipe or a sheet.
+// - Each page fills the pager, so a swipe can start anywhere on it, empty space included. A
+//   profile puts its whole content (header, tabs, grid) in each page for that reason.
 // - `bounces` is off, and on a pushed screen (`edgeGuard`) a strip along the left edge keeps its
 //   touches from the pager, so the stack's back swipe from the edge still works on every page (a
-//   horizontal UIScrollView otherwise wins over the edge gesture).
+//   horizontal UIScrollView otherwise wins over the edge gesture). The strip also takes taps, so
+//   it is only for pushed screens.
 // - The selected tab follows the pager when a swipe settles, never during the drag.
-// - `fitHeight`: inside a vertical ScrollView (a profile), the pager is as tall as the page shown,
-//   so a short list leaves no empty scroll under it.
+// - The page off screen is hidden from VoiceOver and TalkBack.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -29,7 +31,7 @@ export function SwipePages<K extends string>({
   selected,
   onSelect,
   renderPage,
-  fitHeight = false,
+  onDragStart,
   edgeGuard = false,
   style,
 }: {
@@ -37,15 +39,17 @@ export function SwipePages<K extends string>({
   selected: K;
   onSelect: (page: K) => void;
   renderPage: (page: K, shown: boolean) => ReactNode;
-  fitHeight?: boolean;
+  /** A sideways drag begins (before the other page shows). */
+  onDragStart?: () => void;
   edgeGuard?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const ref = useRef<ScrollView>(null);
   const screen = useWindowDimensions();
   const [size, setSize] = useState({ width: screen.width, height: 0 });
-  const [heights, setHeights] = useState<Partial<Record<K, number>>>({});
   const index = Math.max(pages.indexOf(selected), 0);
+  // Where the pager starts. Later pages are reached by scrolling (below), so a tab tap animates.
+  const [startIndex] = useState(index);
 
   // A tab tap (or a page change from inside, like "Back to For you"): move to that page. After a
   // swipe the pager is already there and this does nothing.
@@ -58,7 +62,6 @@ export function SwipePages<K extends string>({
     if (i !== null && pages[i] !== selected) onSelect(pages[i]);
   };
 
-  const fitted = fitHeight ? heights[selected] : undefined;
   const pager = (
     <ScrollView
       ref={ref}
@@ -70,34 +73,34 @@ export function SwipePages<K extends string>({
       scrollsToTop={false}
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
-      contentOffset={{ x: index * size.width, y: 0 }}
+      contentOffset={{ x: startIndex * size.width, y: 0 }}
       onLayout={(e) => {
         const { width, height } = e.nativeEvent.layout;
         if (width !== size.width || height !== size.height) setSize({ width, height });
       }}
+      onScrollBeginDrag={onDragStart}
       onMomentumScrollEnd={settle}
       onScrollEndDrag={settle}
-      scrollEventThrottle={16}
-      style={[fitHeight ? null : s.fill, fitted !== undefined ? { height: fitted } : null, style]}
-      contentContainerStyle={fitHeight ? s.top : null}
+      style={[s.fill, style]}
     >
-      {pages.map((page) => (
-        <View
-          key={page}
-          style={fitHeight ? { width: size.width } : { width: size.width, height: size.height || screen.height }}
-          onLayout={fitHeight ? (e) => {
-            const h = Math.ceil(e.nativeEvent.layout.height);
-            setHeights((prev) => (prev[page] === h ? prev : { ...prev, [page]: h }));
-          } : undefined}
-        >
-          {renderPage(page, page === selected)}
-        </View>
-      ))}
+      {pages.map((page) => {
+        const shown = page === selected;
+        return (
+          <View
+            key={page}
+            style={{ width: size.width, height: size.height || screen.height }}
+            accessibilityElementsHidden={!shown}
+            importantForAccessibility={shown ? 'auto' : 'no-hide-descendants'}
+          >
+            {renderPage(page, shown)}
+          </View>
+        );
+      })}
     </ScrollView>
   );
   if (!edgeGuard) return pager;
   return (
-    <View style={fitHeight ? null : s.fill}>
+    <View style={s.fill}>
       {pager}
       <View style={s.edge} />
     </View>
@@ -106,6 +109,5 @@ export function SwipePages<K extends string>({
 
 const s = StyleSheet.create({
   fill: { flex: 1 },
-  top: { alignItems: 'flex-start' },
   edge: { position: 'absolute', left: 0, top: 0, bottom: 0, width: EDGE_GUARD },
 });
