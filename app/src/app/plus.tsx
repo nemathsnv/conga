@@ -1,16 +1,22 @@
 // Board C-Plus: the + sheet. "Respond to" lists tonight's prompt first, then open prompts
 // from the feed (global and followed places); "Suggest a prompt · Reviewed before anyone sees
 // it"; "Your suggestions · N in review". SPEC.md Sections 4, 12.
+// A prompt the member has already responded to shows "Responded" (proposed copy, not on the board:
+// ui/failedPost.ts RESPONDED_COPY) instead of Respond, which would only lead to a refused Post
+// (one primary response per prompt, SPEC.md Section 6; lib/responded.ts).
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { mySuggestions, openPrompts, type PromptCard } from '@/lib/content';
+import { applyPromptCards, hasResponded, refreshResponded, useRespondedVersion } from '@/lib/responded';
+import { useSession } from '@/lib/session';
 import { responsesLabel } from '@/lib/format';
 import { Separator } from '@/ui/components';
 import { ChevronRightIcon, PlacePinIcon, PromptBubbleIcon } from '@/ui/Icons';
 import { colors, fontFamily, type } from '@/ui/theme';
+import { RESPONDED_COPY } from '@/ui/failedPost';
 import { useOpenRecord } from '@/ui/recordEntry';
 
 function isTonight(p: PromptCard): boolean {
@@ -23,11 +29,21 @@ export default function PlusSheet() {
   const insets = useSafeAreaInsets();
   const [prompts, setPrompts] = useState<PromptCard[] | null>(null);
   const [inReview, setInReview] = useState<number | null>(null);
+  const { session } = useSession();
+  const ownerId = session?.user.id ?? null;
+  // Draws again when what the member has responded to is known (lib/responded.ts).
+  useRespondedVersion();
 
   useEffect(() => {
-    void openPrompts().then(setPrompts).catch((e) => console.error('open_prompts failed', e));
+    void refreshResponded(ownerId);
+    void openPrompts()
+      .then((cards) => {
+        applyPromptCards(cards);
+        setPrompts(cards);
+      })
+      .catch((e) => console.error('open_prompts failed', e));
     void mySuggestions().then((d) => setInReview(d.in_review_count)).catch((e) => console.error('my_suggestions failed', e));
-  }, []);
+  }, [ownerId]);
 
   const respond = (p: PromptCard) => {
     openRecord.open({ pathname: '/record/[promptId]', params: { promptId: p.id } }, 'replace');
@@ -55,9 +71,15 @@ export default function PlusSheet() {
                       </Text>
                     </View>
                   </View>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Respond to ${p.text}`} onPress={() => respond(p)} style={({ pressed }) => [s.pill, pressed && { opacity: 0.7 }]}>
-                    <Text style={s.pillText}>Respond</Text>
-                  </Pressable>
+                  {hasResponded(p.id) ? (
+                    <View accessible accessibilityLabel={`${RESPONDED_COPY.label}: ${p.text}`} style={[s.pill, s.pillDone]}>
+                      <Text style={[s.pillText, s.pillDoneText]}>{RESPONDED_COPY.label}</Text>
+                    </View>
+                  ) : (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Respond to ${p.text}`} onPress={() => respond(p)} style={({ pressed }) => [s.pill, pressed && { opacity: 0.7 }]}>
+                      <Text style={s.pillText}>Respond</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             ))}
@@ -95,6 +117,8 @@ const s = StyleSheet.create({
   sub: { ...type.caption13, color: colors.textSecondary, fontFamily },
   pill: { height: 30, paddingHorizontal: 13, borderRadius: 15, backgroundColor: colors.text, justifyContent: 'center' },
   pillText: { ...type.semi14, color: colors.white, fontFamily },
+  pillDone: { backgroundColor: colors.fillStrong },
+  pillDoneText: { color: colors.textSecondary },
   suggestRow: { marginTop: 12, borderRadius: 14, backgroundColor: colors.fill, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
   suggestIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   suggestTitle: { ...type.button16, color: colors.text, fontFamily },

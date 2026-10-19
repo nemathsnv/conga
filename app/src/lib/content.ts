@@ -18,6 +18,9 @@ export type PromptCard = {
   /** Phase 6: "Suggested by …" when the member kept their name on it. */
   suggested_by?: ProfileCard | null;
   is_own_suggestion?: boolean;
+  /** The signed-in member already has their one primary response on this prompt (the server's
+   *  slot rule). Not deployed yet (supabase/proposed); absent until it is. */
+  viewer_responded?: boolean;
 };
 
 export type ResponseCard = {
@@ -234,8 +237,8 @@ export async function getProfile(args: { id?: string; username?: string } = {}):
   return (unwrap(await supabase.rpc('get_profile', { p_id: args.id ?? null, p_username: args.username ?? null })) ?? null) as Profile | null;
 }
 
-export async function profileResponses(profileId: string): Promise<ProfileResponse[]> {
-  return (unwrap(await supabase.rpc('profile_responses', { p_profile: profileId })) ?? []) as ProfileResponse[];
+export async function profileResponses(profileId: string, limit?: number): Promise<ProfileResponse[]> {
+  return (unwrap(await supabase.rpc('profile_responses', { p_profile: profileId, ...(limit ? { p_limit: limit } : {}) })) ?? []) as ProfileResponse[];
 }
 
 export type FollowSource = 'profile' | 'player' | 'home' | 'reply' | 'search' | 'activity' | 'suggestion' | 'follows' | 'invites';

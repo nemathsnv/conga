@@ -55,6 +55,26 @@ export function failedDetail(view: Exclude<FailedView, 'retry'>): string {
   }
 }
 
+/** The second line for a failed post, with the reason when the boards' line does not say it. */
+export function failedDetailFor(view: Exclude<FailedView, 'retry'>, reason: string | null | undefined): string {
+  if (view === 'cannot_post' && (reason ?? '').includes('already_responded')) return RESPONDED_COPY.refused;
+  return failedDetail(view);
+}
+
+// PROPOSED COPY, NOT ON A BOARD (founder iPhone test, 19 Oct; needs Nemat's approval, or boards):
+// the one-response rule said before recording, and after a refusal. SPEC.md Section 6: "One primary
+// response per person per prompt. To change it, the person deletes it and records again."
+export const RESPONDED_COPY = {
+  /** The + sheet's pill in place of Respond, on a prompt the member has responded to. */
+  label: 'Responded',
+  /** Respond on a prompt the member has responded to (Home, a player, the + sheet). */
+  sheetTitle: "You've already responded to this prompt",
+  sheetLine: 'One response per prompt. To record a new one, delete your response first.',
+  ok: 'OK',
+  /** P2's second line when the refusal was already_responded (instead of "This recording can't be posted."). */
+  refused: "You've already responded to this prompt.",
+} as const;
+
 /** PR-Posting's first line (P8-R for a video reply). */
 export function postingTitle(kind: Kind): string {
   return kind === 'draft' ? 'Saving your draft' : `Posting your ${noun(kind)}`;

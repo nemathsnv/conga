@@ -43,6 +43,9 @@ const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ navigate: mockNavigate, push: mockPush, replace: mockReplace, back: jest.fn() }) }));
 let mockPostingKind = 'idle';
 jest.mock('@/video/posting', () => ({ usePosting: () => ({ state: { kind: mockPostingKind } }) }));
+const mockResponded = new Set<string>();
+jest.mock('@/lib/responded', () => ({ hasResponded: (id: string) => mockResponded.has(id), refreshResponded: async () => undefined }));
+jest.mock('@/lib/session', () => ({ useSession: () => ({ session: { user: { id: 'me' } } }) }));
 
 function texts(tree: { root: { findAllByType: (t: unknown) => unknown[] } }): string[] {
   return (tree.root.findAllByType(Text) as { props: { children: ReactNode } }[]).map((t) => String(t.props.children));
@@ -145,6 +148,33 @@ describe('camera entry (P7, P8)', () => {
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/camera-blocked', params: { kind: sheet } });
     expect(entry.showBlock()).toBe(true);
+    tree.unmount();
+  });
+});
+
+describe('camera entry: one primary response per prompt', () => {
+  let entry!: ReturnType<typeof useOpenRecord>;
+  function Capture() {
+    entry = useOpenRecord();
+    return null;
+  }
+
+  it('Respond on a prompt already responded to opens the sheet route, not the camera; a reply still opens', async () => {
+    mockPostingKind = 'idle';
+    mockResponded.clear();
+    mockResponded.add('p1');
+    mockNavigate.mockReset();
+    mockPush.mockReset();
+    let tree!: ReturnType<typeof renderer.create>;
+    await renderer.act(() => {
+      tree = renderer.create(<RecordEntryProvider><Capture /></RecordEntryProvider>);
+    });
+    entry.open({ pathname: '/record/[promptId]', params: { promptId: 'p1' } });
+    expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/camera-blocked', params: { kind: 'responded' } });
+    expect(mockPush).not.toHaveBeenCalled();
+    entry.open({ pathname: '/record/[promptId]', params: { promptId: 'p1', replyTo: 'v1' } });
+    entry.open({ pathname: '/record/[promptId]', params: { promptId: 'p2' } });
+    expect(mockPush).toHaveBeenCalledTimes(2);
     tree.unmount();
   });
 });

@@ -12,6 +12,7 @@ import { AppState } from 'react-native';
 import { track } from '@/lib/analytics';
 import { isOnline, subscribeOnline } from '@/lib/connectivity';
 import { postDraft, postReply, postResponse, retryResponseUpload } from '@/lib/content';
+import { markResponded } from '@/lib/responded';
 import { useSession } from '@/lib/session';
 import { loadPendingPostOrThrow, savePendingPostOrThrow } from './pendingPost';
 import type { PendingPost } from './pendingPostState';
@@ -56,6 +57,13 @@ function createRow(post: Pick<PendingPost, 'draftFor' | 'replyToId' | 'promptId'
   return postResponse(post.promptId, t.uploadId, post.caption, durationMs, submissionId, signal);
 }
 
+/** What a posting state says about the member's one response to its prompt (lib/responded.ts). */
+function noteResponded(s: PostingState): void {
+  if (s.kind !== 'failed' && s.kind !== 'live') return;
+  if (s.post.kind !== 'response' || s.post.replyToId || s.post.draftFor) return;
+  if (s.kind === 'live' || (s.post.failedReason ?? '').includes('already_responded')) markResponded(s.post.promptId);
+}
+
 function memberFor(ownerId: string, show: (s: PostingState) => void): MemberPosting {
   return createMemberPosting({
     ownerId,
@@ -93,7 +101,10 @@ export function PostingProvider({ children }: { children: ReactNode }) {
       member.current = { id: null, posting: null };
       return;
     }
-    const posting = memberFor(ownerId, (s) => setOwned({ owner: ownerId, state: s }));
+    const posting = memberFor(ownerId, (s) => {
+      noteResponded(s);
+      setOwned({ owner: ownerId, state: s });
+    });
     member.current = { id: ownerId, posting };
     void posting.resumeOnLaunch();
   }, [ownerId]);

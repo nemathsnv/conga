@@ -17,7 +17,7 @@ import { thumbnailUrl } from '@/video/playback';
 import type { PendingPost } from '@/video/pendingPostState';
 import type { PostingState } from '@/video/posting';
 import { uploadFailedDetail } from '@/video/postingFlow';
-import { failedDetail, failedTitle, failedView, offlineDetail, postingTitle } from '@/ui/failedPost';
+import { failedDetailFor, failedTitle, failedView, offlineDetail, postingTitle } from '@/ui/failedPost';
 
 export function Spinner({ size = 28, light = true }: { size?: number; light?: boolean }) {
   const [spin] = useState(() => new Animated.Value(0));
@@ -175,7 +175,7 @@ export function PostingBanner({ state, onRetry, onDiscard, busy = false, topInse
           {failed ? (
             <>
               <Text style={s.bannerTitle}>{failedTitle(post.kind, view)}</Text>
-              <Text style={s.bannerSub}>{view === 'retry' ? uploadFailedDetail(post.failedReason) : failedDetail(view)}</Text>
+              <Text style={s.bannerSub}>{view === 'retry' ? uploadFailedDetail(post.failedReason) : failedDetailFor(view, post.failedReason)}</Text>
             </>
           ) : (
             <>

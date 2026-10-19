@@ -12,6 +12,7 @@ import { BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, View, useW
 
 import { avatarUrl } from '@/lib/api';
 import { blockUser, deleteVideo, reportItem, REPORT_REASONS, type ProfileCard, type ReportKind, type ReportReason } from '@/lib/content';
+import { afterOwnVideoDeleted } from '@/lib/responded';
 import { profileLink, videoLink } from '@/lib/links';
 import { markFeedDirty } from '@/ui/feedStore';
 import { closeAction, type SafetyStage } from '@/ui/safetyClose';
@@ -110,6 +111,8 @@ export default function SafetyScreen() {
     try {
       await deleteVideo(p.id);
       markFeedDirty();
+      // A deleted response frees its prompt for a new one (lib/responded.ts).
+      void afterOwnVideoDeleted();
       router.dismissTo('/(tabs)');
     } catch (e) {
       console.error('delete_video failed', e);

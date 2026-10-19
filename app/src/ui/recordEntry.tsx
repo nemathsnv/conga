@@ -2,9 +2,15 @@
 // recording is waiting (failed, offline, or a discard Conga has not confirmed) or still posting.
 // The sheet says why; no second take exists to replace the first. Every place that opens the camera
 // goes through useOpenRecord. Reads the posting state (app/src/video), never changes it.
+// Respond (not Reply, not a draft) on a prompt the member already responded to does not open the
+// camera either: one primary response per prompt (SPEC.md Section 6; lib/responded.ts).
 // The sheet is the route app/camera-blocked.tsx, not a <Modal> (ui/OverlaySheet.tsx says why).
 import { useRouter, type Href } from 'expo-router';
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { AppState } from 'react-native';
+
+import { hasResponded, refreshResponded } from '@/lib/responded';
+import { useSession } from '@/lib/session';
 
 import { cameraBlock } from '@/ui/failedPost';
 import { usePosting } from '@/video/posting';
@@ -18,10 +24,30 @@ type RecordEntry = {
 
 const RecordEntryContext = createContext<RecordEntry | null>(null);
 
+/** The prompt a camera link records a primary response for; null for a video reply or a draft. */
+export function respondTarget(href: Href): string | null {
+  if (typeof href !== 'object' || href === null || !('pathname' in href) || href.pathname !== '/record/[promptId]') return null;
+  const params = (href as { params?: Record<string, unknown> }).params ?? {};
+  if (params.replyTo || params.draftFor) return null;
+  const promptId = params.promptId;
+  return typeof promptId === 'string' && promptId !== 'draft' ? promptId : null;
+}
+
 export function RecordEntryProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const posting = usePosting();
+  const { session } = useSession();
+  const ownerId = session?.user.id ?? null;
   const block = cameraBlock(posting.state);
+
+  // The member's own responses: at sign-in and whenever the app comes back to the foreground.
+  useEffect(() => {
+    void refreshResponded(ownerId);
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void refreshResponded(ownerId);
+    });
+    return () => sub.remove();
+  }, [ownerId]);
 
   // `navigate`, not `push`: a second tap while the sheet opens does not stack another one.
   const showSheet = useCallback(() => {
@@ -33,6 +59,11 @@ export function RecordEntryProvider({ children }: { children: ReactNode }) {
   const open = useCallback<RecordEntry['open']>(
     (href, mode = 'push') => {
       if (showSheet()) return;
+      const promptId = respondTarget(href);
+      if (promptId && hasResponded(promptId)) {
+        router.navigate({ pathname: '/camera-blocked', params: { kind: 'responded' } });
+        return;
+      }
       if (mode === 'replace') router.replace(href);
       else router.push(href);
     },
