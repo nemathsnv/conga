@@ -4,6 +4,8 @@ The online doc is the master. If it changes, re-export this file. Diagrams were 
 Local revision, 14 Oct 2026 (approved by Nemat): section 19, failed posts, Discard and sign-out.
 Local revision, 17 Oct 2026 (Nemat): the product name is Conga, and the links are on conga.churntech.com
 (section 4). Name and domain only; no behaviour changed.
+Local revision, 19 Oct 2026 (Nemat): several responses per person per prompt (sections 6 and 24), and
+Pause/Resume while recording responses and video replies (sections 2, 6 and 7).
 Not yet in the online master: update the master before the next re-export, or these revisions are lost. -->
 
 # Conga v1 — Product and Build Specification
@@ -42,7 +44,7 @@ v1 ships the full prompt → response → conversation loop, the safety tooling 
 **In v1**
 
 - Home feed (For you, Following), Discover with search, response player, Activity, profiles, Settings
-- Recording responses and video replies in the app: front/back camera, light, 1× zoom, up to 30 seconds
+- Recording responses and video replies in the app: front/back camera, light, 1× zoom, pause and resume, up to 30 seconds of recorded footage
 - Video replies in flat rooms, including replies to replies
 - Text comments on responses (not on video replies)
 - Likes on responses and video replies
@@ -249,6 +251,7 @@ A response is a public video of up to 30 seconds made in response to exactly one
 
 - The prompt is shown on screen while recording, with "Responding · up to 30 seconds".
 - Controls: cancel, camera flip, light, 1× zoom, record and stop with a progress ring, red timer.
+- **Pause and Resume** (Nemat, 19 Oct 2026): Record → Pause → Resume → … → Stop, as many times as the person likes within one recording. Only recorded footage counts: the timer, the ring, the 30-second limit and the 2-second minimum exclude paused time, and the video contains only the recorded parts, joined into one clip with its sound in step. The screen always shows whether it is recording or paused. Flip, zoom and light work while recording and while paused. Reaching 30 seconds of footage ends the recording for post review. Leaving the app or a camera interruption pauses the recording and keeps what was recorded. Cancel during a recording asks before discarding it.
 - After stopping → post review: watch, Re-record, add a caption, Post.
 - The first public video of any kind shows the disclosure first (section 16).
 - Camera or microphone access off → `A-Camera` or `A-Mic`. Recording without sound is not allowed.
@@ -260,7 +263,7 @@ A response is a public video of up to 30 seconds made in response to exactly one
 - Buttons: Reply to the author, Respond to the prompt.
 - At the end: "You've seen all 23 responses.", Add your response, Watch again, then the next conversation.
 
-**One primary response per person per prompt.** To change it, the person deletes it and records again. Video replies are not limited.
+**Several responses per person per prompt** (Nemat, 19 Oct 2026; replaces "one primary response per person per prompt"). A person may respond to the same prompt with any number of independent videos, at any time while the prompt is open: a nature prompt answered from the Netherlands today, Norway next month and Japan later. Each response is its own video with its own caption, likes, comments, video replies, reports and moderation. A prompt the person has responded to offers "Respond again". Deleting a response affects only that response. A response removed by moderation stays removed, but does not stop the person posting a different video; account restrictions and suspensions apply as before (section 17). Posting the same recording twice never makes two responses. Video replies are not limited.
 
 ## 7. Video reply model
 
@@ -281,7 +284,7 @@ A video reply is a public video of up to 30 seconds that replies to a response, 
 - A reply to a reply shows "Replying to \[name\]" on its tile.
 - **Watching a reply** (`Reply-Watch`, `Reply-Watch-2`): a card at the top shows what it replies to. Tapping the card opens that video. A reply to a reply adds "In replies to \[root author\]".
 - **Buttons:** "\[Root author\]'s response" and "Reply to \[this reply's author\]". "x of N" counts within the room.
-- **Recording a reply** (`Record-Reply`): the card shows "Replying to \[name\]", their caption and "In replies to \[root author\] · up to 30 seconds".
+- **Recording a reply** (`Record-Reply`): the card shows "Replying to \[name\]", their caption and "In replies to \[root author\] · up to 30 seconds". Pause and Resume work as for a response (section 6).
 
 **When the video it replies to is deleted**
 
@@ -703,7 +706,7 @@ Most open questions were settled in the spec review on 5 Oct. The decisions are 
 
 **Decided in the spec review (5 Oct)**
 
-- One primary response per person per prompt; video replies are not limited.
+- ~~One primary response per person per prompt~~ Several responses per person per prompt (changed by Nemat, 19 Oct 2026, section 6); video replies are not limited.
 - Prompts stay open after being featured, until archived. Tonight's prompt is featured from about 18:30 until local midnight.
 - 5 invites per member, each valid for 7 days; both configurable.
 - At most 3 suggestions in review per member. Moderators decline rather than rewrite.
