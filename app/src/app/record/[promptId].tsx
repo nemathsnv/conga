@@ -5,11 +5,14 @@
 // (SPEC.md Section 12); the suggestion's text stands in for the prompt.
 // The flip works during a take (docs/BLOCKERS.md B-1): each camera records a segment, the timer and
 // the ring run on the total, and Post Review stitches the segments into one clip (video/stitch.ts).
+// Zoom (founder iPhone test, 19 Oct): pinch anywhere on the preview, or tap the zoom button above
+// Record (1× / 2×), before or during a take; a flip starts the other camera at 1× (video/zoom.ts).
+// The flip button sits beside Record, as on the iPhone camera, not top right (same brief).
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -35,9 +38,19 @@ import {
 import { permissionStep } from '@/video/permissions';
 import { getCurrentRecording, setCurrentRecording } from '@/video/recordingStore';
 import { MAX_DURATION_MS, RECORDING_SETTINGS, type CameraFacing } from '@/video/types';
+import { cameraZoom, formatZoom, pinchFactor, toggledFactor, zoomRangeFor, type ZoomRange } from '@/video/zoom';
+
+import { maxZoomFactor } from '../../../modules/camera-zoom';
 
 const RING = 84;
 const RING_STROKE = 3.5;
+
+/** Distance between the first two fingers of a touch. */
+function fingerSpread(e: GestureResponderEvent): number | null {
+  const [a, b] = e.nativeEvent.touches;
+  if (!a || !b) return null;
+  return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+}
 
 export default function RecordScreen() {
   const router = useRouter();
@@ -65,6 +78,22 @@ export default function RecordScreen() {
   const cam = useRef<CameraView>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const cameraReadyWaiter = useRef<{ resolve: () => void; reject: (e: Error) => void; timeout: ReturnType<typeof setTimeout> } | null>(null);
+  // Zoom: the factor shown on the button and expo-camera's value for it. The camera's range is read
+  // when a pinch or a tap starts (the session has set the camera's format by then).
+  const [zoom, setZoom] = useState({ factor: 1, camera: RECORDING_SETTINGS.zoom });
+  const pinch = useRef<{ startSpread: number; startFactor: number; range: ZoomRange | null } | null>(null);
+  const zoomFactor = useRef(1);
+  const readZoomRange = () => zoomRangeFor(Platform.OS, maxZoomFactor(facing));
+  const setZoomFactor = (factor: number, range: ZoomRange | null) => {
+    zoomFactor.current = factor;
+    setZoom({ factor, camera: cameraZoom(factor, range) });
+  };
+  // Each camera starts at 1×; a pinch in progress belongs to the camera it started on.
+  const resetZoom = useCallback(() => {
+    pinch.current = null;
+    zoomFactor.current = 1;
+    setZoom({ factor: 1, camera: RECORDING_SETTINGS.zoom });
+  }, []);
 
   useEffect(() => {
     if (draftFor) {
@@ -137,9 +166,10 @@ export default function RecordScreen() {
     }, CAMERA_SWITCH_TIMEOUT_MS);
     cameraReadyWaiter.current = { resolve, reject, timeout };
     setReady(false);
+    resetZoom();
     setFacing(to);
     if (Platform.OS === 'ios') setCameraKey((k) => k + 1);
-  }), []);
+  }), [resetZoom]);
 
   const onCameraReady = () => {
     setReady(true);
@@ -218,7 +248,36 @@ export default function RecordScreen() {
   const flip = () => {
     const t = take.current;
     if (t) t.flip();
-    else setFacing((f) => (f === 'front' ? 'back' : 'front'));
+    else {
+      resetZoom();
+      setFacing((f) => (f === 'front' ? 'back' : 'front'));
+    }
+  };
+
+  const toggleZoom = () => {
+    const range = readZoomRange();
+    setZoomFactor(toggledFactor(zoomFactor.current, range), range);
+  };
+
+  // Two fingers anywhere on the preview zoom; one finger is left to the controls. The layer sits
+  // under every control, so taps on Record, Light, Flip and Cancel never reach it.
+  const startPinch = (e: GestureResponderEvent) => {
+    const spread = fingerSpread(e);
+    if (spread === null) return;
+    pinch.current = { startSpread: spread, startFactor: zoomFactor.current, range: readZoomRange() };
+  };
+  const movePinch = (e: GestureResponderEvent) => {
+    const spread = fingerSpread(e);
+    if (spread === null) {
+      pinch.current = null; // a finger lifted: the next two fingers start a new pinch from here
+      return;
+    }
+    if (!pinch.current) return startPinch(e);
+    const p = pinch.current;
+    setZoomFactor(pinchFactor(p.startFactor, p.startSpread, spread, p.range), p.range);
+  };
+  const endPinch = () => {
+    pinch.current = null;
   };
 
   const cancel = () => {
@@ -285,10 +344,8 @@ export default function RecordScreen() {
       ) : (
         <View />
       )}
-      {/* Flip works during a take too (SPEC.md Section 6; Nemat, 6 Oct; docs/BLOCKERS.md B-1). */}
-      <GlassTool label="Flip camera" onPress={flip}>
-        <FlipIcon />
-      </GlassTool>
+      {/* Keeps the timer centred; the flip is beside Record (founder iPhone test, 19 Oct). */}
+      <View style={s.headerSpacer} />
     </View>
   );
 
@@ -332,7 +389,7 @@ export default function RecordScreen() {
           mode="video"
           videoQuality={RECORDING_SETTINGS.videoQuality}
           videoBitrate={RECORDING_SETTINGS.videoBitrate}
-          zoom={RECORDING_SETTINGS.zoom}
+          zoom={zoom.camera}
           enableTorch={torch}
           mute={false}
           mirror={facing === 'front'}
@@ -344,8 +401,21 @@ export default function RecordScreen() {
       <View pointerEvents="none" style={[s.gradient, { top: 0, height: 240, backgroundColor: 'transparent' }]}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.25)' }} />
       </View>
+      <View
+        style={StyleSheet.absoluteFill}
+        onStartShouldSetResponder={(e) => e.nativeEvent.touches.length >= 2}
+        onMoveShouldSetResponder={(e) => e.nativeEvent.touches.length >= 2}
+        onResponderGrant={startPinch}
+        onResponderMove={movePinch}
+        onResponderRelease={endPinch}
+        onResponderTerminate={endPinch}
+        onResponderTerminationRequest={() => false}
+      />
       {header}
-      {promptCard}
+      {/* The card takes no touches, so a pinch over it still zooms. */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {promptCard}
+      </View>
 
       {micOff ? (
         // Board A-Mic: the preview stays, recording is unavailable.
@@ -366,7 +436,7 @@ export default function RecordScreen() {
       ) : null}
 
       {shortToast ? (
-        <Glass style={s.toast} radius={20}>
+        <Glass style={[s.toast, { bottom: Math.max(insets.bottom, 12) + 34 + RING + 14 + 32 + 12 }]} radius={20}>
           <Text style={s.toastText}>Keep going: responses are at least 2 seconds</Text>
         </Glass>
       ) : null}
@@ -401,8 +471,14 @@ export default function RecordScreen() {
           </Svg>
           {recording ? <View style={s.stopSquare} /> : <View style={[s.recordDot, micOff && { opacity: 0.35 }]} />}
         </Pressable>
-        <GlassTool label="Zoom 1x">
-          <Text style={s.zoomText}>1×</Text>
+        {/* Flip works during a take too (SPEC.md Section 6; Nemat, 6 Oct; docs/BLOCKERS.md B-1). */}
+        <GlassTool label="Flip camera" onPress={flip}>
+          <FlipIcon />
+        </GlassTool>
+      </View>
+      <View pointerEvents="box-none" style={[s.zoomRow, { bottom: Math.max(insets.bottom, 12) + 34 + RING + 14 }]}>
+        <GlassTool label={`Zoom ${formatZoom(zoom.factor)}`} onPress={toggleZoom} style={s.zoomTool}>
+          <Text style={s.zoomText}>{formatZoom(zoom.factor)}</Text>
         </GlassTool>
       </View>
       <Text style={[s.upTo, { bottom: Math.max(insets.bottom, 12) + 6 }]}>Up to 0:30</Text>
@@ -425,7 +501,10 @@ const s = StyleSheet.create({
   recordButton: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
   recordDot: { width: 66, height: 66, borderRadius: 33, backgroundColor: colors.dangerBorder },
   stopSquare: { width: 30, height: 30, borderRadius: 8, backgroundColor: colors.dangerBorder },
-  zoomText: { ...type.semi14, color: colors.white, fontFamily },
+  headerSpacer: { width: 44 },
+  zoomRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  zoomTool: { width: 48, height: 32, borderRadius: 16 },
+  zoomText: { ...type.semi14, color: colors.white, fontFamily, fontVariant: ['tabular-nums'] },
   upTo: { position: 'absolute', left: 0, right: 0, textAlign: 'center', ...type.caption12, color: colors.white72, fontFamily, fontVariant: ['tabular-nums'] },
   stateBlock: { position: 'absolute', left: 32, right: 32, top: 300, alignItems: 'center' },
   stateIcon: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
@@ -438,6 +517,6 @@ const s = StyleSheet.create({
   micText: { ...type.caption13, marginTop: 2, color: 'rgba(255,255,255,0.78)', fontFamily },
   micButton: { alignSelf: 'flex-start', marginTop: 10, height: 34, paddingHorizontal: 14, borderRadius: 17, backgroundColor: colors.white, justifyContent: 'center' },
   micButtonText: { ...type.semi14, color: colors.black, fontFamily },
-  toast: { position: 'absolute', alignSelf: 'center', top: 646, height: 40, paddingHorizontal: 16, justifyContent: 'center' },
+  toast: { position: 'absolute', alignSelf: 'center', height: 40, paddingHorizontal: 16, justifyContent: 'center' },
   toastText: { ...type.semi14, color: colors.white, fontFamily },
 });
