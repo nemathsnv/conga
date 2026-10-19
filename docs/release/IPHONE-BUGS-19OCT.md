@@ -139,14 +139,15 @@ Fixes for Nemat's real-device test on the iPhone 17 Pro (founder build `app.shor
 - [05 Me after swiping to Replies](screenshots/iphone-bugs-19oct/05-me-replies-after-swipe.jpg)
 - [06 record controls](screenshots/iphone-bugs-19oct/06-record-controls.jpg)
 
-**Founder build** (built at `3bd9a1d`, 19 Oct, not installed):
+**Founder build** (built at `3bd9a1d`; installed on the iPhone 19 Oct, Nemat approved):
 
 - Command: `INSTALL=0 DEVICE=00008150-00095DC03A61401C app/scripts/founder-ios.sh release`, with `app/.env.founder` copied, git-ignored, from the `conga-mobile-beta` worktree.
 - Signing: `codesign --verify --deep --strict` is valid. Bundle id `app.shortcut.founder`, team `BP7TM32HCQ`, display name Conga, 0.1.0 (1). The free profile expires **24 Oct 2026 16:19 UTC**.
 - Contents: the `CameraZoomModule` is linked. The JS bundle holds the hosted project URL and `conga.churntech.com`, and no local address.
 - Runtime fingerprint: `a64bc144e306e405f6845ff316e48968dd83bf84`. The installed build has `edf83d3d…`, so **an EAS Update cannot carry these changes to the installed app**.
 - Same bundle id and team as the installed app, so installing over it keeps the app's data, sign-in and any waiting recording.
-- Install, when Nemat approves:
+- **Installed 19 Oct (Nemat approved)** over the existing `app.shortcut.founder` with `devicectl`. The first attempt returned a transient `IXRemoteErrorDomain` error 6; the retry reported "App installed". The launch was refused because the iPhone was locked (`BSErrorCodeDescription = Locked`), so the first launch and whether the data survived are unconfirmed until Nemat opens the app.
+- Commands used:
 
   ```bash
   xcrun devicectl device install app --device 00008150-00095DC03A61401C "app/ios/build/Build/Products/Release-iphoneos/Conga.app"
@@ -199,5 +200,5 @@ Fixes for Nemat's real-device test on the iPhone 17 Pro (founder build `app.shor
 ## Not changed
 
 - No backend, migration or Edge Function change.
-- Nothing deployed, published, pushed or installed on the phone.
+- Nothing deployed, published or pushed. The founder build was installed on the phone with Nemat's approval.
 - The local stack `shortcut-cg` was used and stopped. The founder stack `shortcut` was not touched.

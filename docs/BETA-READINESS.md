@@ -4888,7 +4888,7 @@ Base `4b2fe3f`; 23 commits to `c12724e`. Nothing pushed, deployed, installed on 
   files in `Documents/recordings/` never swept; sign-out scope global vs local (Nemat). Android still never
   run.
 
-## 31. iPhone bugs and mobile UX from Nemat's device test (19 Oct; local only, nothing installed or published)
+## 31. iPhone bugs and mobile UX from Nemat's device test (19 Oct; nothing published; founder build installed, Nemat approved)
 
 Base `22a8f7a`; branch `claude/conga-iphone-bugs-ux-6cf82a`. Full report: `release/IPHONE-BUGS-19OCT.md`.
 
@@ -4904,6 +4904,8 @@ Base `22a8f7a`; branch `claude/conga-iphone-bugs-ux-6cf82a`. Full report: `relea
 - *Verified:* typecheck, lint, Jest 39 suites 481/481; simulator Debug build and walk (layout, swipes, back swipe,
   record controls); the refusal on an isolated stack. **Not run:** anything with a camera (zoom, flip with zoom,
   recording, stitching) and the P2 banner after a real Post. Decisions for Nemat are listed in the report.
+- *Founder build installed (19 Oct, Nemat approved):* fingerprint `a64bc144…`, over the existing app with `devicectl`
+  ("App installed" on the second attempt). The launch was refused because the phone was locked; the first launch is unconfirmed.
 
 ## Gates
 
