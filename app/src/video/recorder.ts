@@ -3,7 +3,8 @@
 //
 // A take is one or more segments: expo-camera ends a recording when the camera flips (spike run 21),
 // so a flip during a take stops the segment, keeps it, switches camera and starts the next one
-// (docs/BLOCKERS.md B-1). The segments are stitched into one file on Post Review (stitch.ts).
+// (docs/BLOCKERS.md B-1); Pause and Resume end and start segments the same way (19 Oct 2026). The
+// segments are stitched into one file on Post Review (stitch.ts).
 import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -108,16 +109,30 @@ export function totalDuration(segments: RecordingSegment[]): number {
 // ---------------------------------------------------------------------------------------------
 // The take: segments, the total, the 30-second limit and PR-Short across segments.
 // Pure (the camera and the files are injected), so every edge is unit-tested.
+//
+// A take is Record → (Pause → Resume)* → Stop, with flips anywhere in between (Nemat, 19 Oct 2026).
+// Each stretch of recording is one segment; Pause ends the segment and keeps it, Resume starts the
+// next one on the same camera, and Post Review stitches them (stitch.ts). Only recorded time counts:
+// the timer, the ring, the 30-second limit and PR-Short all run on the segments' total, never on
+// the time spent paused.
+//
+// Nothing recorded is lost to an interruption: the app going to the background, the camera ending
+// a segment by itself (a call, the session interrupted), a camera that does not come back after a
+// flip, or a segment the phone cannot keep all leave the take paused with every segment it has.
+// The person then resumes, or stops and reviews what they have. Only Cancel (or the screen closing)
+// deletes the segments.
 
-/** A flip in the first half second of a segment is ignored: a segment that short may hold no frame. */
+/** A flip or a pause in the first half second of a segment is ignored: a segment that short may hold no frame. */
 export const FLIP_MIN_SEGMENT_MS = 500;
+export const PAUSE_MIN_SEGMENT_MS = FLIP_MIN_SEGMENT_MS;
 /**
- * With less than this left of the 30 seconds, a flip is ignored and the take runs on to its limit.
- * (Android's expo-camera takes whole seconds for the limit and treats 0 as no limit, so a segment
- * under a second cannot be given one.)
+ * With less than this left of the 30 seconds, a flip is ignored (the take runs on to its limit) and a
+ * paused take cannot resume (only Stop). Android's expo-camera takes whole seconds for the limit and
+ * treats 0 as no limit, so a segment under a second cannot be given one.
  */
 export const FLIP_MIN_REMAINING_MS = 1000;
-/** The other camera not ready in this long: the take ends with the segments it has. */
+export const RESUME_MIN_REMAINING_MS = FLIP_MIN_REMAINING_MS;
+/** The other camera not ready in this long: the take pauses with the segments it has. */
 export const CAMERA_SWITCH_TIMEOUT_MS = 4000;
 
 /**
@@ -139,10 +154,15 @@ export type TakeOutcome =
   /** Cancel, or the screen closed. The files are deleted. */
   | { kind: 'cancelled' };
 
-export type TakePhase = 'idle' | 'recording' | 'flipping' | 'done';
+/**
+ * idle: before Record. recording: a segment is being recorded (or is being ended: see `paused`).
+ * paused: between segments, by Pause or an interruption; Resume or Stop. flipping: the camera is
+ * switching (during a take or while paused). done: the take has ended.
+ */
+export type TakePhase = 'idle' | 'recording' | 'paused' | 'flipping' | 'done';
 
-/** Why the current segment is ending. 'ended' is the camera stopping on its own (limit, interruption). */
-type EndReason = 'flip' | 'stop' | 'limit' | 'interrupted';
+/** Why the current segment is ending. A segment the camera ends by itself has no reason. */
+type EndReason = 'flip' | 'pause' | 'stop' | 'limit' | 'interrupted';
 
 export type TakeDeps = {
   /** expo-camera recordAsync on the current camera. */
@@ -154,22 +174,32 @@ export type TakeDeps = {
   discard: (uri: string) => void;
   now: () => number;
   platform: 'ios' | 'android' | string;
-  /** Something the screen shows changed (phase, facing). The timer is read with elapsedMs(). */
+  /** Something the screen shows changed (phase, facing, paused). The timer is read with elapsedMs(). */
   onChange: () => void;
   onFinish: (outcome: TakeOutcome) => void;
+  /** A segment failed or was cut short by the camera and the take paused: the screen may restart the camera. */
+  onInterrupted?: (error?: unknown) => void;
 };
 
 export type Take = {
   readonly phase: TakePhase;
   readonly facing: CameraFacing;
   readonly segments: readonly RecordingSegment[];
+  /** Paused, or a pause (or an interruption) is ending the segment: nothing is being recorded. */
+  readonly paused: boolean;
   start: () => void;
-  /** Total recorded across segments, for the red timer and the ring. */
+  /** Total recorded across segments, for the red timer and the ring. Paused time is never counted. */
   elapsedMs: () => number;
   /** Whether a flip now would be taken. */
   canFlip: () => boolean;
   flip: () => void;
-  /** Stop: the take ends with what it has. 'limit' when the 30 seconds are reached. */
+  canPause: () => boolean;
+  /** Ends the segment and keeps it; the take waits, paused. */
+  pause: () => void;
+  canResume: () => boolean;
+  /** Starts the next segment on the current camera. */
+  resume: () => void;
+  /** Stop: the take ends with what it has. 'limit' when the 30 seconds are reached; 'interrupted' pauses. */
   stop: (reason?: 'stop' | 'limit' | 'interrupted') => void;
   cancel: () => void;
 };
@@ -188,8 +218,12 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
   let endRequestedAt: number | null = null;
   // Each segment's recordAsync settles once; a stale one (after cancel) only gives back its file.
   let segmentToken = 0;
+  // A flip started while recording records on the other camera once it is ready; one started
+  // while paused (or interrupted on the way) stays paused.
+  let recordAfterSwitch = false;
 
   const keptMs = () => totalDuration(segments);
+  const remainingMs = () => MAX_DURATION_MS - keptMs();
 
   const liveMs = () => {
     if (phase !== 'recording') return 0;
@@ -220,8 +254,15 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     deps.onFinish(outcome);
   };
 
+  const enterPaused = () => {
+    phase = 'paused';
+    ending = null;
+    endRequestedAt = null;
+    deps.onChange();
+  };
+
   const beginSegment = () => {
-    segmentBudgetMs = MAX_DURATION_MS - keptMs();
+    segmentBudgetMs = remainingMs();
     phase = 'recording';
     ending = null;
     endRequestedAt = null;
@@ -262,21 +303,37 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
       }
     }
     if (reason === 'flip') {
-      flipCamera();
+      flipCamera(true);
       return;
     }
-    // A take stopped before 2 seconds often holds no usable data at all (Android's CameraX rejects
-    // it; iOS can report no file): that is PR-Short, not a failed take.
-    if (segments.length === 0 && reason === 'stop' && durationMs < MIN_DURATION_MS) {
+    if (reason === 'stop' || reason === 'limit') {
+      // A take stopped before 2 seconds often holds no usable data at all (Android's CameraX rejects
+      // it; iOS can report no file): that is PR-Short, not a failed take.
+      if (segments.length === 0 && reason === 'stop' && durationMs < MIN_DURATION_MS) {
+        finish();
+        return;
+      }
+      finish(segments.length === 0 ? error ?? (uri ? undefined : new Error('record_failed')) : undefined);
+      return;
+    }
+    // The 30 seconds are used up (the camera's own limit ended it): the take is complete.
+    if (reason === null && remainingMs() < RESUME_MIN_REMAINING_MS && segments.length > 0) {
       finish();
       return;
     }
-    // Stop, the limit, an interruption, or the camera ending the segment on its own.
-    finish(segments.length === 0 ? error ?? (uri ? undefined : new Error('record_failed')) : undefined);
+    // Pause, an interruption, the camera ending the segment by itself, or a failed segment.
+    // Nothing usable at all from the first segment, and no pause asked: a failed take, as before.
+    if (segments.length === 0 && reason === null) {
+      finish(error ?? (uri ? undefined : new Error('record_failed')));
+      return;
+    }
+    enterPaused();
+    if (reason !== 'pause' || error !== undefined) deps.onInterrupted?.(error);
   };
 
-  const flipCamera = () => {
+  const flipCamera = (thenRecord: boolean) => {
     phase = 'flipping';
+    recordAfterSwitch = thenRecord;
     ending = null;
     endRequestedAt = null;
     const to = otherFacing(facing);
@@ -286,24 +343,26 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     deps.switchCamera(to).then(
       () => {
         if (phase !== 'flipping' || token !== segmentToken) return;
-        // Unreachable while flips under a second from the limit are ignored; kept as a safety net.
-        if (MAX_DURATION_MS - keptMs() < FLIP_MIN_REMAINING_MS) finish();
-        else beginSegment();
+        if (recordAfterSwitch && remainingMs() >= FLIP_MIN_REMAINING_MS) beginSegment();
+        else if (recordAfterSwitch && segments.length > 0) finish();
+        else enterPaused();
       },
       (e) => {
         if (phase !== 'flipping' || token !== segmentToken) return;
-        console.warn('camera switch failed during a take; ending it with what it has', e);
-        finish(e);
+        console.warn('camera switch failed during a take; pausing with what it has', e);
+        enterPaused();
+        deps.onInterrupted?.(e);
       },
     );
   };
 
   const requestEnd = (reason: EndReason) => {
-    // A stop (or the limit) asked while a flip is stopping the segment wins: the take ends there.
-    if (ending !== null && !(ending === 'flip' && reason !== 'flip')) {
-      // Stop tapped again: ask the camera again. On iOS a stop that lands in the moment before
-      // recording has really started is lost, and the take would otherwise run to its limit.
-      if (reason === 'stop' && ending === 'stop') deps.stopRecording();
+    // A stop (or the limit) asked while a flip or a pause is ending the segment wins: the take ends there.
+    const overridable = ending === 'flip' || ending === 'pause' || ending === 'interrupted';
+    if (ending !== null && !(overridable && (reason === 'stop' || reason === 'limit'))) {
+      // Stop or Pause tapped again: ask the camera again. On iOS a stop that lands in the moment
+      // before recording has really started is lost, and the take would otherwise run to its limit.
+      if (reason === ending && (reason === 'stop' || reason === 'pause')) deps.stopRecording();
       return;
     }
     const first = ending === null;
@@ -313,11 +372,15 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     deps.onChange();
   };
 
+  const segmentAgeMs = () => deps.now() - segmentStartedAt;
+
   const canFlip = () =>
-    phase === 'recording' &&
-    ending === null &&
-    deps.now() - segmentStartedAt >= FLIP_MIN_SEGMENT_MS &&
-    MAX_DURATION_MS - elapsedMs() >= FLIP_MIN_REMAINING_MS;
+    (phase === 'recording' && ending === null && segmentAgeMs() >= FLIP_MIN_SEGMENT_MS && remainingMs() - liveMs() >= FLIP_MIN_REMAINING_MS) ||
+    phase === 'paused';
+
+  const canPause = () => phase === 'recording' && ending === null && segmentAgeMs() >= PAUSE_MIN_SEGMENT_MS;
+
+  const canResume = () => phase === 'paused' && remainingMs() >= RESUME_MIN_REMAINING_MS;
 
   return {
     get phase() {
@@ -329,6 +392,9 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     get segments() {
       return segments;
     },
+    get paused() {
+      return phase === 'paused' || (phase === 'recording' && (ending === 'pause' || ending === 'interrupted')) || (phase === 'flipping' && !recordAfterSwitch);
+    },
     start() {
       if (phase !== 'idle') return;
       beginSegment();
@@ -336,11 +402,32 @@ export function createTake(initialFacing: CameraFacing, deps: TakeDeps): Take {
     elapsedMs,
     canFlip,
     flip() {
-      if (canFlip()) requestEnd('flip');
+      if (!canFlip()) return;
+      if (phase === 'paused') flipCamera(false);
+      else requestEnd('flip');
+    },
+    canPause,
+    pause() {
+      if (canPause()) requestEnd('pause');
+      else if (phase === 'recording' && ending === 'pause') requestEnd('pause');
+    },
+    canResume,
+    resume() {
+      if (canResume()) beginSegment();
     },
     stop(reason = 'stop') {
-      if (phase === 'recording') requestEnd(reason);
-      else if (phase === 'flipping') finish();
+      if (phase === 'recording') {
+        if (reason === 'interrupted') {
+          if (ending === null) requestEnd('interrupted');
+          // Already ending for a flip: stay paused on the other camera instead of recording there.
+          else if (ending === 'flip') recordAfterSwitch = false;
+        } else requestEnd(reason);
+      } else if (phase === 'flipping') {
+        if (reason === 'interrupted') {
+          recordAfterSwitch = false;
+          deps.onChange();
+        } else finish();
+      } else if (phase === 'paused' && reason !== 'interrupted') finish();
     },
     cancel() {
       if (phase === 'done') return;

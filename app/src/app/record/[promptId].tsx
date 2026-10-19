@@ -8,16 +8,24 @@
 // Zoom (founder iPhone test, 19 Oct): pinch anywhere on the preview, or tap the zoom button above
 // Record (1× / 2×), before or during a take; a flip starts the other camera at 1× (video/zoom.ts).
 // The flip button sits beside Record, as on the iPhone camera, not top right (same brief).
+// Pause and Resume (Nemat, 19 Oct 2026): during a take the centre button pauses and resumes; Stop is
+// the left button and ends the take for Post Review; Light moves to the top right so it stays in
+// reach in every state. Only recorded time counts (the timer, the ring, the 30 seconds); each
+// stretch is a segment, stitched on Post Review like a flip's. Leaving the app or a camera
+// interruption pauses the take and keeps what was recorded; Cancel with a take asks first
+// (PR-Discard's words). NOT ON A BOARD: these controls and the paused timer need Nemat's approval.
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { AppState, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
 import { track } from '@/lib/analytics';
 import { getPrompt, getSuggestion, getVideo, type PromptCard, type Video } from '@/lib/content';
+import { ActionSheet } from '@/ui/ActionSheet';
+import { OverlaySheet } from '@/ui/OverlaySheet';
 import { ReplyCard } from '@/ui/ReplyCard';
 import { Button, Glass } from '@/ui/components';
 import { GlassTool } from '@/ui/dark';
@@ -32,6 +40,7 @@ import {
   finalizeTakeSegments,
   keepTakeSegment,
   makeRecording,
+  PAUSE_MIN_SEGMENT_MS,
   sweepTakeFolder,
   type Take,
   type TakeOutcome,
@@ -67,9 +76,15 @@ export default function RecordScreen() {
   // expo-camera drops the torch when recording starts, so it is blinked off and on after start.
   const [torchBlink, setTorchBlink] = useState(false);
   const torch = light && facing === 'back' && !torchBlink;
-  // The take in progress (one segment per camera); null between takes.
+  // The take in progress (one segment per stretch recorded); null between takes.
   const take = useRef<Take | null>(null);
-  const [recording, setRecording] = useState(false);
+  // What the controls show: no take, recording, or paused (by Pause or an interruption). Set when the
+  // take's phase changes, never by the timer.
+  const [mode, setMode] = useState<'idle' | 'recording' | 'paused'>('idle');
+  const [resumable, setResumable] = useState(false);
+  const recording = mode !== 'idle';
+  // Cancel (or Android Back) with a take: PR-Discard's question first; the take waits, paused.
+  const [discardAsk, setDiscardAsk] = useState(false);
   // The take's elapsed time, read only by the timer and the ring (TakeTimer, RecordRing): set ten
   // times a second, it re-rendered the whole screen, the camera view included, during a take.
   const [elapsed] = useState(() => createLiveValue(0));
@@ -184,6 +199,14 @@ export default function RecordScreen() {
     }
   };
 
+  // iOS: a fresh CameraView (as at a flip) after the session was interrupted or a segment failed,
+  // so Resume starts on a camera that has reported ready. Android's CameraX rebinds by itself.
+  const restartCamera = useCallback(() => {
+    if (Platform.OS !== 'ios' || AppState.currentState !== 'active') return;
+    setReady(false);
+    setCameraKey((k) => k + 1);
+  }, []);
+
   const start = useCallback(() => {
     if (!cam.current || !ready || take.current || !prompt || (replyTo && !target)) return;
     const kind = draftFor ? 'draft' : replyTo ? 'reply' : 'response';
@@ -192,7 +215,8 @@ export default function RecordScreen() {
     const finished = (outcome: TakeOutcome) => {
       take.current = null;
       stopTimer();
-      setRecording(false);
+      setMode('idle');
+      setDiscardAsk(false);
       if (outcome.kind === 'short') {
         // PR-Short: the clip does not reach review.
         setShortToast(true);
@@ -228,11 +252,20 @@ export default function RecordScreen() {
       discard: deleteFileQuietly,
       now: Date.now,
       platform: Platform.OS,
-      onChange: () => elapsed.set(t.elapsedMs()),
+      onChange: () => {
+        elapsed.set(t.elapsedMs());
+        if (t.phase === 'done') return;
+        setMode(t.paused ? 'paused' : 'recording');
+        setResumable(t.canResume());
+      },
       onFinish: finished,
+      onInterrupted: (e) => {
+        if (e !== undefined) console.warn('a segment ended with an error; the take is paused with what it has', e);
+        restartCamera();
+      },
     });
     take.current = t;
-    setRecording(true);
+    setMode('recording');
     elapsed.set(0);
     track('record_started', { kind });
     timer.current = setInterval(() => {
@@ -242,11 +275,38 @@ export default function RecordScreen() {
       if (ms >= MAX_DURATION_MS) t.stop('limit');
     }, 100);
     t.start();
-  }, [ready, prompt, facing, router, replyTo, target, draftFor, switchCamera, blinkTorchIfBack, elapsed]);
+  }, [ready, prompt, facing, router, replyTo, target, draftFor, switchCamera, blinkTorchIfBack, elapsed, restartCamera]);
 
   const stop = () => {
     take.current?.stop('stop');
   };
+
+  // A pause in the first half second of a segment is taken when that half second is up (a shorter
+  // segment may hold no frame), so a quick Pause is never lost.
+  const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pause = useCallback(() => {
+    const t = take.current;
+    if (!t || t.paused) return;
+    if (t.canPause()) t.pause();
+    else if (t.phase === 'recording' && !pauseTimer.current) {
+      pauseTimer.current = setTimeout(() => {
+        pauseTimer.current = null;
+        if (take.current === t) t.pause();
+      }, PAUSE_MIN_SEGMENT_MS);
+    }
+  }, []);
+
+  const resume = () => {
+    take.current?.resume();
+  };
+
+  // Cancel: straight back with no take; with one, pause it and ask (PR-Discard's words).
+  const askDiscard = useCallback(() => {
+    if (!take.current) return false;
+    pause();
+    setDiscardAsk(true);
+    return true;
+  }, [pause]);
 
   const flip = () => {
     const t = take.current;
@@ -284,24 +344,51 @@ export default function RecordScreen() {
   };
 
   const cancel = () => {
+    if (askDiscard()) return;
+    router.back();
+  };
+
+  const discardTake = () => {
+    setDiscardAsk(false);
     take.current?.cancel();
     router.back();
   };
 
-  // Leaving the app ends the take with what it has (the camera stops anyway); closing the screen
-  // any other way discards it.
+  // Android's Back is the X: with a take, PR-Discard first, never a silent loss of what was recorded.
   useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (discardAsk) {
+        setDiscardAsk(false);
+        return true;
+      }
+      return askDiscard();
+    });
+    return () => sub.remove();
+  }, [discardAsk, askDiscard]);
+
+  // Leaving the app pauses the take and keeps what was recorded (the camera stops anyway). Back in
+  // the app, iOS gets a fresh camera before Resume is offered. Closing the screen any other way
+  // discards the take.
+  useEffect(() => {
+    let wasInBackground = false;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background') take.current?.stop('interrupted');
+      if (state === 'background') {
+        wasInBackground = true;
+        take.current?.stop('interrupted');
+      } else if (state === 'active' && wasInBackground) {
+        wasInBackground = false;
+        if (take.current) restartCamera();
+      }
     });
     return () => {
       sub.remove();
       take.current?.cancel();
       stopTimer();
+      if (pauseTimer.current) clearTimeout(pauseTimer.current);
       const waiter = cameraReadyWaiter.current;
       if (waiter) clearTimeout(waiter.timeout);
     };
-  }, []);
+  }, [restartCamera]);
 
   const cameraOff = cameraStep === 'off';
   const micOff = cameraStep === 'granted' && micStep === 'off';
@@ -337,16 +424,26 @@ export default function RecordScreen() {
       <GlassTool label="Cancel" onPress={cancel}>
         <CloseIcon />
       </GlassTool>
-      {recording ? (
-        <View style={s.timer}>
+      {mode === 'recording' ? (
+        <View style={s.timer} accessibilityLabel="Recording">
           <View style={s.timerDot} />
           <TakeTimer elapsed={elapsed} />
         </View>
+      ) : mode === 'paused' ? (
+        // Paused: grey, not red, with the word, so it never reads as recording.
+        <Glass style={s.timerPaused} radius={15}>
+          <PauseGlyph size={10} color={colors.white} />
+          <Text style={s.timerText}>Paused</Text>
+          <Text style={s.timerTextDim}>·</Text>
+          <TakeTimer elapsed={elapsed} />
+        </Glass>
       ) : (
         <View />
       )}
-      {/* Keeps the timer centred; the flip is beside Record (founder iPhone test, 19 Oct). */}
-      <View style={s.headerSpacer} />
+      {/* Light, top right: in reach before and during a take (the flip is beside Record). */}
+      <GlassTool label={light ? 'Light, on' : 'Light, off'} onPress={() => setLight((v) => !v)}>
+        <LightIcon on={light} />
+      </GlassTool>
     </View>
   );
 
@@ -443,10 +540,21 @@ export default function RecordScreen() {
       ) : null}
 
       <View style={[s.controls, { bottom: Math.max(insets.bottom, 12) + 34 }]}>
-        <GlassTool label="Light" onPress={() => setLight((v) => !v)}>
-          <LightIcon on={light} />
-        </GlassTool>
-        <RecordButton elapsed={elapsed} recording={recording} micOff={micOff} disabled={recording ? false : micOff || !ready} onPress={recording ? stop : start} />
+        {recording ? (
+          // Stop: left of the centre button, away from the thumb that pauses and resumes.
+          <GlassTool label="Stop recording" onPress={stop}>
+            <View style={s.stopGlyph} />
+          </GlassTool>
+        ) : (
+          <View style={s.slot} />
+        )}
+        <RecordButton
+          elapsed={elapsed}
+          mode={mode}
+          micOff={micOff}
+          disabled={mode === 'idle' ? micOff || !ready : mode === 'paused' ? !resumable || !ready : false}
+          onPress={mode === 'idle' ? start : mode === 'recording' ? pause : resume}
+        />
         {/* Flip works during a take too (SPEC.md Section 6; Nemat, 6 Oct; docs/BLOCKERS.md B-1). */}
         <GlassTool label="Flip camera" onPress={flip}>
           <FlipIcon />
@@ -458,6 +566,16 @@ export default function RecordScreen() {
         </GlassTool>
       </View>
       <Text style={[s.upTo, { bottom: Math.max(insets.bottom, 12) + 6 }]}>Up to 0:30</Text>
+
+      {/* PR-Discard's question for Cancel during a take (an overlay, never a <Modal>: ui/OverlaySheet.tsx) */}
+      <OverlaySheet visible={discardAsk} onRequestClose={() => setDiscardAsk(false)}>
+        <ActionSheet
+          title="Discard this recording?"
+          lines={["It won't be saved anywhere."]}
+          actions={[{ label: 'Discard', destructive: true, onPress: discardTake }]}
+          onCancel={() => setDiscardAsk(false)}
+        />
+      </OverlaySheet>
     </View>
   );
 }
@@ -467,22 +585,33 @@ function TakeTimer({ elapsed }: { elapsed: ProgressSource }) {
   return <Text style={s.timerText}>{formatTimer(useProgress(elapsed))}</Text>;
 }
 
-/** Record / Stop with its ring; the only part of the controls drawn as the take runs. */
-function RecordButton({ elapsed, recording, micOff, disabled, onPress }: { elapsed: ProgressSource; recording: boolean; micOff: boolean; disabled: boolean; onPress: () => void }) {
+/** Two rounded bars: the pause sign. */
+function PauseGlyph({ size, color }: { size: number; color: string }) {
+  const bar = { width: Math.max(2, Math.round(size * 0.3)), height: size, borderRadius: size * 0.12, backgroundColor: color };
+  return (
+    <View style={{ flexDirection: 'row', gap: Math.round(size * 0.3) }}>
+      <View style={bar} />
+      <View style={bar} />
+    </View>
+  );
+}
+
+/**
+ * The centre button and its ring: Record (red dot), Pause (red disc with the pause sign) while
+ * recording, Resume (red dot again) while paused. The ring shows the recorded total of 30 seconds
+ * and holds still while paused. The only part of the controls drawn as the take runs.
+ */
+function RecordButton({ elapsed, mode, micOff, disabled, onPress }: { elapsed: ProgressSource; mode: 'idle' | 'recording' | 'paused'; micOff: boolean; disabled: boolean; onPress: () => void }) {
   const elapsedMs = useProgress(elapsed);
   const progress = elapsedMs / MAX_DURATION_MS;
   const circumference = Math.PI * (RING - RING_STROKE);
+  const seconds = `${Math.round(elapsedMs / 1000)} of 30 seconds`;
+  const label = mode === 'recording' ? `Pause recording, ${seconds}` : mode === 'paused' ? `Resume recording, ${seconds} recorded` : micOff ? 'Record, unavailable' : 'Record';
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={recording ? `Stop recording, ${Math.round(elapsedMs / 1000)} of 30 seconds` : micOff ? 'Record, unavailable' : 'Record'}
-      disabled={disabled}
-      onPress={onPress}
-      style={s.recordButton}
-    >
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={s.recordButton}>
       <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
-        <Circle cx={RING / 2} cy={RING / 2} r={(RING - RING_STROKE) / 2} stroke={recording ? 'rgba(255,255,255,0.35)' : micOff ? 'rgba(255,255,255,0.35)' : '#FFFFFF'} strokeWidth={RING_STROKE} fill="none" />
-        {recording ? (
+        <Circle cx={RING / 2} cy={RING / 2} r={(RING - RING_STROKE) / 2} stroke={mode !== 'idle' || micOff ? 'rgba(255,255,255,0.35)' : '#FFFFFF'} strokeWidth={RING_STROKE} fill="none" />
+        {mode !== 'idle' ? (
           <Circle
             cx={RING / 2}
             cy={RING / 2}
@@ -497,7 +626,13 @@ function RecordButton({ elapsed, recording, micOff, disabled, onPress }: { elaps
           />
         ) : null}
       </Svg>
-      {recording ? <View style={s.stopSquare} /> : <View style={[s.recordDot, micOff && { opacity: 0.35 }]} />}
+      {mode === 'recording' ? (
+        <View style={s.pauseDisc}>
+          <PauseGlyph size={24} color={colors.white} />
+        </View>
+      ) : (
+        <View style={[s.recordDot, (micOff || disabled) && { opacity: 0.35 }]} />
+      )}
     </Pressable>
   );
 }
@@ -516,8 +651,11 @@ const s = StyleSheet.create({
   controls: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 46 },
   recordButton: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
   recordDot: { width: 66, height: 66, borderRadius: 33, backgroundColor: colors.dangerBorder },
-  stopSquare: { width: 30, height: 30, borderRadius: 8, backgroundColor: colors.dangerBorder },
-  headerSpacer: { width: 44 },
+  pauseDisc: { width: 66, height: 66, borderRadius: 33, backgroundColor: colors.dangerBorder, alignItems: 'center', justifyContent: 'center' },
+  stopGlyph: { width: 16, height: 16, borderRadius: 4, backgroundColor: colors.dangerBorder },
+  slot: { width: 44, height: 44 },
+  timerPaused: { height: 30, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  timerTextDim: { ...type.semi14, color: 'rgba(255,255,255,0.6)', fontFamily },
   zoomRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   zoomTool: { width: 48, height: 32, borderRadius: 16 },
   zoomText: { ...type.semi14, color: colors.white, fontFamily, fontVariant: ['tabular-nums'] },
