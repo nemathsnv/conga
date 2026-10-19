@@ -146,7 +146,7 @@ Fixes for Nemat's real-device test on the iPhone 17 Pro (founder build `app.shor
 - Contents: the `CameraZoomModule` is linked. The JS bundle holds the hosted project URL and `conga.churntech.com`, and no local address.
 - Runtime fingerprint: `a64bc144e306e405f6845ff316e48968dd83bf84`. The installed build has `edf83d3d…`, so **an EAS Update cannot carry these changes to the installed app**.
 - Same bundle id and team as the installed app, so installing over it keeps the app's data, sign-in and any waiting recording.
-- **Installed 19 Oct (Nemat approved)** over the existing `app.shortcut.founder` with `devicectl`. The first attempt returned a transient `IXRemoteErrorDomain` error 6; the retry reported "App installed". The launch was refused because the iPhone was locked (`BSErrorCodeDescription = Locked`), so the first launch and whether the data survived are unconfirmed until Nemat opens the app.
+- **Installed 19 Oct (Nemat approved)** over the existing `app.shortcut.founder` with `devicectl`. The first attempt returned a transient `IXRemoteErrorDomain` error 6; the retry reported "App installed". The launch was refused because the iPhone was locked (`BSErrorCodeDescription = Locked`), Once Nemat unlocked the phone, `devicectl` launched it at 05:59:08 UTC. The process (pid 20045, from the new install's path `397F48ED…`) was still running at 06:00:07 UTC, with no Conga crash log. Whether it opened signed in, with its data, is not seen from the Mac: Nemat to confirm on the phone.
 - Commands used:
 
   ```bash

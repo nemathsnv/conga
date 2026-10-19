@@ -4905,7 +4905,7 @@ Base `22a8f7a`; branch `claude/conga-iphone-bugs-ux-6cf82a`. Full report: `relea
   record controls); the refusal on an isolated stack. **Not run:** anything with a camera (zoom, flip with zoom,
   recording, stitching) and the P2 banner after a real Post. Decisions for Nemat are listed in the report.
 - *Founder build installed (19 Oct, Nemat approved):* fingerprint `a64bc144…`, over the existing app with `devicectl`
-  ("App installed" on the second attempt). The launch was refused because the phone was locked; the first launch is unconfirmed.
+  ("App installed" on the second attempt). The first launch was refused (phone locked); after unlocking, launched 05:59:08 UTC and still running a minute later (pid 20045, new install path), no crash log. Signed-in state to be confirmed by Nemat on the phone.
 
 ## Gates
 
