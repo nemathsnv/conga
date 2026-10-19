@@ -237,7 +237,7 @@ enum VideoStitcher {
 
     if reader.status == .failed || writer.status == .failed {
       let message = reader.error?.localizedDescription ?? writer.error?.localizedDescription ?? "reading or writing failed"
-      reader.cancelReading()
+      if reader.status == .reading { reader.cancelReading() }
       writer.cancelWriting()
       throw VideoStitcherError.export(message)
     }
@@ -259,7 +259,12 @@ enum VideoStitcher {
       let pumps = pairs.map { output, input, label in
         Pump(output: output, input: input, writer: writer, group: group, queue: DispatchQueue(label: "app.shortcut.videostitcher.\(label)"))
       }
+      // Both copies can fail at the same moment (the writer failing fails both inputs), each on its
+      // own queue. cancelReading must run once: two at once over-release inside AVFoundation and
+      // crash the app (harness, 19 Oct: SIGTRAP in CFRelease under -[AVAssetReader cancelReading]).
+      let aborted = Once()
       let abortAll = {
+        guard aborted.first() else { return }
         reader.cancelReading()
         for pump in pumps { pump.queue.async { pump.finish() } }
       }
@@ -274,6 +279,20 @@ enum VideoStitcher {
         continuation.resume()
       }
     }
+  }
+}
+
+/// True for the first caller only, from any thread.
+private final class Once: @unchecked Sendable {
+  private let lock = NSLock()
+  private var done = false
+
+  func first() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    if done { return false }
+    done = true
+    return true
   }
 }
 

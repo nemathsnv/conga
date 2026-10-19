@@ -7,6 +7,7 @@ import AVFoundation
 import CoreImage
 import Foundation
 
+setbuf(stdout, nil) // results survive a crash
 let dir = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : FileManager.default.currentDirectoryPath)
 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
@@ -246,6 +247,101 @@ do {
     }
     t += s.seconds
   }
+
+  // Pause and Resume (19 Oct 2026): a take of many short segments, cameras alternating, each with its
+  // own tone. The stitched clip is the sum of the segments (no paused time exists in the files), and
+  // the sound changes tone at each join within a frame or two of the picture: picture and sound stay
+  // in step across every join, not only overall.
+  let pauseSpecs: [SegmentSpec] = [0.7, 1.3, 2.0, 0.9, 3.1, 1.6, 0.8, 2.4, 1.1, 1.9].enumerated().map { i, secs in
+    SegmentSpec(name: "pause\(i + 1)", seconds: secs, width: 1920, height: 1080, transform: i % 2 == 0 ? rotate90Mirrored : rotate90,
+                toneHz: [300.0, 500, 700, 900, 1100][i % 5], withAudio: true)
+  }
+  var pauseUrls: [URL] = []
+  for s in pauseSpecs { pauseUrls.append(try await makeSegment(s)) }
+  let pauseOut = dir.appendingPathComponent("stitched-pause-resume.mp4")
+  try? FileManager.default.removeItem(at: pauseOut)
+  let tp = Date()
+  try await VideoStitcher.stitch(pauseUrls, to: pauseOut)
+  print(String(format: "10 pause/resume segments stitched in %.2f s", Date().timeIntervalSince(tp)))
+  let pAsset = AVURLAsset(url: pauseOut, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+  let pExpected = pauseSpecs.reduce(0) { $0 + $1.seconds }
+  let pDuration = try await pAsset.load(.duration).seconds
+  check(abs(pDuration - pExpected) < 0.05, String(format: "pause/resume: duration %.3f s (expected %.3f, the recorded segments only)", pDuration, pExpected))
+  let pv = try await pAsset.loadTracks(withMediaType: .video)
+  let pa = try await pAsset.loadTracks(withMediaType: .audio)
+  check(pv.count == 1 && pa.count == 1, "pause/resume: one video and one audio track")
+  let paRange = try await pa[0].load(.timeRange)
+  check(abs(paRange.duration.seconds - pExpected) < 0.1, String(format: "pause/resume: sound spans %.3f s", paRange.duration.seconds))
+  // Frames.
+  let pReader = try AVAssetReader(asset: pAsset)
+  let pro = AVAssetReaderTrackOutput(track: pv[0], outputSettings: nil)
+  pReader.add(pro)
+  pReader.startReading()
+  var pFrames = 0
+  var pPts: [Double] = []
+  while let sb = pro.copyNextSampleBuffer() { pFrames += 1; pPts.append(CMSampleBufferGetPresentationTimeStamp(sb).seconds) }
+  pPts.sort()
+  let gaps = zip(pPts.dropFirst(), pPts).map { $0 - $1 }
+  let short = gaps.enumerated().filter { $0.element < 0.030 }.map { String(format: "%.3f s (+%.1f ms)", pPts[$0.offset], $0.element * 1000) }
+  if !short.isEmpty { print("pause/resume: short frame intervals at \(short.joined(separator: ", "))") }
+  // The composition draws at 30 fps; where a join falls between two grid points it can add one frame.
+  let sourceFrames = Int((pExpected * 30).rounded())
+  check(pFrames >= sourceFrames && pFrames <= sourceFrames + pauseSpecs.count - 1, "pause/resume: \(pFrames) frames for \(sourceFrames) recorded (at most one extra per join)")
+  check((gaps.max() ?? 1) < 0.040, String(format: "pause/resume: no frame gap longer than %.1f ms (no frozen picture at a join)", (gaps.max() ?? 1) * 1000))
+  // The sound, decoded to 16-bit mono at 44.1 kHz.
+  let aReader = try AVAssetReader(asset: pAsset)
+  let aro = AVAssetReaderTrackOutput(track: pa[0], outputSettings: [
+    AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1,
+    AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
+  ])
+  aReader.add(aro)
+  aReader.startReading()
+  var pcm: [Int16] = []
+  var firstPts: Double?
+  while let sb = aro.copyNextSampleBuffer() {
+    if firstPts == nil { firstPts = CMSampleBufferGetPresentationTimeStamp(sb).seconds }
+    guard let block = CMSampleBufferGetDataBuffer(sb) else { continue }
+    let len = CMBlockBufferGetDataLength(block)
+    var chunk = [Int16](repeating: 0, count: len / 2)
+    chunk.withUnsafeMutableBytes { raw in _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: len, destination: raw.baseAddress!) }
+    pcm.append(contentsOf: chunk)
+  }
+  let start = firstPts ?? 0
+  /// The tone in the 10 ms window at `t` (zero crossings), or 0 for silence.
+  func tone(at t: Double) -> Double {
+    let from = Int(((t - start) * 44_100).rounded())
+    let n = 441
+    guard from >= 0, from + n < pcm.count else { return 0 }
+    var crossings = 0
+    var loud = false
+    for k in from..<(from + n - 1) {
+      if (pcm[k] < 0) != (pcm[k + 1] < 0) { crossings += 1 }
+      if abs(Int(pcm[k])) > 2000 { loud = true }
+    }
+    return loud ? Double(crossings) / 2 / 0.01 : 0
+  }
+  func near(_ f: Double, _ hz: Double) -> Bool { abs(f - hz) < hz * 0.15 }
+  var joinErrors: [Double] = []
+  var middlesOk = true
+  var cursor = 0.0
+  for (i, s) in pauseSpecs.enumerated() {
+    if !near(tone(at: cursor + s.seconds / 2 - 0.005), s.toneHz) { middlesOk = false }
+    if i > 0 {
+      // Where the previous tone gives way to this one, in 2 ms steps around the join.
+      let previous = pauseSpecs[i - 1].toneHz
+      var found: Double?
+      var t = cursor - 0.15
+      while t < cursor + 0.15 {
+        if !near(tone(at: t), previous) && near(tone(at: t + 0.012), s.toneHz) { found = t + 0.01; break }
+        t += 0.002
+      }
+      joinErrors.append(found.map { abs($0 - cursor) } ?? 1)
+    }
+    cursor += s.seconds
+  }
+  check(middlesOk, "pause/resume: every segment's middle has its own tone (sound in its own segment)")
+  let worst = joinErrors.max() ?? 1
+  check(worst < 0.045, String(format: "pause/resume: sound changes at every join within %.0f ms of the picture (limit 45 ms)", worst * 1000))
 
   // Bitrate at the recording settings, on camera-like moving detail.
   let noisy = [
