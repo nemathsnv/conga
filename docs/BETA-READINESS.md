@@ -4907,6 +4907,24 @@ Base `22a8f7a`; branch `claude/conga-iphone-bugs-ux-6cf82a`. Full report: `relea
 - *Founder build installed (19 Oct, Nemat approved):* fingerprint `a64bc144…`, over the existing app with `devicectl`
   ("App installed" on the second attempt). The first launch was refused (phone locked); after unlocking, launched 05:59:08 UTC and still running a minute later (pid 20045, new install path), no crash log. Signed-in state to be confirmed by Nemat on the phone.
 
+## 32. iPhone stability and interactions from Nemat's second device test (19 Oct; nothing published, deployed or installed)
+
+Base `c757dfd`; branch `claude/conga-iphone-stability-3988b9`. Full report: `release/IPHONE-STABILITY-19OCT.md`.
+
+- *Taps that did nothing, Discard only after a restart:* a React Native `<Modal>` refused by iOS (while a native sheet
+  was up or closing) left an invisible full-screen layer over the screen; reproduced on the simulator. Every sheet is
+  now an overlay in the view tree, P7/P8 a sheet route; a stray second navigation after Post removed (`56c7001`).
+- *Lag:* player progress re-rendered whole screens 4x/s and re-subscribed native listeners; Home kept both lists'
+  streams open since the swipe change; upload progress, analytics writes and the take timer re-rendered too much.
+  Render work about 5x lower on Home and 9x in the player (simulator, Debug) (`8f0735a`, `b5453dd`, `89e06cc`).
+- *Profiles:* swipe between Responses and Replies anywhere on the profile (`e943d2f`).
+- *Respond:* answered prompts show "Responded" in the + sheet and Respond explains instead of opening the camera; the
+  P2 line says why (`4b67636`). **Proposed copy, not on a board.** Server field `viewer_responded` prepared in
+  `supabase/proposed/` (pgTAP 14/14), **not deployed**.
+- *Verified:* typecheck, lint, Jest 41 suites 507/507; simulator walks on an isolated stack with a fake Mux. Founder
+  update dry run: fingerprint `a64bc144…`, the installed build's, so an EAS Update can carry it (needs Nemat's approval).
+  **Not run:** the iPhone, anything with a camera, a real Mux upload.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
