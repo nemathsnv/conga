@@ -72,12 +72,12 @@ select is(jsonb_array_length(public.follow_list('b2222222-2222-2222-2222-2222222
 select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%'), pg_temp.response_id('up-maya')))->'responses'->0->'author'->>'username', 'testmaya', 'entry response comes first');
 select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%')))->'responses'->0->'author'->>'username', 'testadam', 'without an entry, unseen followed people come first');
 
--- Posting: disclosure first, one response per prompt, limits.
+-- Posting: disclosure first, limits. (Several responses per prompt: 0030_multiple_responses.sql.)
 select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', null, 5000) $$, 'P0001', 'disclosure_required', 'no post before the disclosure');
 select lives_ok($$ select public.acknowledge_disclosure() $$, 'acknowledge_disclosure');
 select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', null, 1000) $$, 'P0001', 'invalid_duration', 'under 2 seconds is refused');
 select is((public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', '  Berawa traffic  ', 5000))->>'status', 'processing', 'post_response creates a processing response');
-select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena-2', null, 5000) $$, 'P0001', 'already_responded', 'one primary response per person per prompt');
+select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', null, 5000) $$, 'P0001', 'upload_already_used', 'the same upload never makes a second response');
 select is(jsonb_array_length(public.profile_responses('a1111111-1111-1111-1111-111111111111')), 1, 'own processing response shows on own profile (Processing tile)');
 reset role;
 

@@ -281,7 +281,7 @@ select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-11
 select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', '', null, 5000) $$), 'upload_required', 'an empty upload id is refused as before');
 select is((public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000))->>'status', 'processing', 'the member''s own upload is posted');
 select is(pg_temp.err($$ select public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upL1', null, 5000) $$), 'upload_already_used', 'the same upload cannot be posted twice');
-select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL2', null, 5000) $$), 'already_responded', 'one response per prompt is still checked');
+select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000) $$), 'upload_already_used', 'the same upload to the same prompt again: no duplicate (several responses per prompt are allowed, 20261019000200)');
 select is(pg_temp.err($$ select public.post_response('99999999-aaaa-aaaa-aaaa-999999999999', 'upL5', null, 5000) $$), 'prompt_not_found', 'a post refused for another reason');
 select is(pg_temp.err($$ select public.post_reply('ad000000-0000-0000-0000-000000000001', 'upL1', null, 5000) $$), 'upload_already_used', 'a used upload cannot become a video reply');
 select is(pg_temp.err($$ select public.post_reply('ad000000-0000-0000-0000-000000000001', 'upA2', null, 5000) $$), 'upload_not_found', 'nor can another member''s');

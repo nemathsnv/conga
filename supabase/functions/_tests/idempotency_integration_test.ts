@@ -132,7 +132,7 @@ async function signed(body: string, t = Math.floor(Date.now() / 1000)) {
 // Fixtures: prompts, a live video to reply to, a suggestion for drafts.
 const prompts = await http("/rest/v1/prompts?select=id", {
   method: "POST", prefer: "return=representation",
-  body: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ text: `Idempotency test prompt ${n} ${run}`, status: "live", published_at: new Date().toISOString() })),
+  body: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ text: `Idempotency test prompt ${n} ${run}`, status: "live", published_at: new Date().toISOString() })),
 });
 assertEquals(prompts.status, 201, "prompts");
 const P = (prompts.json as { id: string }[]).map((p) => p.id);
@@ -156,11 +156,26 @@ Deno.test("lost answer: the same post_response again returns the same row; old c
   assertEquals([again.status, again.json.id, again.json.replayed], [200, first.json.id, true]);
   assertEquals((await rows(`author_id=eq.${lena.id}&prompt_id=eq.${P[1]}`)).length, 1, "one row");
   assertEquals(await ledgerRow(u), { status: "claimed", response_id: first.json.id as string });
-  // A build without submissions calls with four named arguments and gets exactly the old answers.
+  // A build without submissions calls with four named arguments. The upload's one claim stops the
+  // repeat (already_responded is gone: several responses per prompt, 20261019000200).
   const old = await postResponse(lena, P[1], u);
-  assertEquals([old.status, old.error], [400, "already_responded"]);
+  assertEquals([old.status, old.error], [400, "upload_already_used"]);
+  assertEquals((await rows(`author_id=eq.${lena.id}&prompt_id=eq.${P[1]}`)).length, 1, "still one row");
   const oldOther = await postResponse(lena, P[2], u);
   assertEquals([oldOther.status, oldOther.error], [400, "upload_already_used"]);
+});
+
+Deno.test("several responses: three recordings posted at once to one prompt make three rows, each replayable", async () => {
+  const uploads = await Promise.all([upload(lena), upload(lena), upload(lena)]);
+  const subs = uploads.map(() => crypto.randomUUID());
+  const results = await Promise.all(uploads.map((u, i) => postResponse(lena, P[7], u, subs[i])));
+  assertEquals(results.map((r) => r.status), [200, 200, 200], JSON.stringify(results.map((r) => r.error)));
+  assertEquals(new Set(results.map((r) => r.json.id)).size, 3, "three different rows");
+  assertEquals((await rows(`author_id=eq.${lena.id}&prompt_id=eq.${P[7]}`)).length, 3);
+  // Each recording's lost answer is found again; none makes a fourth row.
+  const replays = await Promise.all(uploads.map((u, i) => postResponse(lena, P[7], u, subs[i])));
+  assertEquals(replays.map((r) => [r.status, r.json.id, r.json.replayed]), results.map((r) => [200, r.json.id, true]));
+  assertEquals((await rows(`author_id=eq.${lena.id}&prompt_id=eq.${P[7]}`)).length, 3, "still three");
 });
 
 Deno.test("concurrency: six simultaneous attempts of one post_response submission make one row, and all six get it", async () => {

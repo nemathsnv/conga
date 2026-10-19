@@ -150,13 +150,14 @@ select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-11
 select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'I1: a NULL caption against a stored one is a conflict');
 select is(pg_temp.err($$ select public.post_reply(null, 'upL1', 'hello', 5000, 'c0000000-0000-0000-0000-000000000001') $$), 'submission_conflict', 'I1: the same for a video reply with a NULL target');
 
--- An old client (no submission) gets exactly the old answers.
-select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', 'hello', 5000) $$), 'already_responded', 'four arguments: already_responded, as before');
+-- An old client (no submission): the upload's single claim stops a repeat (already_responded is
+-- gone since 20261019000200, several responses per prompt).
+select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', 'hello', 5000) $$), 'upload_already_used', 'four arguments, the same upload: upload_already_used');
 select is(pg_temp.err($$ select public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upL1', null, 5000) $$), 'upload_already_used', 'four arguments: upload_already_used, as before');
--- A new recording (new submission) for the same prompt is still one response per prompt.
-select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL3', null, 5000, 'c0000000-0000-0000-0000-000000000002') $$), 'already_responded', 'a different submission for the same prompt: already_responded');
-select is((pg_temp.upload('upL3')).status, 'active', 'its upload stays usable');
-select is(pg_temp.sub('c0000000-0000-0000-0000-000000000002'), null, 'and no submission is recorded');
+-- A new recording (new submission) for the same prompt is a second, independent response.
+select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL3', null, 5000, 'c0000000-0000-0000-0000-000000000002') $$), 'ok', 'a different submission for the same prompt: a second response');
+select is((pg_temp.upload('upL3')).status, 'claimed', 'its upload is claimed');
+select isnt(pg_temp.sub('c0000000-0000-0000-0000-000000000002'), null, 'and its submission is recorded');
 
 -- ===========================================================================
 -- 4. Ownership: another member with the same id
@@ -243,7 +244,7 @@ select pg_temp.act('a1111111-1111-1111-1111-111111111111');
 reset role;
 select throws_ok($$ insert into public.post_submissions (id, account_id, kind, target_id, upload_id, duration_ms) values (gen_random_uuid(), 'a1111111-1111-1111-1111-111111111111', 'response', '44444444-aaaa-aaaa-aaaa-444444444444', 'upL9', 5000) $$, '23505', null, 'an upload belongs to one submission');
 select throws_ok($$ insert into public.post_submissions (id, account_id, kind, target_id, upload_id, duration_ms, response_id) values (gen_random_uuid(), 'a1111111-1111-1111-1111-111111111111', 'response', '44444444-aaaa-aaaa-aaaa-444444444444', 'upLX', 5000, (select response_id from public.post_submissions where id = 'c0000000-0000-0000-0000-000000000008')) $$, '23505', null, 'a row belongs to one submission');
-select is((select count(*)::int from public.post_submissions where account_id = 'a1111111-1111-1111-1111-111111111111'), 7, 'every successful post with a submission recorded it once');
+select is((select count(*)::int from public.post_submissions where account_id = 'a1111111-1111-1111-1111-111111111111'), 8, 'every successful post with a submission recorded it once (8: the second response on one prompt is a post too)');
 
 select * from finish();
 rollback;
