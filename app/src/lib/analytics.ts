@@ -44,6 +44,8 @@ const KEY = 'shortcut.events';
 const MAX_QUEUE = 1000;
 const BATCH = 200;
 const FLUSH_MS = 5000;
+/** Events tracked together (a swipe, a screen opening) are written to the phone once. */
+const PERSIST_COALESCE_MS = 250;
 
 let queue: Queued[] = [];
 let loaded = false;
@@ -66,6 +68,17 @@ async function persist(): Promise<void> {
   } catch {
     // Best effort: the queue is still in memory for this launch.
   }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** One write for a burst of events: each write serializes the whole queue (up to 1000 events). */
+function schedulePersist(): void {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persist();
+  }, PERSIST_COALESCE_MS);
 }
 
 let loading: Promise<void> | null = null;
@@ -93,7 +106,7 @@ function load(): Promise<void> {
 export function track(name: EventName, props: EventProps = {}): void {
   queue.push({ name, props, ts: new Date().toISOString() });
   if (queue.length > MAX_QUEUE) queue = queue.slice(-MAX_QUEUE);
-  void persist();
+  schedulePersist();
 }
 
 /** Sends what is queued, if signed in. Keeps the queue on any failure. */
@@ -134,7 +147,14 @@ export function startAnalytics(): () => void {
   void load();
   timer = setInterval(() => void flush(), FLUSH_MS);
   const sub = AppState.addEventListener('change', (st) => {
-    if (st === 'background' || st === 'inactive') void flush();
+    if (st !== 'background' && st !== 'inactive') return;
+    // The app may not come back: write what is queued now, then try to send it.
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+      void persist();
+    }
+    void flush();
   });
   return () => {
     if (timer) clearInterval(timer);
@@ -145,6 +165,8 @@ export function startAnalytics(): () => void {
 
 /** Test seam. */
 export function _resetForTests(): void {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = null;
   queue = [];
   loaded = false;
   loading = null;

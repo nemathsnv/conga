@@ -32,3 +32,23 @@ test('a non-2xx answer fails the upload', async () => {
   mockCreateUploadTask.mockReturnValue({ uploadAsync: () => Promise.resolve({ status: 410 }) });
   await expect(putRecording(recording, 'https://storage.example/1', jest.fn())).rejects.toThrow('upload_http_410');
 });
+
+test('progress is reported once per whole percent, and the end always', async () => {
+  let report: (p: { bytesSent: number; totalBytes: number }) => void = () => undefined;
+  mockCreateUploadTask.mockImplementation((_url: string, options: { onProgress: typeof report }) => {
+    report = options.onProgress;
+    return {
+      uploadAsync: async () => {
+        // 1000 chunk reports for 100 bytes: many within the same percent.
+        for (let i = 1; i <= 1000; i += 1) report({ bytesSent: i / 10, totalBytes: 100 });
+        return { status: 200 };
+      },
+    };
+  });
+  const progress = jest.fn();
+  await putRecording(recording, 'https://storage.example/1', progress);
+  expect(progress.mock.calls.length).toBeLessThanOrEqual(102);
+  expect(progress).toHaveBeenLastCalledWith(1);
+  const fractions = progress.mock.calls.map((c) => c[0] as number);
+  expect([...fractions].sort((a, b) => a - b)).toEqual(fractions);
+});

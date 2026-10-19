@@ -78,3 +78,23 @@ describe('analytics queue', () => {
     expect(JSON.stringify(_queued())).not.toMatch(/@/);
   });
 });
+
+describe('analytics writes (founder iPhone test, 19 Oct: lag)', () => {
+  it('writes a burst of events to the phone once, with all of them', async () => {
+    jest.useFakeTimers();
+    try {
+      const storage = jest.requireMock('@react-native-async-storage/async-storage') as { setItem: jest.Mock; getItem: (k: string) => Promise<string | null> };
+      mockGetSession.mockResolvedValue({ data: { session: null } });
+      await flush(); // loads the stored queue, so writes are allowed
+      storage.setItem.mockClear();
+      for (let i = 0; i < 20; i += 1) track('response_viewed', { position: i });
+      expect(storage.setItem).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(300);
+      expect(storage.setItem).toHaveBeenCalledTimes(1);
+      const stored = JSON.parse((await storage.getItem('shortcut.events')) ?? '[]') as { name: string }[];
+      expect(stored).toHaveLength(20);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

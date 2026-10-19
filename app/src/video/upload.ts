@@ -86,11 +86,20 @@ export async function putRecording(
 ): Promise<void> {
   const file = uploadableFile(recording);
   const total = file.size ?? 0;
+  // The transfer reports progress for every chunk sent, and each report re-renders everything that
+  // reads the posting state (Home and its banner). The banner shows whole percents: report those.
+  let lastPercent = -1;
+  const report = (fraction: number) => {
+    const percent = Math.floor(fraction * 100);
+    if (percent === lastPercent) return;
+    lastPercent = percent;
+    onProgress(fraction);
+  };
   const task = file.createUploadTask(uploadUrl, {
     httpMethod: 'PUT',
     uploadType: UploadType.BINARY_CONTENT,
     headers: { 'Content-Type': 'video/mp4' },
-    onProgress: (p) => onProgress(total > 0 ? Math.min(1, p.bytesSent / (p.totalBytes || total)) : 0),
+    onProgress: (p) => report(total > 0 ? Math.min(1, p.bytesSent / (p.totalBytes || total)) : 0),
     sessionType: 'foreground',
     signal,
   });
