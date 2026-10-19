@@ -6,7 +6,7 @@ import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
@@ -15,6 +15,7 @@ import { commentsList, deleteComment, likeComment, postComment, unlikeComment, t
 import { isPostingRestriction, restrictionTarget } from '@/lib/restriction';
 import { useSession } from '@/lib/session';
 import { Avatar } from '@/ui/components';
+import { OverlaySheet } from '@/ui/OverlaySheet';
 import { Spinner } from '@/ui/HomeStates';
 import { CloseIcon, HeartIcon, VideoReplyIcon } from '@/ui/Icons';
 import { useOverlayWhileMounted } from '@/ui/playerOverlay';
@@ -282,8 +283,8 @@ export default function CommentsScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Board LV-CommentOwn */}
-      <Modal visible={own !== null} transparent animationType="fade" onRequestClose={() => setOwn(null)}>
+      {/* Board LV-CommentOwn (an overlay, never a <Modal>: ui/OverlaySheet.tsx) */}
+      <OverlaySheet visible={own !== null} onRequestClose={() => setOwn(null)}>
         <Pressable style={s.dim} onPress={() => setOwn(null)} accessible={false}>
           <View style={[s.sheetWrap, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
             <View style={s.actionSheet}>
@@ -304,7 +305,7 @@ export default function CommentsScreen() {
             </Pressable>
           </View>
         </Pressable>
-      </Modal>
+      </OverlaySheet>
     </View>
   );
 }

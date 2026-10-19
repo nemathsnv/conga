@@ -4,7 +4,7 @@ import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
@@ -12,6 +12,7 @@ import { followPlace, placePage, unfollowPlace, type PlacePage } from '@/lib/con
 import { responsesLabel, timeAgo } from '@/lib/format';
 import { promptLink } from '@/lib/links';
 import { ActionSheet } from '@/ui/ActionSheet';
+import { OverlaySheet } from '@/ui/OverlaySheet';
 import { Avatar } from '@/ui/components';
 import { Spinner } from '@/ui/HomeStates';
 import { ChevronLeft, PlacePinIcon, ShareIcon } from '@/ui/Icons';
@@ -139,14 +140,14 @@ export default function PlaceScreen() {
         </ScrollView>
       )}
 
-      <Modal visible={unfollowAsk} transparent animationType="fade" onRequestClose={() => setUnfollowAsk(false)}>
+      <OverlaySheet visible={unfollowAsk} onRequestClose={() => setUnfollowAsk(false)}>
         <ActionSheet
           title={`Unfollow ${place?.name ?? ''}?`}
           lines={[`${place?.name ?? ''} prompts will stop appearing in your feed. Global prompts and people you follow stay.`]}
           actions={[{ label: 'Unfollow', destructive: true, onPress: () => void unfollow() }]}
           onCancel={() => setUnfollowAsk(false)}
         />
-      </Modal>
+      </OverlaySheet>
     </View>
   );
 }

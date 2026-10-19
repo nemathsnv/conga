@@ -115,6 +115,7 @@ function RootNavigator() {
           <Stack.Screen name="notifications/prime" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="notifications/settings" />
           <Stack.Screen name="safety" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+          <Stack.Screen name="camera-blocked" options={{ presentation: 'transparentModal', animation: 'fade' }} />
           <Stack.Screen name="settings/index" />
           <Stack.Screen name="settings/blocked" />
           <Stack.Screen name="settings/delete-account" />

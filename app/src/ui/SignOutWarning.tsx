@@ -7,10 +7,10 @@
 //
 // P9 was approved as drawn by Nemat on 16 Oct 2026 (design/BOARDS.md, "Failed posts").
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Modal } from 'react-native';
 
 import { useSession } from '@/lib/session';
 import { ActionSheet } from '@/ui/ActionSheet';
+import { OverlaySheet } from '@/ui/OverlaySheet';
 import { SIGN_OUT_SHEET } from '@/ui/failedPost';
 import { loadPendingPost } from '@/video/pendingPost';
 import { usePosting } from '@/video/posting';
@@ -43,7 +43,7 @@ export function useSignOutWarning(): { confirm: () => Promise<boolean>; signOut:
   }, [posting, signOutOfSession]);
 
   const sheet = (
-    <Modal visible={asking} transparent animationType="fade" onRequestClose={() => finish(false)}>
+    <OverlaySheet visible={asking} onRequestClose={() => finish(false)}>
       <ActionSheet
         title={SIGN_OUT_SHEET.title}
         lines={[SIGN_OUT_SHEET.line]}
@@ -51,7 +51,7 @@ export function useSignOutWarning(): { confirm: () => Promise<boolean>; signOut:
         cancelLabel={SIGN_OUT_SHEET.cancel}
         onCancel={() => finish(false)}
       />
-    </Modal>
+    </OverlaySheet>
   );
   return { confirm, signOut, sheet };
 }

@@ -1,11 +1,12 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { useCallback, useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, View } from 'react-native';
 
 import { getNotificationState } from '@/lib/content';
 import { shouldAsk } from '@/lib/notificationAsk';
 import { TabBar } from '@/ui/TabBar';
+import { TabsOverlayOutlet } from '@/ui/tabsOverlay';
 
 /**
  * The second notification ask (SPEC.md Section 15; Nemat, 7 Oct 2026): the server marks it due
@@ -44,22 +45,26 @@ export default function TabsLayout() {
   const router = useRouter();
   useSecondAsk();
   return (
-    <Tabs screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: '#FFFFFF' } }} tabBar={(props) => <TabBar {...props} />}>
-      <Tabs.Screen name="index" options={{ title: 'Home', sceneStyle: { backgroundColor: '#000000' } }} />
-      <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
-      <Tabs.Screen
-        name="create"
-        options={{ title: 'Record' }}
-        listeners={{
-          // The + opens the C-Plus sheet, never a blank camera (SPEC.md Section 4).
-          tabPress: (e) => {
-            e.preventDefault();
-            router.push('/plus');
-          },
-        }}
-      />
-      <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
-      <Tabs.Screen name="me" options={{ title: 'Me' }} />
-    </Tabs>
+    <View style={{ flex: 1 }}>
+      <Tabs screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: '#FFFFFF' } }} tabBar={(props) => <TabBar {...props} />}>
+        <Tabs.Screen name="index" options={{ title: 'Home', sceneStyle: { backgroundColor: '#000000' } }} />
+        <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
+        <Tabs.Screen
+          name="create"
+          options={{ title: 'Record' }}
+          listeners={{
+            // The + opens the C-Plus sheet, never a blank camera (SPEC.md Section 4).
+            tabPress: (e) => {
+              e.preventDefault();
+              router.push('/plus');
+            },
+          }}
+        />
+        <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
+        <Tabs.Screen name="me" options={{ title: 'Me' }} />
+      </Tabs>
+      {/* Home's sheets, above the tab bar (ui/tabsOverlay.tsx). */}
+      <TabsOverlayOutlet />
+    </View>
   );
 }

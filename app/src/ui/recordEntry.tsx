@@ -2,14 +2,11 @@
 // recording is waiting (failed, offline, or a discard Conga has not confirmed) or still posting.
 // The sheet says why; no second take exists to replace the first. Every place that opens the camera
 // goes through useOpenRecord. Reads the posting state (app/src/video), never changes it.
-//
-// NOT APPROVED YET: P7 and P8 are proposal boards. Lives on hold/failed-post-ui.
+// The sheet is the route app/camera-blocked.tsx, not a <Modal> (ui/OverlaySheet.tsx says why).
 import { useRouter, type Href } from 'expo-router';
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { Modal } from 'react-native';
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 
-import { ActionSheet } from '@/ui/ActionSheet';
-import { CAMERA_BLOCK_SHEET, cameraBlock, type CameraBlock } from '@/ui/failedPost';
+import { cameraBlock } from '@/ui/failedPost';
 import { usePosting } from '@/video/posting';
 
 type RecordEntry = {
@@ -24,36 +21,26 @@ const RecordEntryContext = createContext<RecordEntry | null>(null);
 export function RecordEntryProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const posting = usePosting();
-  const [shown, setShown] = useState<CameraBlock | null>(null);
   const block = cameraBlock(posting.state);
+
+  // `navigate`, not `push`: a second tap while the sheet opens does not stack another one.
+  const showSheet = useCallback(() => {
+    if (!block) return false;
+    router.navigate({ pathname: '/camera-blocked', params: { kind: block } });
+    return true;
+  }, [block, router]);
 
   const open = useCallback<RecordEntry['open']>(
     (href, mode = 'push') => {
-      if (block) {
-        setShown(block);
-        return;
-      }
+      if (showSheet()) return;
       if (mode === 'replace') router.replace(href);
       else router.push(href);
     },
-    [block, router],
+    [showSheet, router],
   );
-  const showBlock = useCallback(() => {
-    if (!block) return false;
-    setShown(block);
-    return true;
-  }, [block]);
 
-  const value = useMemo(() => ({ open, showBlock }), [open, showBlock]);
-  const sheet = shown ? CAMERA_BLOCK_SHEET[shown] : null;
-  return (
-    <RecordEntryContext.Provider value={value}>
-      {children}
-      <Modal visible={sheet !== null} transparent animationType="fade" onRequestClose={() => setShown(null)}>
-        {sheet ? <ActionSheet title={sheet.title} lines={[sheet.line]} actions={[]} cancelLabel={sheet.ok} onCancel={() => setShown(null)} /> : null}
-      </Modal>
-    </RecordEntryContext.Provider>
-  );
+  const value = useMemo(() => ({ open, showBlock: showSheet }), [open, showSheet]);
+  return <RecordEntryContext.Provider value={value}>{children}</RecordEntryContext.Provider>;
 }
 
 export function useOpenRecord(): RecordEntry {

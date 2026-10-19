@@ -6,8 +6,8 @@
 // stitched file is what plays and what Post sends (docs/BLOCKERS.md B-1, video/stitch.ts).
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Alert, BackHandler, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -15,9 +15,11 @@ import { acknowledgeDisclosure, disclosureAcknowledged } from '@/lib/content';
 import { isPostingRestriction, restrictionTarget } from '@/lib/restriction';
 import { useSession } from '@/lib/session';
 import { Button, Glass } from '@/ui/components';
-import { GlassTool, ProgressLine, VideoGradients } from '@/ui/dark';
+import { GlassTool, LiveProgressLine, VideoGradients } from '@/ui/dark';
 import { failedTitle } from '@/ui/failedPost';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
+import { OverlaySheet } from '@/ui/OverlaySheet';
+import { createProgress } from '@/ui/progress';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { ReplyCard } from '@/ui/ReplyCard';
 import { colors, fontFamily, type } from '@/ui/theme';
@@ -42,7 +44,8 @@ export default function ReviewScreen() {
   const current = getCurrentRecording();
   const [caption, setCaption] = useState('');
   const [editing, setEditing] = useState(false);
-  const [progress, setProgress] = useState(0);
+  // The 2pt line's progress, outside this screen's state (ui/progress.ts).
+  const [progress] = useState(createProgress);
   const [discardAsk, setDiscardAsk] = useState(false);
   const [disclosure, setDisclosure] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -79,8 +82,12 @@ export default function ReviewScreen() {
     return () => sub.remove();
   }, [busy, gate]);
 
+  // Opened with no recording (a link, a restored screen): back to Home. Not after this screen has
+  // already left with its recording (Post, Discard, Re-record): that second navigation raced the
+  // first one back to Home (founder iPhone test, 19 Oct).
+  const leaving = useRef(false);
   useEffect(() => {
-    if (!current) router.replace('/(tabs)');
+    if (!current && !leaving.current) router.replace('/(tabs)');
   }, [current, router]);
   if (!current) return null;
   const { recording, prompt, replyTo, draftFor } = current;
@@ -93,6 +100,7 @@ export default function ReviewScreen() {
     if (!editable()) return;
     abandonStitch(recording);
     deleteRecordingFiles(recording);
+    leaving.current = true;
     setCurrentRecording(null);
     setDiscardAsk(false);
     router.dismissTo('/(tabs)');
@@ -102,6 +110,7 @@ export default function ReviewScreen() {
     if (!editable()) return;
     abandonStitch(recording);
     deleteRecordingFiles(recording);
+    leaving.current = true;
     setCurrentRecording(null);
     router.replace({ pathname: '/record/[promptId]', params: { promptId: draftFor ? 'draft' : prompt.id, ...(replyTo ? { replyTo: replyTo.id } : {}), ...(draftFor ? { draftFor } : {}) } });
   };
@@ -114,6 +123,7 @@ export default function ReviewScreen() {
       const stitched = await ensureStitched(recording);
       adoptStitched(stitched);
       await posting.post({ recording: stitched, promptId: prompt.id, promptText: prompt.text, caption: caption.trim() || null, tickets: uploadTickets.forOwner(ownerId), replyTo: replyTo ? { id: replyTo.id, name: replyTo.author.name.split(' ')[0] } : undefined, draftFor });
+      leaving.current = true;
       setCurrentRecording(null);
       if (draftFor) router.dismissTo('/suggestions');
       else router.dismissTo('/(tabs)');
@@ -186,7 +196,7 @@ export default function ReviewScreen() {
   return (
     <View style={s.root}>
       <StatusBar style="light" />
-      <VideoSurface playbackId={null} localUri={localUri} active={!discardAsk && !disclosure} loop onProgress={setProgress} />
+      <VideoSurface playbackId={null} localUri={localUri} active={!discardAsk && !disclosure} loop onProgress={progress.set} />
       <VideoGradients top={240} bottom={330} topAlpha={0.55} bottomAlpha={0.7} />
 
       <View style={[s.header, { top: insets.top + 3 }]}>
@@ -227,7 +237,7 @@ export default function ReviewScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.bottomArea} pointerEvents="box-none">
         <View style={{ paddingBottom: Math.max(insets.bottom, 10) + 10 }}>
-          <ProgressLine fraction={progress} />
+          <LiveProgressLine source={progress} />
           <Glass style={s.captionBox} radius={14}>
             <TextInput
               style={s.captionInput}
@@ -257,8 +267,8 @@ export default function ReviewScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Board PR-Discard */}
-      <Modal visible={discardAsk} transparent animationType="fade" onRequestClose={() => setDiscardAsk(false)}>
+      {/* Board PR-Discard (an overlay, never a <Modal>: ui/OverlaySheet.tsx) */}
+      <OverlaySheet visible={discardAsk} onRequestClose={() => setDiscardAsk(false)}>
         <View style={s.dim}>
           <View style={[s.sheetWrap, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
             <View style={s.actionSheet}>
@@ -276,10 +286,10 @@ export default function ReviewScreen() {
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </OverlaySheet>
 
       {/* Board A-Disclosure */}
-      <Modal visible={disclosure} transparent animationType="slide" onRequestClose={() => setDisclosure(false)}>
+      <OverlaySheet visible={disclosure} animation="slide" onRequestClose={() => setDisclosure(false)}>
         <View style={s.dim}>
           <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 10) + 24 }]}>
             <View style={s.handle} />
@@ -297,7 +307,7 @@ export default function ReviewScreen() {
             <Text style={s.sheetNote}>Shown once, before your first public video: a response, a video reply or a published draft.</Text>
           </View>
         </View>
-      </Modal>
+      </OverlaySheet>
     </View>
   );
 }

@@ -3,8 +3,8 @@
 // the tabs to change list (ui/SwipePages.tsx).
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
-import { FlatList, Modal, StyleSheet, View, useWindowDimensions, type ViewToken } from 'react-native';
+import { memo, useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { FlatList, StyleSheet, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInfo } from '@/ui/safeArea';
 
 import { followSuggestions, followUser, followingFeed, getNotificationState, homeFeed, type Conversation, type FollowSuggestion } from '@/lib/content';
@@ -18,7 +18,9 @@ import { ConversationView } from '@/ui/ConversationView';
 import { DISCARD_SHEET, REACHED_CONGA_SHEET, discardOutcome } from '@/ui/failedPost';
 import { FeedHeader } from '@/ui/dark';
 import { EmptyPrompt, FollowingEmpty, HomeLoading, OfflineBanner, PostingBanner } from '@/ui/HomeStates';
+import { OverlaySheet } from '@/ui/OverlaySheet';
 import { SwipePages } from '@/ui/SwipePages';
+import { useTabsOverlay } from '@/ui/tabsOverlay';
 import { usePosting } from '@/video/posting';
 
 type Tab = 'following' | 'foryou';
@@ -104,24 +106,40 @@ export default function HomeTab() {
 
   // Swiped or tapped to the other list: the one left goes back to the top with a fresh list, as a
   // tab switch always did, so it is current when it comes back.
-  const changeTab = (next: Tab) => {
+  const changeTab = useCallback((next: Tab) => {
     if (next === tab) return;
     reloads.emit({ clear: true, page: tab });
     setTab(next);
-  };
+  }, [tab, reloads]);
+  const backToForYou = useCallback(() => changeTab('foryou'), [changeTab]);
+  // The pages are memoized (FeedPage): a posting banner update or a Discard here does not draw the
+  // two lists again.
+  const renderPage = useCallback(
+    (which: Tab, shown: boolean) => <FeedPage which={which} shown={shown} focused={focused} reloads={reloads} seen={seen} topInset={top} bottomSpace={bottomSpace} onBackToForYou={backToForYou} />,
+    [focused, reloads, top, bottomSpace, backToForYou],
+  );
+
+  // P4 and P6 cover the tab bar, so the tabs layout draws them (ui/tabsOverlay.tsx); in the view
+  // tree, never a <Modal> (ui/OverlaySheet.tsx: a refused <Modal> left Discard and the whole of
+  // Home unresponsive until the app restarted).
+  useTabsOverlay(
+    <>
+      {/* P4 */}
+      <OverlaySheet visible={focused && confirmDiscard} onRequestClose={() => setConfirmDiscard(false)}>
+        <ActionSheet title={DISCARD_SHEET.title} lines={[DISCARD_SHEET.line]} actions={[{ label: DISCARD_SHEET.discard, destructive: true, onPress: runDiscard }]} cancelLabel={DISCARD_SHEET.cancel} onCancel={() => setConfirmDiscard(false)} />
+      </OverlaySheet>
+      {/* P6 */}
+      <OverlaySheet visible={focused && reachedConga} onRequestClose={() => setDiscard({ status: 'idle', recordingId: null })}>
+        <ActionSheet title={REACHED_CONGA_SHEET.title} lines={[REACHED_CONGA_SHEET.line]} actions={[]} cancelLabel={REACHED_CONGA_SHEET.ok} onCancel={() => setDiscard({ status: 'idle', recordingId: null })} />
+      </OverlaySheet>
+    </>,
+  );
 
   return (
     <View style={s.root}>
       <StatusBar style="light" />
       {/* Swipe sideways between Following and For you, or tap the tabs (founder iPhone test, 19 Oct). */}
-      <SwipePages
-        pages={PAGES}
-        selected={tab}
-        onSelect={changeTab}
-        renderPage={(which, shown) => (
-          <FeedPage which={which} shown={shown} focused={focused} reloads={reloads} seen={seen} topInset={top} bottomSpace={bottomSpace} onBackToForYou={() => changeTab('foryou')} />
-        )}
-      />
+      <SwipePages pages={PAGES} selected={tab} onSelect={changeTab} renderPage={renderPage} />
       <FeedHeader tab={tab} onTab={changeTab} />
       {/* A-Offline takes the banner slot unless a post is in flight or waiting for Retry; a post that waits for the connection is A-Offline's own case. */}
       {(!online && (posting.state.kind === 'idle' || posting.state.kind === 'live')) || posting.state.kind === 'waiting' ? (
@@ -132,23 +150,15 @@ export default function HomeTab() {
           void posting.retry();
         }} onDiscard={() => setConfirmDiscard(true)} busy={discard.status === 'running'} topInset={top} />
       )}
-      {/* P4 */}
-      <Modal visible={confirmDiscard} transparent animationType="fade" onRequestClose={() => setConfirmDiscard(false)}>
-        <ActionSheet title={DISCARD_SHEET.title} lines={[DISCARD_SHEET.line]} actions={[{ label: DISCARD_SHEET.discard, destructive: true, onPress: runDiscard }]} cancelLabel={DISCARD_SHEET.cancel} onCancel={() => setConfirmDiscard(false)} />
-      </Modal>
-      {/* P6 */}
-      <Modal visible={reachedConga} transparent animationType="fade" onRequestClose={() => setDiscard({ status: 'idle', recordingId: null })}>
-        <ActionSheet title={REACHED_CONGA_SHEET.title} lines={[REACHED_CONGA_SHEET.line]} actions={[]} cancelLabel={REACHED_CONGA_SHEET.ok} onCancel={() => setDiscard({ status: 'idle', recordingId: null })} />
-      </Modal>
     </View>
   );
 }
 
 /**
  * One of Home's two lists, a page of the pager, with its own list and position. Only the page on
- * screen plays and counts views.
+ * screen plays, counts views and opens video streams (the other shows stills).
  */
-function FeedPage({ which, shown, focused, reloads, seen, topInset, bottomSpace, onBackToForYou }: {
+const FeedPage = memo(function FeedPage({ which, shown, focused, reloads, seen, topInset, bottomSpace, onBackToForYou }: {
   which: Tab;
   shown: boolean;
   focused: boolean;
@@ -252,7 +262,7 @@ function FeedPage({ which, shown, focused, reloads, seen, topInset, bottomSpace,
       renderItem={({ item: row, index: i }) =>
         row.response ? (
           <View style={{ height }}>
-            <ConversationView item={row} active={active && i === index} topInset={topInset} />
+            <ConversationView item={row} active={active && i === index} load={shown} topInset={topInset} />
           </View>
         ) : (
           <View style={{ height }}>
@@ -263,7 +273,7 @@ function FeedPage({ which, shown, focused, reloads, seen, topInset, bottomSpace,
       pagingEnabled
       showsVerticalScrollIndicator={false}
       onViewableItemsChanged={onViewable}
-      viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+      viewabilityConfig={VIEWABILITY}
       onEndReachedThreshold={2}
       onEndReached={onEndReached}
       windowSize={3}
@@ -273,6 +283,8 @@ function FeedPage({ which, shown, focused, reloads, seen, topInset, bottomSpace,
       getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
     />
   );
-}
+});
+
+const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
 
 const s = StyleSheet.create({ root: { flex: 1, backgroundColor: '#000000' } });
