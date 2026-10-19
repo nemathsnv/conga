@@ -4928,6 +4928,44 @@ Base `c757dfd`; branch `claude/conga-iphone-stability-3988b9`. Full report: `rel
   `01a1531a-3d96-7d71-a3d8-19bf9bf1d597`) to `founder` only, runtime `a64bc144…`, from `c5e326b`. It is the channel's first
   update, so rollback is to the embedded bundle (command in the report, section 9). Loading on the phone not yet confirmed.
 
+## 33. Several responses per prompt, and Pause/Resume recording (19 Oct; local only: nothing deployed, published, pushed or installed)
+
+Report: `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`.
+
+- *Decisions (Nemat, 19 Oct):* a member may respond to one prompt any number of times; recording
+  supports Pause and Resume, counting only recorded footage (`docs/DECISIONS.md`; SPEC.md sections 2,
+  6, 7 and 24 revised locally).
+- *Database:* `20261019000200_multiple_responses.sql` drops the one-response unique index and the
+  `already_responded` checks, and fixes the face strip so each responder appears once.
+  - Idempotency, upload limits, account enforcement and moderation records are unchanged.
+  - The hosted project is at 24 migrations. Batch C (`…0300`, `…0301`) goes in the same push.
+  - Rehearsed from the 24-migration state: fingerprint 866 objects
+    (`docs/release/mr-expected-27-migrations.fp`).
+- *App:*
+  - "Respond again" in the + sheet; Respond always opens the camera.
+  - Pause and Resume: centre button, Stop on the left, Light top right, a grey "Paused" pill.
+  - Backgrounding and camera interruptions pause the take and keep what was recorded.
+  - Cancel during a take asks first.
+- *Native fix:* the iOS stitcher crashed when a stitch failed (two concurrent `cancelReading` calls).
+  Fixed; the harness passes 10 of 10 runs (base: crashed 2 of 3). This changes the runtime to
+  `593205d5…`, so it needs a new build.
+- *Verified:*
+  - typecheck and lint; Jest 41 suites 527/527; pgTAP 1,701/1,701; every Deno suite.
+  - the take state machine, 46 cases.
+  - stitcher harness 34/34, with A/V joins within 8 ms.
+  - rollback both ways.
+  - a simulator walk with a camera stand-in, the real stitcher and the isolated stack: Respond
+    again, Pause, Resume, flip while paused, Cancel's question, one stitched clip, a second response
+    accepted by the server, Retry with no duplicate, backgrounding pauses.
+  - iOS simulator build; **founder Release build signed, not installed** (profile expires 24 Oct).
+- *Not run:* the iPhone (camera, torch, zoom, real audio across joins, the camera remount after
+  backgrounding, a call), a real Mux upload, Android.
+- *Waiting on Nemat:*
+  - the database push (with batch C);
+  - installing the build, or an EAS Update without the crash fix;
+  - the camera controls and the "Respond again" and "Paused" copy, which are not on a board;
+  - a Git push.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

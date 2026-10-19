@@ -50,6 +50,7 @@ Expo / React Native / TypeScript / Expo Router, and Supabase (Postgres, Auth, St
 - **Phases 2 to 7:** implemented in `app/` and `supabase/`. None has been verified on a real device. What was seen on the iOS simulator is listed in each `docs/PHASE-*-REPORT.md`. Android has never run.
 - **Provisional stack:** Mux (video hosting and playback) and expo-camera, selected on the iPhone spike evidence and used for implementation since phase 2. Provisional means Gate 1 is not passed and SPEC.md Section 22's video rows are not settled. Don't swap either without Nemat.
 - **Outstanding:** Android video validation (the spike checklist on a real mid-range Android over Bali mobile data), and B-1, camera flip during a take (segment stitching; `docs/BLOCKERS.md`).
+- **Authorized 19 Oct 2026 (Nemat):** several responses per person per prompt, and Pause/Resume while recording (`docs/DECISIONS.md`; `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`). Built locally; deploying, publishing and installing each need Nemat's approval.
 - **Gates 1, 2, 5 and 7 are open.** Only Nemat closes a gate, and it is recorded in `docs/DECISIONS.md`. Never mark a gate passed.
 - **What is still open:** `docs/BETA-READINESS.md` (consolidated) and `docs/BLOCKERS.md` (B-1 to B-4).
 - **Name:** "Conga" is the product name in code, copy and docs (Nemat, 17 Oct 2026; it replaces the earlier implementation name "Shortcut"). The public link domain is `conga.churntech.com`, the moderation admin `admin.conga.churntech.com`, the Cloudflare Pages project `conga-web`.
