@@ -437,3 +437,65 @@ help most.
   ```bash
   xcrun devicectl device process launch --device 00008150-00095DC03A61401C app.shortcut.founder
   ```
+
+## Deployed and installed (19 Oct 2026, Nemat approved)
+
+### Preflight (read-only, before approval)
+
+| Check | Result |
+| --- | --- |
+| Hosted migrations | 24, latest `20261016000204` |
+| Hosted schema fingerprint | `847\|8bddf2614e7c2d55acfcd10d951dddc5`, equal to `h4-expected-24-migrations.fp` |
+| 0300 pre-check (members with two counted responses on one prompt) | 0 |
+| Objects the migrations create | none present yet; the old unique index present |
+| Mux clean-up switch | `off` |
+| Dry run | exactly the three files, in order; seeds `[]`, roles `[]` |
+| Top-level statements in the three files | no `update`, `delete`, `insert` or `truncate` of existing rows |
+
+**Backups.** The project has no managed backups and no point-in-time recovery (free plan, open since 9 Oct).
+
+- A logical dump was taken instead (`supabase db dump --linked`, schema plus data).
+- It was restored into a local stack built from the same 24 migrations: every count and content
+  hash equalled the hosted values.
+- The three migrations were then applied to that restored copy of the real data. The data was
+  unchanged, and the fingerprint was the expected `866|f702387b…`.
+- **Restore procedure, tested:**
+  1. Truncate the tables named in the dump's `COPY` statements, with cascade.
+  2. Load `data.sql` as `supabase_admin` with `session_replication_role = replica`, in one
+     transaction.
+- The dumps hold personal data and are kept only on Nemat's Mac, owner-only, outside the repository.
+
+### Deployment (14:19 UTC)
+
+1. A fresh dump was taken immediately before the push, and every pre-check was repeated with the same
+   results.
+2. Pushed from a clean `git archive` of `2da3046` (checksums `a94f421d…`, `e3ec0781…`, `158e392a…`):
+   `20261016000300_response_slot_moderation.sql`, `20261016000301_admin_moderators.sql`,
+   `20261019000200_multiple_responses.sql`.
+
+### Verification (read-only, all PASS)
+
+| Check | Result |
+| --- | --- |
+| Migrations | 27, latest `20261019000200` |
+| Fingerprint | `866\|f702387b293eeb80b24655fe6efa727d`, equal to `mr-expected-27-migrations.fp` |
+| Data baseline | unchanged: responses 5 (`61b1dbe1…`), moderation actions 2 (`c5ed6186…`), uploads 15 (`2202ef1e…`), submissions 1, comments 0, likes 0, accounts 2, analytics 175 |
+| `responses_one_per_prompt` | gone |
+| `responses_author_prompt_idx` | present, not unique |
+| `post_response` | no `already_responded`; still runs `submission_replay`, `claim_video_upload`, `assert_can_post` |
+| `post_response` grants | `anon` no, `authenticated` yes |
+| `moderators` | empty, no member access |
+| Mux clean-up switch | still `off` |
+
+### iPhone
+
+- The signed founder Release build (runtime `593205d5…`, built from `c9e0edf`) was installed over
+  `app.shortcut.founder` on the iPhone 17 Pro with `devicectl`, then launched.
+- It was still running 8 s later.
+- The app's sign-in and data are not visible from here: confirm on the phone.
+
+### Not done
+
+No Mux asset, EAS Update, Git push, Edge Function, secret or other hosted change.
+
+**Next:** the iPhone test in section 6.

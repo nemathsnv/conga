@@ -4928,7 +4928,7 @@ Base `c757dfd`; branch `claude/conga-iphone-stability-3988b9`. Full report: `rel
   `01a1531a-3d96-7d71-a3d8-19bf9bf1d597`) to `founder` only, runtime `a64bc144…`, from `c5e326b`. It is the channel's first
   update, so rollback is to the embedded bundle (command in the report, section 9). Loading on the phone not yet confirmed.
 
-## 33. Several responses per prompt, and Pause/Resume recording (19 Oct; local only: nothing deployed, published, pushed or installed)
+## 33. Several responses per prompt, and Pause/Resume recording (19 Oct; migrations deployed and founder build installed with Nemat's approval; nothing published or pushed)
 
 Report: `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`.
 
@@ -4960,9 +4960,12 @@ Report: `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`.
   - iOS simulator build; **founder Release build signed, not installed** (profile expires 24 Oct).
 - *Not run:* the iPhone (camera, torch, zoom, real audio across joins, the camera remount after
   backgrounding, a call), a real Mux upload, Android.
+- *Deployed (Nemat approved, 19 Oct 14:19 UTC):* `20261016000300`, `…0301` and `20261019000200`.
+  - The hosted project is now at 27 migrations, fingerprint `866|f702387b…`, data unchanged.
+  - A pre-push logical dump was verified restorable; the project still has no managed backups.
+- *Installed:* the founder build (runtime `593205d5…`) on the iPhone, launched and running.
 - *Waiting on Nemat:*
-  - the database push (with batch C);
-  - installing the build, or an EAS Update without the crash fix;
+  - the iPhone test (report section 6);
   - the camera controls and the "Respond again" and "Paused" copy, which are not on a board;
   - a Git push.
 
