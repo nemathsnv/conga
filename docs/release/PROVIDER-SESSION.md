@@ -19,6 +19,43 @@ Where things stand (`docs/BETA-READINESS.md` sections 21 to 28):
 - T1 (`b0c14e38-4e89-4dbd-a9a3-8a8c01872a78`) is active. V (`52bbaabb-6faa-4bd2-94f9-015e43be791d`)
   is `live` on P2.
 
+## 0. Baseline refresh, 20 Oct 10:22 UTC (read-only; supersedes the numbers above and in section 5)
+
+Read with `scripts/mux-reconcile.mjs hosted --cap 10` and one plain select; no write, no Mux change.
+
+- **Mux (Shortcut Beta): 5 assets, not 2.** `inventory_md5` `2fee72342da7f36906d5522d2459e407`
+  (same hash as `provider-mux-read.mjs assets`). Every asset is used by its own `live` row and its
+  passthrough is that row's author; no orphan, nothing missing at Mux, no deleted video still
+  playable. Founder `L7KxG29…` unchanged.
+- **T1 now owns 4 live videos, not 1:** V (asset `01IyQdSi…`), and three made from the founder
+  iPhone build after the multiple-responses work: reply `cef19888…` (19 Oct 05:05, asset
+  `H923MkjG…`), responses `bcf65f4d…` (20 Oct 07:56, `ZL8jBUce…`) and `1eb1ce41…` (20 Oct 07:58,
+  `023QkUtH…`). So the phone has been signed in as T1.
+- Hosted: 27 migrations (last `20261019000200`); clean-up `off`, no `MUX_CLEANUP_MODE` assumed (not
+  re-read: `secrets list` is Nemat's); health `warn`, only `waiting_while_not_live` (e48); open
+  jobs: exactly e48, `pending`, `result.dry_run` from C2w-b; all six clean-up schedules active, 0
+  failures in 24 h. T1 holds no unexpired URL. `post_submissions` 3, none abandoned.
+
+**What this changes in the plan (Nemat decides before A0):**
+
+1. **P0 expectations:** 5 assets and `2fee7234…`, not 2 and `ccb8b093…`; stop rule 4 reads "count
+   other than 5". Use `scripts/mux-reconcile.mjs hosted --cap 10` for S3 (exit 1 with only the e48
+   warning is the expected P0 answer).
+2. **Nobody uses the phone as T1 during the session.** Opening Post Review mints a URL for T1,
+   which changes T1's ledger mid-test (and could retire a test URL by the C1 rule).
+3. **E1 is no longer one job.** `delete_account` queues one `sync_playback` per T1 video: 4 jobs
+   (V and the three above). E1's dry run and live drain must list all four, and E1 revokes the
+   playback of all four (the three device videos stop playing until E2 gives each a new id).
+   E2 likewise makes 4 jobs. The expected rows in section 5 that say "one new job" become "four".
+4. **E3 would destroy the three device-test videos for good** (the purge deletes every T1 asset,
+   so Shortcut Beta goes from 5 to 1). The previous plan assumed only V. Options:
+   (a) accept that; (b) run E1 and E2 only (both reversible) and leave E3 for a disposable
+   account that holds nothing else; (c) Nemat deletes the three videos in the app first
+   (each then queues a `cancel_upload`/`delete_asset` job that also needs a drain). Recommended: (b).
+   E3's Mux action, `delete_asset`, was already verified by the 12 Oct canary.
+5. **E1 signs the phone out** if it is still signed in as T1 (since H4 a deletion ends every
+   session); after E2 the phone needs a new sign-in.
+
 ## 1. Constraints the timeline respects
 
 | Constraint | Consequence in this plan |

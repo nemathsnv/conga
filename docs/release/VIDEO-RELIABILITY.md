@@ -206,6 +206,14 @@ Preconditions (in order):
    somewhere is the missing piece; until then, a named person and a time of day.
 5. The Mux asset count is reconciled with the database by hand once (a `muxread assets` against the
    rows with assets), since the health check does not compare them.
+
+   **20 Oct:** `scripts/mux-reconcile.mjs` does preconditions 4 (the check, not yet its schedule or
+   delivery) and 5 in one read-only command: Mux `GET`s and one plain select; it classifies every
+   asset as the sweep would (in use, held, queued, orphan, ownership unproven), flags rows whose
+   asset or playback id Mux lacks, deleted or removed videos still playable at Mux, and the asset
+   count against `--cap`; it exits 0/1/2 on the worse of that and `mux_cleanup_health()`. Unit tests:
+   `node --test scripts/tests/*.test.mjs`. First hosted run, 20 Oct 10:26 UTC: 5 assets, all in use
+   by their own author, exit 1 for the e48 warning only (`BETA-READINESS.md` section 34).
 6. Nemat accepts the mechanics in `docs/BETA-READINESS.md` section 15 ("Mechanics to accept or tune":
    backoff to 6 hours, 10 attempts, 120 s leases, batch size) and that Mux's rate limits are not
    verified.

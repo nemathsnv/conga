@@ -4974,6 +4974,68 @@ Report: `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`.
   - Dashboard: https://expo.dev/accounts/nemathsnv/projects/conga/updates/c4d2ecb2-5395-4e04-adca-0a1dd69309cb
   - Rollback: republish the build's embedded bundle with `eas update:roll-back-to-embedded --branch founder --runtime-version 593205d5b48fd2ed8dd7456ff16a60faecf84634 --platform ios`.
 
+## 34. Mux media security and clean-up: hosted state, reconciliation tool, provider plan refreshed (20 Oct; read-only on hosted and Mux; nothing deployed, created, deleted or switched)
+
+- *Read-only hosted and Mux check (10:22 to 10:27 UTC):* one plain select through
+  `scripts/provider-sql.sh hosted` and Mux `GET`s only.
+  - **Mux (Shortcut Beta): 5 assets**, `inventory_md5` `2fee7234…` (was 2, `ccb8b093…`, on 16 Oct).
+  - Every asset belongs to its own `live` row, and each asset's passthrough is that row's author.
+    There are no orphans, nothing is missing at Mux, and no deleted or removed video is still
+    playable.
+  - The three new assets are T1's: reply `cef19888…` (19 Oct) and responses `bcf65f4d…` and
+    `1eb1ce41…` (20 Oct). T1 now has three responses on prompt `ddd5a383…`, so the founder iPhone
+    build has been signed in as T1.
+  - Hosted database: 27 migrations; clean-up `off`; health `warn`, from `waiting_while_not_live`
+    (e48) only. Exactly one open job, e48 (`pending`, due). All six clean-up schedules are active,
+    with 0 failures in 24 h. 2 accounts, none deleted. No unexpired T1 URL.
+- *Capacity:* 5 Beta assets. The record had 7 spike assets on 16 Oct. If the free plan's 10-asset
+  cap were account-wide, Mux would have refused at least one of the three new assets, and it did
+  not. So the cap is not account-wide, or the spike assets are gone, or the plan is not the free
+  one. The spike environment was not read today (its token was not used).
+- *Built (`scripts/mux-reconcile.mjs`, `scripts/lib/mux-reconcile-core.mjs`):* the daily check and
+  the reconciliation from `VIDEO-RELIABILITY.md` section 8, preconditions 4 and 5. It is
+  read-only: Mux `GET`s and one plain select under `provider-sql.sh`'s guards.
+  - It classifies every asset by the sweep's rules and flags problems: owner or asset mismatch, a
+    live row whose asset or playback id Mux lacks, a deleted, removed or account-deleted video
+    still playable, an orphan, and the count against `--cap`.
+  - Exit status: 0 ok, 1 warn, 2 alert, 3 could not run. It takes the worse of its own result and
+    `mux_cleanup_health()`.
+  - 17 unit tests (`node --test scripts/tests/*.test.mjs`); each of 4 deliberate mutations of the
+    classifier fails a test.
+  - Hosted run: `status warn` (e48 only), `reconciliation ok`, capacity 5 of 10.
+  - Not done: a schedule and a delivery path for the check. Both need Nemat's approval.
+- *Test added:* pgTAP `0030` section 9 covers T1's shape on hosted: three responses on one prompt
+  plus a video reply.
+  - `delete_account` queues exactly one `sync_playback` per video (4), and asking again adds none.
+  - The purge queues exactly one `delete_asset` per asset (4), all owned by the purged account,
+    and touches no other member.
+- *Local verification (isolated stack `shortcut-mux`, fake Mux; nothing on a device or real Mux):*
+  `scripts/full-local-verification.sh` on the 27 migrations. Everything passed except the rollback
+  check, which is stale (below):
+  - pgTAP 1,701/1,701, then 1,713/1,713 with the new section;
+  - every Deno unit and integration suite; scheduler 13/13;
+  - auth integration; app typecheck, lint and Jest.
+  - After a clean reset: C1 rehearsal passed, and the provider rehearsal passed 8/8 (C2w, C2a,
+    C2e as assumed, E1, E2, E3, guards).
+- *Found: `scripts/idempotency-rollback-check.sh` is stale since `20261019000200`.*
+  - It rolls back `20261013000200` and `0300` while the seven later migrations stay applied, so
+    the restored four-argument `post_response` brings back `already_responded`. pgTAP `0002` #27
+    and `0009` #88 then fail.
+  - Its failure recovery re-applies the 0200 body, which leaves the stack with the one-response
+    rule back. This only affects isolated stacks.
+  - The real consequence: section 18's "roll back batch A" is no longer a standalone option. It
+    would need every later migration rolled back first, and `20261019000200`'s rollback refuses
+    while anyone has two responses on one prompt, which T1 now has.
+  - The function-only rollback of `abandon-submission` is unaffected. Not fixed here; the script
+    needs a newest-first rewrite or retirement (Nemat).
+- *Provider plan:* `PROVIDER-SESSION.md` section 0 now carries this baseline.
+  - P0 expects 5 assets and `2fee7234…`.
+  - E1 and E2 each make 4 jobs, not 1, and E1 revokes all four of T1's videos until E2.
+  - E3 would permanently delete the three device-test videos as well.
+  - Nobody may use the phone as T1 during the session.
+  - The U5 reassessment is unchanged: e48 closes as `done`/`timed_out` with no Mux change in the
+    first dry run and live drain that list it. It only keeps the health check at `warn`.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
