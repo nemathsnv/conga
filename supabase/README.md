@@ -51,10 +51,13 @@ deno test --allow-env --allow-net supabase/functions/_tests/abandon_integration_
 ```
 
 Posting idempotency (`20261013000200`) and the Mux-checked abandonment (`20261013000300`, the
-`abandon-submission` function) have a rollback check, which applies both rollback files and both
-migrations again on a local stack: `scripts/idempotency-rollback-check.sh [stack folder]` (it logs to
-`ROLLBACK_CHECK_LOG` or a temporary file, and on a failure prints the failing tests and puts the stack
-forward again).
+`abandon-submission` function) have a rollback check on an isolated stack:
+`scripts/idempotency-rollback-check.sh <stack folder>` (a `shortcut-<id>` stack only). It rolls back
+every migration from `20261013000200` on, newest first, runs `0001`-`0011` as they were then, and
+applies them all again. It first checks that the `20261019000200` rollback refuses while a member has
+two responses on one prompt. It logs to `ROLLBACK_CHECK_LOG` or a temporary file. On a failure it
+prints the failing tests, puts the stack forward again and compares the schema fingerprint with the
+start.
 Test C1 is rehearsed against a fake Mux with `scripts/c1-rehearsal.sh [stack folder]`.
 
 The real-provider tests C2, E1, E2 and E3 (`docs/release/PROVIDER-TESTS.md`) use
