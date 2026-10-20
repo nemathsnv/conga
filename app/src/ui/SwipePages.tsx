@@ -11,8 +11,12 @@
 //   it is only for pushed screens.
 // - The selected tab follows the pager when a swipe settles, never during the drag.
 // - The page off screen is hidden from VoiceOver and TalkBack.
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
+// - Each page clips to its own bounds, and `renderPage` gets `pinX`: a translateX that keeps a part
+//   of the page still while the pages slide (a profile's header and tabs, founder iPhone test,
+//   20 Oct). Two pages showing the same pinned part at the same height join at the pager's moving
+//   seam into one still picture. It runs on the native scroll event, with no JavaScript per frame.
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Animated, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 
 /** Width of the strip left to the back swipe (the iOS edge gesture starts within about 20 pt). */
 const EDGE_GUARD = 20;
@@ -38,7 +42,7 @@ export function SwipePages<K extends string>({
   pages: readonly K[];
   selected: K;
   onSelect: (page: K) => void;
-  renderPage: (page: K, shown: boolean) => ReactNode;
+  renderPage: (page: K, shown: boolean, pinX: Animated.AnimatedNode) => ReactNode;
   /** A sideways drag begins (before the other page shows). */
   onDragStart?: () => void;
   edgeGuard?: boolean;
@@ -50,6 +54,10 @@ export function SwipePages<K extends string>({
   const index = Math.max(pages.indexOf(selected), 0);
   // Where the pager starts. Later pages are reached by scrolling (below), so a tab tap animates.
   const [startIndex] = useState(index);
+  // The pager's horizontal offset, on the native thread, and per page the translateX that cancels it.
+  const [scrollX] = useState(() => new Animated.Value(startIndex * screen.width));
+  const pins = useMemo(() => pages.map((_, i) => Animated.add(scrollX, -i * size.width)), [pages, scrollX, size.width]);
+  const onScroll = useMemo(() => Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true }), [scrollX]);
 
   // A tab tap (or a page change from inside, like "Back to For you"): move to that page. After a
   // swipe the pager is already there and this does nothing.
@@ -63,7 +71,7 @@ export function SwipePages<K extends string>({
   };
 
   const pager = (
-    <ScrollView
+    <Animated.ScrollView
       ref={ref}
       horizontal
       pagingEnabled
@@ -78,25 +86,27 @@ export function SwipePages<K extends string>({
         const { width, height } = e.nativeEvent.layout;
         if (width !== size.width || height !== size.height) setSize({ width, height });
       }}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
       onScrollBeginDrag={onDragStart}
       onMomentumScrollEnd={settle}
       onScrollEndDrag={settle}
       style={[s.fill, style]}
     >
-      {pages.map((page) => {
+      {pages.map((page, i) => {
         const shown = page === selected;
         return (
           <View
             key={page}
-            style={{ width: size.width, height: size.height || screen.height }}
+            style={{ width: size.width, height: size.height || screen.height, overflow: 'hidden' }}
             accessibilityElementsHidden={!shown}
             importantForAccessibility={shown ? 'auto' : 'no-hide-descendants'}
           >
-            {renderPage(page, shown)}
+            {renderPage(page, shown, pins[i])}
           </View>
         );
       })}
-    </ScrollView>
+    </Animated.ScrollView>
   );
   if (!edgeGuard) return pager;
   return (

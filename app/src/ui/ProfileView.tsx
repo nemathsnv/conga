@@ -3,7 +3,7 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 
 import { avatarUrl } from '@/lib/api';
 import { followUser, getProfile, profileReplies, profileResponses, unfollowUser, type Profile, type ProfileReply, type ProfileResponse } from '@/lib/content';
@@ -45,7 +45,9 @@ export function useProfile(args: { id?: string; username?: string }) {
  * The profile under the screen's top bar. Responses and Replies are the two pages of a sideways
  * pager, and each page scrolls the whole profile (header, tabs, grid), so a sideways swipe starts
  * anywhere on it (founder iPhone test, 19 Oct: only a swipe that began on the videos worked). The
- * page coming on screen is first scrolled to match the header's position on the page leaving.
+ * page coming on screen is first scrolled to match the header's position on the page leaving, and
+ * the header and tabs are pinned sideways (SwipePages `pinX`), so only the grids slide and the
+ * profile itself stays still (founder iPhone test, 20 Oct).
  * `edgeGuard`: on a pushed screen, the left edge stays the back swipe (ui/SwipePages.tsx).
  */
 export function ProfileBody({ profile, responses, own, onTonight, edgeGuard = false }: { profile: Profile; responses: ProfileResponse[] | null; own: boolean; onTonight?: () => void; edgeGuard?: boolean }) {
@@ -85,10 +87,15 @@ export function ProfileBody({ profile, responses, own, onTonight, edgeGuard = fa
     }
   };
 
-  // Each page's vertical position, and the height of the header above the tabs (the same on both).
+  // Each page's vertical position, and the height of the pinned block, header and tabs (the same on
+  // both pages; the pages line up exactly while any of it is on screen).
   const lists = useRef<Partial<Record<ProfileTab, ScrollView | null>>>({});
   const offsets = useRef<Record<ProfileTab, number>>({ responses: 0, replies: 0 });
   const headerHeight = useRef(0);
+  // Every page can scroll at least the pinned block's height, whatever its content: the page coming
+  // on screen must be able to take the leaving page's position, or the two halves of the pinned
+  // header would not meet (an empty Replies tab could not scroll at all).
+  const [minContent, setMinContent] = useState({ page: 0, pinned: 0 });
   const recordOffset = (page: ProfileTab) => (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     offsets.current[page] = e.nativeEvent.contentOffset.y;
   };
@@ -110,11 +117,7 @@ export function ProfileBody({ profile, responses, own, onTonight, edgeGuard = fa
   };
 
   const header = (
-    <View
-      onLayout={(e) => {
-        headerHeight.current = e.nativeEvent.layout.height;
-      }}
-    >
+    <View>
       <View style={[s.head, own && !empty && { paddingTop: 0 }]}>
         <Avatar uri={avatarUrl(profile.photo_path)} size={own && !empty ? 84 : 92} />
         <Text style={[s.name, own && !empty && { fontSize: 22, lineHeight: 26, marginTop: 10 }]}>{profile.name}</Text>
@@ -267,21 +270,35 @@ export function ProfileBody({ profile, responses, own, onTonight, edgeGuard = fa
       onSelect={setTab}
       onDragStart={alignOther}
       edgeGuard={edgeGuard}
-      renderPage={(page, shown) => (
+      renderPage={(page, shown, pinX) => (
         <ScrollView
           ref={(r) => {
             lists.current[page] = r;
           }}
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: 120, minHeight: minContent.page + minContent.pinned }}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            setMinContent((m) => (m.page === h ? m : { ...m, page: h }));
+          }}
           showsVerticalScrollIndicator={false}
           scrollsToTop={shown}
           onScrollEndDrag={recordOffset(page)}
           onMomentumScrollEnd={recordOffset(page)}
         >
-          {header}
-          {tabsRow}
-          <Separator inset={0} />
+          {/* Pinned sideways: only the grid below slides between the pages. */}
+          <Animated.View
+            style={{ transform: [{ translateX: pinX }] }}
+            onLayout={(e) => {
+              const h = e.nativeEvent.layout.height;
+              headerHeight.current = h;
+              setMinContent((m) => (m.pinned === h ? m : { ...m, pinned: h }));
+            }}
+          >
+            {header}
+            {tabsRow}
+            <Separator inset={0} />
+          </Animated.View>
           {grid(page)}
         </ScrollView>
       )}
