@@ -1,0 +1,49 @@
+Reverses the pgTAP edits that came with 20261016000202 (commit ec60cd9: deleting an account ends its sessions), so the
+rollback check can run the 0001-0011 files as they were before it, against a stack rolled back
+past it. Applied by scripts/idempotency-rollback-check.sh to a throwaway copy; never to supabase/tests.
+
+diff --git a/supabase/tests/0004_safety.sql b/supabase/tests/0004_safety.sql
+index ddd790c..988f89c 100644
+--- a/supabase/tests/0004_safety.sql
++++ b/supabase/tests/0004_safety.sql
+@@ -182,10 +182,9 @@ select throws_ok($$ insert into public.moderation_actions (moderator, account_id
+ -- ---------------------------------------------------------------------------
+ -- Delete your account: a fresh sign-in first, then hidden for 30 days, restored by signing in.
+ set local role authenticated;
+--- The sign-in time is the token's amr timestamp, which a refresh keeps (20261016000202).
+-select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":%s,"amr":[{"method":"otp","timestamp":1000}]}', extract(epoch from now())::bigint), true);
+-select throws_ok($$ select public.delete_account() $$, 'P0001', 'reauth_required', 'an old session cannot delete the account, even with a freshly refreshed token');
+-select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":%1$s,"amr":[{"method":"otp","timestamp":%1$s}]}', extract(epoch from now())::bigint), true);
++select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":1000}', true);
++select throws_ok($$ select public.delete_account() $$, 'P0001', 'reauth_required', 'an old session cannot delete the account');
++select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","iat":%s}', extract(epoch from now())::bigint), true);
+ select lives_ok($$ select public.delete_account() $$, 'a fresh sign-in can');
+ reset role;
+ select is((select deleted_at is not null from public.accounts where id = 'c3333333-3333-3333-3333-333333333333'), true, 'soft deleted');
+@@ -197,8 +196,7 @@ reset role;
+ select is((public.web_video('d5555555-5555-5555-5555-555555555555'))->>'status', 'unavailable', 'on the web too');
+ select is((select username from public.profiles where id = 'c3333333-3333-3333-3333-333333333333'), 'testmaya', 'the username stays reserved');
+ set local role authenticated;
+--- A sign-in after the deletion (one second later: now() does not move inside the transaction).
+-select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","amr":[{"method":"otp","timestamp":%s}]}', extract(epoch from now())::bigint + 1), true);
++select set_config('request.jwt.claims', '{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated"}', true);
+ select is((public.get_onboarding_state())->>'has_profile', 'true', 'signing back in restores');
+ reset role;
+ select is((select deleted_at from public.accounts where id = 'c3333333-3333-3333-3333-333333333333'), null, 'deleted_at cleared');
+diff --git a/supabase/tests/0010_video_deletion.sql b/supabase/tests/0010_video_deletion.sql
+index 77b8bf2..067866c 100644
+--- a/supabase/tests/0010_video_deletion.sql
++++ b/supabase/tests/0010_video_deletion.sql
+@@ -110,11 +110,8 @@ exception when others then
+ end;
+ $$;
+ grant execute on function pg_temp.err(text) to authenticated, anon;
+--- A fresh sign-in (amr), one second after now(), so after any deletion in this transaction: here
+--- "signs back in" restores (20261016000202 needs a sign-in after the deletion; 0022 tests that).
+ create function pg_temp.act(p_account uuid) returns void language sql as $$
+-  select set_config('request.jwt.claims', json_build_object('sub', p_account, 'role', 'authenticated', 'iat', extract(epoch from now())::bigint,
+-    'amr', json_build_array(json_build_object('method', 'otp', 'timestamp', extract(epoch from now())::bigint + 1)))::text, true);
++  select set_config('request.jwt.claims', json_build_object('sub', p_account, 'role', 'authenticated', 'iat', extract(epoch from now())::bigint)::text, true);
+ $$;
+ grant execute on function pg_temp.act(uuid) to authenticated;
+ -- The job of an action for an asset or an upload: the open one if there is one (now() does not

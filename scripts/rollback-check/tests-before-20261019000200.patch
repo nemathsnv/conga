@@ -1,0 +1,36 @@
+Reverses the pgTAP edits that came with 20261019000200 (commit e1fd489: several responses per person per prompt), so the
+rollback check can run the 0001-0011 files as they were before it, against a stack rolled back
+past it. Applied by scripts/idempotency-rollback-check.sh to a throwaway copy; never to supabase/tests.
+
+diff --git a/supabase/tests/0002_core_loop.sql b/supabase/tests/0002_core_loop.sql
+index 9e27970..9385f66 100644
+--- a/supabase/tests/0002_core_loop.sql
++++ b/supabase/tests/0002_core_loop.sql
+@@ -72,12 +72,12 @@ select is(jsonb_array_length(public.follow_list('b2222222-2222-2222-2222-2222222
+ select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%'), pg_temp.response_id('up-maya')))->'responses'->0->'author'->>'username', 'testmaya', 'entry response comes first');
+ select is((public.prompt_responses((select id from public.prompts where text like 'Be honest%')))->'responses'->0->'author'->>'username', 'testadam', 'without an entry, unseen followed people come first');
+ 
+--- Posting: disclosure first, limits. (Several responses per prompt: 0030_multiple_responses.sql.)
++-- Posting: disclosure first, one response per prompt, limits.
+ select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', null, 5000) $$, 'P0001', 'disclosure_required', 'no post before the disclosure');
+ select lives_ok($$ select public.acknowledge_disclosure() $$, 'acknowledge_disclosure');
+ select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', null, 1000) $$, 'P0001', 'invalid_duration', 'under 2 seconds is refused');
+ select is((public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', '  Berawa traffic  ', 5000))->>'status', 'processing', 'post_response creates a processing response');
+-select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena', null, 5000) $$, 'P0001', 'upload_already_used', 'the same upload never makes a second response');
++select throws_ok($$ select public.post_response((select id from public.prompts where text like 'Speak%'), 'up-lena-2', null, 5000) $$, 'P0001', 'already_responded', 'one primary response per person per prompt');
+ select is(jsonb_array_length(public.profile_responses('a1111111-1111-1111-1111-111111111111')), 1, 'own processing response shows on own profile (Processing tile)');
+ reset role;
+ 
+diff --git a/supabase/tests/0009_video_uploads.sql b/supabase/tests/0009_video_uploads.sql
+index beb3b32..7abaf85 100644
+--- a/supabase/tests/0009_video_uploads.sql
++++ b/supabase/tests/0009_video_uploads.sql
+@@ -281,7 +281,7 @@ select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-11
+ select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', '', null, 5000) $$), 'upload_required', 'an empty upload id is refused as before');
+ select is((public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000))->>'status', 'processing', 'the member''s own upload is posted');
+ select is(pg_temp.err($$ select public.post_response('22222222-aaaa-aaaa-aaaa-222222222222', 'upL1', null, 5000) $$), 'upload_already_used', 'the same upload cannot be posted twice');
+-select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL1', null, 5000) $$), 'upload_already_used', 'the same upload to the same prompt again: no duplicate (several responses per prompt are allowed, 20261019000200)');
++select is(pg_temp.err($$ select public.post_response('11111111-aaaa-aaaa-aaaa-111111111111', 'upL2', null, 5000) $$), 'already_responded', 'one response per prompt is still checked');
+ select is(pg_temp.err($$ select public.post_response('99999999-aaaa-aaaa-aaaa-999999999999', 'upL5', null, 5000) $$), 'prompt_not_found', 'a post refused for another reason');
+ select is(pg_temp.err($$ select public.post_reply('ad000000-0000-0000-0000-000000000001', 'upL1', null, 5000) $$), 'upload_already_used', 'a used upload cannot become a video reply');
+ select is(pg_temp.err($$ select public.post_reply('ad000000-0000-0000-0000-000000000001', 'upA2', null, 5000) $$), 'upload_not_found', 'nor can another member''s');
