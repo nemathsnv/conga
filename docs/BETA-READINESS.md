@@ -4968,6 +4968,11 @@ Report: `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`.
   - the iPhone test (report section 6);
   - the camera controls and the "Respond again" and "Paused" copy, which are not on a board;
   - a Git push.
+- *20 Oct, profile swipe fix (`09fa4f6`; Nemat approved publishing):* on Me and other profiles the header and tabs stay still and only the grid slides between Responses and Replies.
+  - Checked on the simulator only.
+  - Published as EAS Update group `c4d2ecb2-5395-4e04-adca-0a1dd69309cb` (iOS update `01a15879-b603-7bc1-bd66-017d5d840074`), to `founder` only, runtime `593205d5…`.
+  - Dashboard: https://expo.dev/accounts/nemathsnv/projects/conga/updates/c4d2ecb2-5395-4e04-adca-0a1dd69309cb
+  - Rollback: republish the build's embedded bundle with `eas update:roll-back-to-embedded --branch founder --runtime-version 593205d5b48fd2ed8dd7456ff16a60faecf84634 --platform ios`.
 
 ## Gates
 
