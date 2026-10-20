@@ -5,7 +5,7 @@
 -- account checks (suspended, posting paused, deleted), and moderation (a removed video stays
 -- removed, with its whole record) without refusing a different video.
 begin;
-select plan(97);
+select plan(109);
 
 delete from public.reports;
 delete from public.review_requests;
@@ -308,6 +308,37 @@ select is(public.purge_account('d4444444-4444-4444-4444-444444444444'), true, 'Z
 select is((select status from public.responses where id = 'ee000000-0000-0000-0000-000000000009'), 'deleted', 'the response Adam replied to is a tombstone');
 select is((select count(*)::int from public.responses where id = 'ee000000-0000-0000-0000-000000000019'), 0, 'the other is gone with the account');
 select is((select status from public.responses where id = 'ee000000-0000-0000-0000-00000000009a'), 'live', 'Adam''s reply is untouched');
+
+-- ===========================================================================
+-- 9. Account deletion and purge reach every video at Mux (provider tests E1 and E3; on the
+--    hosted project the test account holds three responses on one prompt and a video reply)
+-- ===========================================================================
+delete from public.mux_cleanup_jobs;
+insert into public.responses (id, prompt_id, author_id, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at) values
+  ('ff000000-0000-0000-0000-000000000001', '11111111-aaaa-aaaa-aaaa-111111111111', 'c3333333-3333-3333-3333-333333333333', 5000, 'live', 'upM1', 'asM1', 'pbM1', now()),
+  ('ff000000-0000-0000-0000-000000000002', '11111111-aaaa-aaaa-aaaa-111111111111', 'c3333333-3333-3333-3333-333333333333', 5000, 'live', 'upM2', 'asM2', 'pbM2', now()),
+  ('ff000000-0000-0000-0000-000000000003', '11111111-aaaa-aaaa-aaaa-111111111111', 'c3333333-3333-3333-3333-333333333333', 5000, 'live', 'upM3', 'asM3', 'pbM3', now());
+insert into public.responses (id, kind, prompt_id, root_response_id, reply_to_id, author_id, duration_ms, status, mux_upload_id, mux_asset_id, mux_playback_id, live_at) values
+  ('ff000000-0000-0000-0000-00000000001a', 'reply', '11111111-aaaa-aaaa-aaaa-111111111111', 'ff000000-0000-0000-0000-000000000001', 'ff000000-0000-0000-0000-000000000001', 'c3333333-3333-3333-3333-333333333333', 4000, 'live', 'upMR', 'asMR', 'pbMR', now());
+set local role authenticated;
+select set_config('request.jwt.claims', format('{"sub":"c3333333-3333-3333-3333-333333333333","role":"authenticated","session_id":"5c333333-0000-0000-0000-000000000001","amr":[{"method":"otp","timestamp":%s}]}', extract(epoch from now())::bigint - 30), true);
+select lives_ok($$ select public.delete_account() $$, 'Maya, with three responses on one prompt and a video reply, deletes her account');
+reset role;
+select is((select array_agg(asset_id order by asset_id) from public.mux_cleanup_jobs where action = 'sync_playback' and reason = 'account_deleted' and status = 'pending'),
+          array['asM1', 'asM2', 'asM3', 'asMR'], 'one playback job per video: all three responses and the reply');
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id like 'asM%' and action <> 'sync_playback'), 0, 'and nothing else for them');
+select is((select count(*)::int from public.mux_cleanup_jobs where asset_id not like 'asM%'), 0, 'no other member''s video is touched');
+select lives_ok($$ select public.mux_sync_account_playback('c3333333-3333-3333-3333-333333333333', 'account_deleted') $$, 'asking again (a second deletion request)');
+select is((select count(*)::int from public.mux_cleanup_jobs where action = 'sync_playback'), 4, 'still one job per video');
+-- Day 31: the purge.
+update public.accounts set deleted_at = now() - interval '31 days' where id = 'c3333333-3333-3333-3333-333333333333';
+select is(public.purge_account('c3333333-3333-3333-3333-333333333333'), true, 'Maya is purged');
+select is((select count(*)::int from public.responses where id::text like 'ff000000-%'), 0, 'her four videos are gone (nobody else replied to them)');
+select is((select array_agg(asset_id order by asset_id) from public.mux_cleanup_jobs where action = 'delete_asset' and reason = 'account_purged' and status = 'pending'),
+          array['asM1', 'asM2', 'asM3', 'asMR'], 'one asset deletion per video, each for its own asset');
+select is((select count(distinct owner_id)::int from public.mux_cleanup_jobs where action = 'delete_asset' and asset_id like 'asM%'), 1, 'all owned by her');
+select is((select owner_id from public.mux_cleanup_jobs where action = 'delete_asset' and asset_id = 'asM1'), 'c3333333-3333-3333-3333-333333333333'::uuid, 'the owner is the purged account');
+select is((select count(*)::int from public.mux_cleanup_jobs where action = 'delete_asset' and asset_id not like 'asM%'), 0, 'no other asset is queued for deletion');
 
 select * from finish();
 rollback;
