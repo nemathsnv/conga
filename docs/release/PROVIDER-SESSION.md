@@ -1,4 +1,4 @@
-# One provider session: C2w (fresh), C2a, E1, E2, E3 (plan, 17 Oct 2026; not run)
+# Provider session: C2w (fresh), C2a; E1 to E3 on a disposable account (plan 17 Oct, revised 20 Oct 2026; not run)
 
 This is a plan. Nothing in it has been run against the hosted project or real Mux. It is built on
 Nemat's decision 3 (16 Oct): C2 stays deferred until one uninterrupted verification window, U5 is
@@ -36,25 +36,57 @@ Read with `scripts/mux-reconcile.mjs hosted --cap 10` and one plain select; no w
   jobs: exactly e48, `pending`, `result.dry_run` from C2w-b; all six clean-up schedules active, 0
   failures in 24 h. T1 holds no unexpired URL. `post_submissions` 3, none abandoned.
 
-**What this changes in the plan (Nemat decides before A0):**
+**Plan as revised by Nemat, 20 Oct (`docs/DECISIONS.md`; supersedes the timeline in section 5 for E1 to E3):**
 
-1. **P0 expectations:** 5 assets and `2fee7234…`, not 2 and `ccb8b093…`; stop rule 4 reads "count
-   other than 5". Use `scripts/mux-reconcile.mjs hosted --cap 10` for S3 (exit 1 with only the e48
-   warning is the expected P0 answer).
-2. **Nobody uses the phone as T1 during the session.** Opening Post Review mints a URL for T1,
-   which changes T1's ledger mid-test (and could retire a test URL by the C1 rule).
-3. **E1 is no longer one job.** `delete_account` queues one `sync_playback` per T1 video: 4 jobs
-   (V and the three above). E1's dry run and live drain must list all four, and E1 revokes the
-   playback of all four (the three device videos stop playing until E2 gives each a new id).
-   E2 likewise makes 4 jobs. The expected rows in section 5 that say "one new job" become "four".
-4. **E3 would destroy the three device-test videos for good** (the purge deletes every T1 asset,
-   so Shortcut Beta goes from 5 to 1). The previous plan assumed only V. Options:
-   (a) accept that; (b) run E1 and E2 only (both reversible) and leave E3 for a disposable
-   account that holds nothing else; (c) Nemat deletes the three videos in the app first
-   (each then queues a `cancel_upload`/`delete_asset` job that also needs a drain). Recommended: (b).
-   E3's Mux action, `delete_asset`, was already verified by the 12 Oct canary.
-5. **E1 signs the phone out** if it is still signed in as T1 (since H4 a deletion ends every
-   session); after E2 the phone needs a new sign-in.
+- **E1, E2 and E3 never run against T1.** T1's four videos, their playback ids and the iPhone's T1
+  sign-in are kept. Section 5's E rows are retired; E1 to E3 move to a disposable account, below.
+- **Closed, not repeated:** A1, A2, B1, B2, C1.
+- **Nobody uses the phone as T1 during C2w or C2a.** Opening Post Review mints a URL for T1, which
+  changes T1's ledger in the middle of a test and could retire a test URL by the C1 rule. A test
+  sign-in (`provider-member.mjs otp`/`verify`) starts a new session and does not end the phone's.
+- **U5 is not recreated.** Job e48 is listed with C2w's own job in C2w's dry run and live drain.
+  There it closes as `done`/`timed_out` with one Mux `GET` and no other Mux call (Mux reports U5
+  `timed_out`, no asset). No separate window is opened for it.
+- **No continuous clean-up and no scheduled reconciliation** until the Mux quota scope is confirmed.
+
+**Operation C2w (its own approval; 0 assets; one window W1 of about 5 minutes):**
+
+1. T1 code 1: `provider-member.mjs otp`, then Nemat runs `provider-t1-verify.sh`. That is one Auth
+   email to T1's inbox.
+2. **C2w-a′:** one mint (U6), one video-reply row R6 to V, a cut PUT (256 KiB of 8 MiB), then
+   `abandon_response`. Expected: one job J6.
+3. **C2w-b′ dry run**, listing e48 and J6: Mux `GET`s only.
+4. Nemat opens W1 (`secrets set MUX_CLEANUP_MODE=live`).
+5. **C2w-c live drain**, listing e48 and J6. Expected: one Mux cancel, of U6; J6 `cancelled`; e48
+   `timed_out`.
+6. Nemat closes W1 (`secrets unset`).
+7. Postflight: `mux-reconcile.mjs` reports 5 assets and `2fee7234…`, and the health check is `ok`,
+   because e48 is closed.
+
+Stop rules 1 to 5 and 9 apply. If C2w-c cannot start by U6's mint + 45 minutes, it is not run
+(stop rule 3).
+
+**Operation C2a (its own approval, any later day; 0 assets; no window, no worker):** a new T1 code
+if the session has expired, then
+`provider-member.mjs c2 --reply-to <V> --submission yes --bytes partial --discard abandon-submission`.
+Expected: `{"outcome": "abandoned", "reason": "cancelled"}`, U7 `cancelled` at Mux, no job, 5 assets.
+
+**E1 to E3 on a disposable account T2 (not approved; prerequisites first):**
+
+1. **Confirm the quota scope** (read-only). See the capacity note in `BETA-READINESS.md`
+   section 35.
+2. **CP0′ (approval):** T2 is created with a disposable inbox Nemat controls. An invite is needed,
+   since `invite_required` is on. T2 records one short response V2 on a test prompt: **1 new asset**
+   (6 of 10 if the cap is per environment).
+3. **E1** (T2 deletes the account): exactly 1 `sync_playback`; dry run, then a live drain revokes
+   V2's playback.
+4. **E2** (a new sign-in): 1 job; dry run, then a live drain gives V2 a new playback id.
+5. **E3:** T2 deletes the account again. The purge is either the 30-day path or the same-day
+   fallback (deleting T2's Auth user in the Dashboard). Then 1 `delete_asset`; dry run, then a live
+   drain deletes V2's asset, and Beta is back to 5.
+
+Each drain is listed by job id. pgTAP `0030` section 9 has already shown, locally, the per-video
+job counts for an account with several responses on one prompt.
 
 ## 1. Constraints the timeline respects
 

@@ -5036,6 +5036,42 @@ Report: `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`.
   - The U5 reassessment is unchanged: e48 closes as `done`/`timed_out` with no Mux change in the
     first dry run and live drain that list it. It only keeps the health check at `warn`.
 
+## 35. A0 read-only preflight passed (20 Oct 14:56 UTC; Nemat approved A0 only; nothing changed)
+
+Nemat's decision of 20 Oct (`docs/DECISIONS.md`): no E test on T1; E1 to E3 move to a disposable
+account; C2w and C2a are separate operations; only A0 approved. Plan: `PROVIDER-SESSION.md` section 0.
+
+- **S2, schema:** the hosted listing has 866 objects. It is identical, line for line, to
+  `docs/release/mr-expected-27-migrations.fp` (md5 of the listing `146a1976…` on both).
+- **S1, state:**
+  - Migrations: 27.
+  - Clean-up: `off`. Health: `warn`, from `waiting_while_not_live` (e48) only.
+  - Open jobs: exactly e48 (`cancel_upload`, U5, `pending`, attempts 0).
+  - T1: active, not deleted, 2 `auth.sessions` (counted, not read), so the phone stays signed in.
+  - T1's 4 live videos are unchanged, with the same assets and playback ids.
+  - T1's URLs: no unexpired slot; 0 minted in the last hour, 2 in 24 h. 3 submissions.
+  - Founder: response `5b321c24…` on `L7KxG29…` unchanged. 2 accounts.
+- **S3, Mux:**
+  - U5 is `timed_out`, with no asset and passthrough T1.
+  - All 5 playback ids answer HLS 200 and thumbnail 200.
+  - `mux-reconcile.mjs hosted --cap 10`: reconciliation `ok`, 5 of 5 in use, `2fee7234…`
+    unchanged, exit 1 (the e48 warning only).
+- **Functions and secrets:**
+  - 9 functions, all `ACTIVE`. `mux-create-upload` is still bundle `bd0a6937…` (R0).
+  - 13 secret names (digests only). **No `MUX_CLEANUP_MODE`.**
+- **A0 verdict: pass.** C2w would start from exactly the state its plan expects.
+- **Not done in A0:** no T1 code was sent, and nothing was minted, drained or switched.
+- **Mux quota scope: not confirmed.**
+  - Mux's free-plan note says only "upload and store up to 10 video assets". It does not say
+    whether that is per account or per environment, or what happens at the limit.
+  - Evidence from hosted: the Beta environment has gone from 2 to 5 assets since 16 Oct with no
+    refusal, while the record says the spike environment held 7. That rules out "account-wide 10
+    with 7 spike assets present". It does not tell per-environment from "spike assets gone" or
+    "not the free plan".
+  - What would settle it: Nemat reads the plan and asset usage in the Mux dashboard (Settings,
+    Billing), or approves one read-only `GET /video/v1/assets` count with the spike environment's
+    token.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
