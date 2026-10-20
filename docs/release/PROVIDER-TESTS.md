@@ -196,6 +196,9 @@ else.
 
 ### C2a: abandon-submission cancels it (its deployment is done: H2, H3 on 16 Oct)
 
+**PASSED on hosted and real Mux, 20 Oct 15:57 UTC (BETA-READINESS section 36):** U7 `cancelled`, no
+asset, no job, 5 assets unchanged.
+
 What it proves, against real Mux: the new discard path cancels a waiting upload with partial bytes
 first, retires the row only after Mux confirms, and queues no worker job.
 

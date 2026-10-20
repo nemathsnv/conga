@@ -5072,6 +5072,52 @@ account; C2w and C2a are separate operations; only A0 approved. Plan: `PROVIDER-
     Billing), or approves one read-only `GET /video/v1/assets` count with the spike environment's
     token.
 
+## 36. Provider test C2a passed on the hosted project and real Mux (20 Oct 15:56 UTC; Nemat approved C2a only)
+
+Approved by Nemat on 20 Oct: the single C2a, after a fresh read-only preflight. No C2w, E test,
+worker drain, switch, secret, deployment or push.
+
+- **Preflight (15:55 UTC, read-only):** everything matched section 35.
+  - Mux: 5 assets, `2fee7234…`. Reconciliation `ok`; all 5 playback ids HLS 200 and thumbnail 200.
+  - Clean-up `off`; only e48 open; 13 secret names, no `MUX_CLEANUP_MODE`.
+  - T1: active; 4 live videos; 2 sessions; no unexpired slot; 0 minted in the last hour.
+- **Sign-in:** one code was sent at 15:55:43 UTC. Nemat entered it privately
+  (`provider-t1-verify.sh`), which added a third T1 session. The phone's two sessions were not
+  touched. Re-check just before the run: unchanged, with 3 sessions.
+- **Run (15:56:54 to 15:57:02 UTC):** `provider-member.mjs c2 --reply-to V --submission yes --bytes partial --discard abandon-submission`.
+  1. Mint `200`, U7 `bEKSH5G1…`.
+  2. `post_reply` `200`: row R7 `f889eaeb…`, a `processing` reply to T1's own V; submission
+     `bdd19a3c…`.
+  3. PUT cut after 262,144 of 8,388,608 bytes.
+  4. `abandon-submission` `200` **`{"outcome": "abandoned", "reason": "cancelled"}`**.
+- **Postflight (15:57 UTC):**
+  - Mux: U7 is **`cancelled`, `asset_id` null**, passthrough T1. **Assets still 5, `inventory_md5`
+    `2fee7234…` unchanged**; reconciliation `ok`, 5 of 5 in use. All 5 playback ids still answer
+    HLS 200 and thumbnail 200.
+  - Database:
+    - R7 `deleted`, no asset.
+    - Ledger U7 `claimed`, `cancelled_at` 15:57:02.55.
+    - Submission `abandoned_at` 15:57:02.55, `abandoning_until` null.
+    - **No new clean-up job** (still only e48; 5 jobs in total).
+    - 0 activity rows.
+  - T1's 4 videos are unchanged (rows, assets, playback ids), and the founder video too.
+  - T1: 3 sessions; no unexpired slot. 1 minted in the hour, 3 in 24 h (limits 10 and 30).
+  - Clean-up `off`; health `warn` from e48 only; 13 secret names, no `MUX_CLEANUP_MODE`.
+- **What this proves on the real provider:** the app's discard path (`abandon-submission`, the
+  discard in every build since `b7a02ad`) cancels a waiting upload that has received part of a
+  file. It cancels at Mux first and retires the row only after Mux confirmed. It queues no worker
+  job, and Mux makes no asset.
+- **Residual state; nothing needs cleanup:**
+  - R7 stays as a `deleted` tombstone, invisible everywhere. U7 stays a `claimed`, cancelled
+    ledger row, and the submission stays abandoned. These are the designed records, kept with the
+    account.
+  - The test session (T1's third) cannot be refreshed: the script keeps only the access token,
+    which expires at about 16:56 UTC. The token and address files were deleted from the Mac at the
+    end.
+  - e48 is still pending, as before; it closes in C2w's drains.
+
+*Next:* C2w, its own approval (`PROVIDER-SESSION.md` section 0, "Operation C2w").
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
