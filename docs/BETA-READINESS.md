@@ -5594,6 +5594,157 @@ push.
   restores through a new sign-in only: `get_onboarding_state` on a session that began after
   09:02:55. E2 has its own dry run and live window.
 
+## 45. E2: T2 restored and V2 given a new playback id on hosted and real Mux (21 Oct 09:51 to 10:07 UTC; Nemat's master instruction for E2 to E3b)
+
+From `0030fd3`, on branch `claude/conga-mux-lifecycle-verify-9706a3`. Nemat authorised E2, E3a and E3b in
+one instruction, scoped to T2 (`4fd43a83…`), V2 (`cec0cef7…`) and V2's asset (`xMQeMrW0…`), with the
+stop conditions unchanged (`docs/DECISIONS.md`, 21 Oct). Writes: one sign-in code, the app's launch
+call, one guarded dry run, one guarded live drain, one Mux change (a playback id created). No new
+video, upload or asset. Nothing printed an address, code or token.
+
+- **Preflight (09:51:23 to 09:52:40), all as at the end of section 44:**
+  - **Hosted:** 28 migrations (`20261021000100`), 3 accounts and 3 Auth users, T2 deleted (09:02:55),
+    3 invites, none unused. Switch `off`, health `ok`, 0 open jobs, 7 jobs in all, last worker run #12.
+    0 purge failures, 0 cron failures in 24 h, 10 cron jobs active.
+  - **T2:** 0 sessions; V2 `live`, asset `xMQeMrW0…`, no playback id.
+  - **Mux:** Beta 6 (`5f053d03…`), spike 7 (`315652b2…`). V2's asset `ready` with `playback_ids` `[]`.
+    The 12 original playback ids all HLS 200 and thumbnail 200.
+  - **Secrets and functions:** 13 secrets, no `MUX_CLEANUP_MODE`, `MUX_API_BASE` or `MUX_STREAM_BASE`;
+    9 functions `ACTIVE`, `mux-cleanup` v16.
+  - **Protected:** unchanged against `baseline-e1b`. Fresh `baseline-e2.json` (600).
+- **Sign-in:** `otp` (no `--create`) at 09:52:52, 200. Nemat ran `provider-member-verify.sh`. Checked
+  locally: subject T2, issued 09:53:39 by `otp`, after the deletion.
+- **Restore (09:54:14):** `provider-member.mjs sign-in-state` (`get_onboarding_state`, the app's launch
+  call): 200.
+  - T2 `deleted_at` null, 1 session (the new one).
+  - Exactly one new job: `84a46233-4cbd-4a13-8636-1d87522fa70b`, `sync_playback` / `account_restored`,
+    V2's asset and response, owner T2, due 09:54:14.
+- **Dry run (09:55:06, run #13):** `PROVIDER_WRITE_STEP=E2-dry scripts/provider-drain.sh hosted dry_run
+  "Nemat: E2 dry run" 84a46233-…`. Worker 200, `claimed 1, release 1`. Plan: `direction restore`,
+  `owner_verified true`, `asset_status ready`, `public_playback_ids` `[]`, `would_create public`. Mux
+  unchanged. Switch `off`.
+- **Before live:** protected unchanged against `baseline-e2`; the only open job `84a46233…`.
+- **Window:** Nemat set `MUX_CLEANUP_MODE=live`; confirmed 09:56:30 (14 secrets, `mux-cleanup` v17).
+- **Live drain (09:57:06, run #14):** `PROVIDER_WRITE_STEP=E2-live … live "Nemat: E2 restoration"
+  84a46233-…`. Worker 200, `claimed 1, done 1`, everything else 0. Switch `off` again.
+- **Window closed:** Nemat unset it; confirmed 10:05:44 (13 secrets, no `MUX_CLEANUP_MODE`, v18).
+- **Reconciled (not from the HTTP answer alone):**
+  - **Job:** `done`, `{"outcome": "restored"}`, 1 attempt, finished 09:57:10.
+  - **V2's row:** `live`, `mux_playback_id` `S8LOYjnM2OWKuwvkYSvIeS6i6X00O01md5at00TPzBI01mE`.
+  - **Mux API:** asset `xMQeMrW0…` `ready`, the same `created_at` (`1792572826`), `playback_ids`
+    exactly [`S8LOYjnM…` public]. One new id, no new asset.
+  - **Playback:** `S8LOYjnM…` HLS 200, thumbnail 200. The old `VpzPAAYF…` still 404 and 404.
+  - **Visibility:** `video_visible` true for anonymous viewers, T1 and the founder; `web_video` `live`.
+- **Postflight (10:06):** protected unchanged against `baseline-e2`. Beta 6 assets, 6 ids, all 200/200
+  (inventory `b33a8139…`); spike 7, `315652b2…`. 0 open jobs, 8 in all, last run #14, 0 deleted
+  accounts, health `ok`, switch `off`.
+
+## 46. E3a: T2 deleted a second time and the new playback id revoked (21 Oct 10:07 to 12:03 UTC; same instruction)
+
+Writes: one sign-in code, T2's `delete_account`, one guarded dry run, one guarded live drain, one Mux
+change (V2's playback id deleted). V2's asset kept.
+
+- **Preflight:** section 45's postflight. Fresh `baseline-e3a.json` (600). A private copy of the E2
+  token was kept to test its revocation, then deleted.
+- **Sign-in:** `otp` at 10:09:04, 200; Nemat entered the code. Token: T2, a new session, issued 10:09:31.
+- **Deletion (10:10:05):** `delete-account`, 204, 34 s after the sign-in. 0 open jobs and 0 push tokens
+  before it.
+- **Results:**
+  - **T2:** `deleted_at` 10:10:06.623. Auth sessions 0, live refresh tokens 0.
+  - **Tokens:** `sign-in-state` with the deletion's token and with the E2 token: both 403
+    `session_revoked`. `deleted_at` stayed set.
+  - **Hidden:** `video_visible` false for anonymous viewers, T1 and the founder; `web_video`
+    `unavailable`.
+  - **Exactly one new job:** `2fff1d4d-910c-40cb-8ebe-706e72a84342`, `sync_playback` /
+    `account_deleted`, V2's asset and response, owner T2. 9 jobs in all.
+- **Dry run (10:11:06, run #15):** `claimed 1, release 1`. Plan: `direction revoke`, `owner_verified
+  true`, `would_revoke` exactly [`S8LOYjnM…`]. No other asset.
+- **Gap:** the window opened about 90 minutes after the dry run. The job's one-hour release ended at
+  11:11, so it was simply due. A fresh check at 11:44 showed nothing had moved: the only open job
+  `2fff1d4d…`, last worker run still #15, T2 deleted with 0 sessions, protected unchanged against
+  `baseline-e3a`.
+- **Window:** confirmed open 11:43:59 (14 secrets, v19).
+- **Live drain (11:46:06, run #16):** `PROVIDER_WRITE_STEP=E3a-live … "Nemat: E3a revocation"
+  2fff1d4d-…`. Worker 200, `claimed 1, done 1`. Switch `off`.
+- **Window closed:** confirmed 12:00:38 (13 secrets, no `MUX_CLEANUP_MODE`, v20).
+- **Reconciled:**
+  - **Job:** `done`, `{"outcome": "revoked"}`, 1 attempt, finished 11:46:10.
+  - **V2's row:** `mux_playback_id` null, asset kept.
+  - **Mux API:** asset `xMQeMrW0…` still `ready`, same `created_at`, `playback_ids` `[]`.
+  - **Playback:** `S8LOYjnM…` HLS 404, thumbnail 404.
+- **Postflight (12:03):** protected unchanged against `baseline-e3a`. Beta 6 assets, 5 ids, all
+  200/200; the only asset without an id is V2's. Spike 7/7, all 200/200. 0 open jobs, 9 in all, 1
+  deleted account (T2).
+
+## 47. E3b: T2 permanently deleted by hand and V2's asset deleted at Mux (21 Oct 12:03 to 12:28 UTC; same instruction)
+
+Outcome **E3(ii)** (`PROVIDER-SESSION.md` section 0, rule 2): the same-day manual Auth-user deletion
+(`account_removed`). **It does not verify the scheduled purge** (E3(i), `account_purged` at 03:15 on
+day 31), which has still not run against a deleted account on hosted.
+
+- **Ownership, just before (12:03):**
+  - **Database:** Auth user T2 (confirmed, 1 email identity), soft-deleted 10:10:06. V2 is the only row
+    on asset `xMQeMrW0…` and the only row of T2. Its author is T2, with 0 replies and 0 comments. Upload
+    `cZN6ajHr…` is `claimed` by T2.
+  - **Mux:** passthrough T2, `upload_id` `cZN6ajHr…`.
+  - **Baseline:** `baseline-e3b.json` (600), equal to `baseline-e3a`.
+  - **Expected:** by `accounts_before_delete` → `prepare_account_removal(…, 'account_removed')`,
+    exactly one `delete_asset` for V2's asset and no `cancel_upload` (the upload is claimed).
+- **Deletion:** Nemat deleted user `4fd43a83…` in the Dashboard (Authentication, Users), after
+  checking the address was T2's alias. No error. Its job was created at 12:11:33.
+- **Verified (12:15):**
+  - **T2 gone:** 0 Auth users, identities, sessions, accounts, profiles, place follows, ledger rows and
+    submissions for T2. V2's row deleted (not kept: nobody else replied to it). 0 purge failures.
+  - **Totals:** 2 accounts, 2 Auth users.
+  - **The invite fix on hosted:** the deletion succeeded where it failed before `20261021000100`.
+    T2's invite `eaf264e9…` keeps `redeemed_at` 08:35:04, `redeemed_by` null, not cancelled. 3 invites,
+    0 unused, so it stays consumed.
+  - **Exactly one new job:** `d0023eed-d912-478a-9d95-4780d8379945`, `delete_asset` / `account_removed`,
+    asset `xMQeMrW0…`, upload `cZN6ajHr…`, response V2, owner T2, due at once. 10 jobs in all.
+- **A slip (read-only intent, small write):** the check called the rate-limited `invite_lookup`, which
+  counts a `used` answer as a failed attempt. It added two `rate_limit_counters` rows at 1 hit each:
+  `invite_client` (1 of 10, 15 minutes; the Management API's address) and `invite_stem` (1 of 100,
+  one hour; T2's code stem). They expire on their own and touch no member; left as they are. Later
+  checks use `invite_lookup_unlimited` or `redeemed_at`.
+- **Dry run (12:18:06, run #17):** `claimed 1, release 1`. Plan: `act delete`, `asset_id xMQeMrW0…`,
+  `upload_id cZN6ajHr…`, `owner_verified true`. Then V2's asset still `ready`, and protected unchanged
+  against `baseline-e3b`.
+- **Window:** confirmed open 12:22:07 (14 secrets, v21). The only open job was `d0023eed…`, with no run
+  after #17.
+- **Live drain (12:23:21, run #18):** `PROVIDER_WRITE_STEP=E3b-live … "Nemat: E3b asset deletion"
+  d0023eed-…`. Worker 200, `claimed 1, done 1`. Switch `off`.
+- **Window closed:** confirmed 12:26:12 (13 secrets, no `MUX_CLEANUP_MODE`, `MUX_API_BASE` or
+  `MUX_STREAM_BASE`). Every function is 6 versions up since 09:51, one per secret change; no bundle
+  changed (`mux-cleanup` v22).
+- **Reconciled:**
+  - **Job:** `done`, `{"outcome": "deleted"}`, 1 attempt, finished 12:23:24.
+  - **Mux API:** `GET` asset `xMQeMrW0…` 404, "Asset not found". Beta lists 5 assets, V2's not among them.
+  - **Playback:** `VpzPAAYF…` and `S8LOYjnM…` both HLS 404 and thumbnail 404.
+- **Final postflight (12:27):**
+  - **Protected:** unchanged against `baseline-e3b`, `baseline-e2` and `baseline-cp0a` (taken before T2
+    existed). T1: 7 rows (4 live), 5 sessions, same session ids. Founder: 2 rows (1 live).
+  - **Mux:** Beta 5 assets, `2fee7234…`, the same inventory hash as before CP0′-b; 5 ids, all 200/200.
+    Spike 7, `315652b2…`; 7 ids, all 200/200. 0 assets with T2's passthrough.
+  - **Hosted:** 28 migrations. 2 accounts, 2 Auth users, 0 deleted. 3 invites, 0 unused. Switch `off`,
+    health `ok`, 0 open jobs; jobs 10 (9 `done`, 1 `skipped`); last run #18. 0 purge failures, 0 cron
+    failures. No row references T2.
+  - **Scheduled purge:** `purge-deleted-accounts` (`15 3 * * *`) active; last run 21 Oct 03:15,
+    `succeeded`, with no deleted account to purge.
+  - **Local:** `t2.token` deleted. Left in `~/.conga-provider` (600): the address, id, used invite
+    code, `respond` journal (an upload URL for an upload already used), `t2.v2.json` and the baselines.
+- **Transient read failures, each retried once, read-only:** at about 12:04, `provider-check save`
+  (an empty error from the CLI, then a spike Mux read); at 12:18, a Mux `GET` (connect timeout).
+- **Not verified:**
+  - **E3(i), the automatic purge on hosted.** It needs a deleted account left for 30 days and the 03:15
+    run on day 31. It was rehearsed locally (section 39). The manual path proves the asset deletion
+    and the trigger, not the timer or `purge_deleted_accounts()` itself on hosted.
+  - The app on a device: every step went through the app's endpoints from scripts.
+  - The web player for V2 over HTTP (only `web_video` in SQL).
+- **Time:** 09:51:23 to about 12:28 UTC, about 2 h 37 min of wall-clock time. About 1 h 30 min of it
+  (10:11 to 11:43) was waiting for the E3a window. The rest included waits for codes and secret
+  changes. Active working time was not measured separately.
+- **E1 to E3 status:** E1, E2 and E3a passed; E3(ii) passed; E3(i) is open.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

@@ -125,4 +125,7 @@ Tracked here so they cannot disappear; none is closed by code alone.
   too. Every closed-beta member redeems an invite. **Fixed and deployed (21 Oct 07:06 UTC):**
   Nemat decided the invite keeps its history, loses the link to the person and stays used;
   `20261021000100_invite_member_deletion.sql` is on hosted and verified (`docs/BETA-READINESS.md`
-  section 40). No member has been removed on hosted since; E3 is the first real exercise.
+  section 40). **Verified on hosted 21 Oct 12:11 UTC (E3(ii)):** T2's Auth user deleted in the
+  Dashboard without error, its invite still used (`redeemed_at` kept, `redeemed_by` null), and its one
+  `delete_asset` job queued and drained (`docs/BETA-READINESS.md` section 47). The 03:15 purge path
+  (E3(i)) has not yet removed an invited member on hosted.

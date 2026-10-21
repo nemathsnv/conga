@@ -169,11 +169,14 @@ ends with the postflight.**
   - Any uncertain state: rule 3.
 - **E1 Stage A done 21 Oct 09:02 to 09:05 UTC** (T2 deleted, job `d7e245e3…` dry-run `would_revoke`
   [`VpzPAAYF…`]; `BETA-READINESS.md` section 43). **Stage B done 21 Oct 09:26 UTC:** `d7e245e3…` `revoked`, V2's
-  asset `ready` with no playback id, the other 12 ids unaffected (`BETA-READINESS.md` section 44). E2 needs its own approval.
-- **E1, E2, E3a:** as in section 5's E rows, with T2 for T1 and V2 for V, using
-  `provider-member-verify.sh` for each code. W1 opens before E1 live and closes after E3a live. Rule 1
-  applies throughout W1.
-- **E3b:** the invite fix is deployed (21 Oct). Then (i) or (ii), as in rule 2.
+  asset `ready` with no playback id, the other 12 ids unaffected (`BETA-READINESS.md` section 44).
+- **E2, E3a and E3b were done 21 Oct 09:51 to 12:28 UTC** under one instruction from Nemat, with one short
+  live window per live drain (three in all) rather than one W1 (`BETA-READINESS.md` sections 45 to 47).
+  - **E2:** job `84a46233…` `restored`, with new id `S8LOYjnM…`.
+  - **E3a:** job `2fff1d4d…` `revoked`, asset kept.
+  - **E3b, as outcome (ii):** T2's Auth user deleted in the Dashboard. Job `d0023eed…` `deleted`: asset
+    `xMQeMrW0…` 404 at Mux, Beta 5 `2fee7234…`.
+  - **E3(i), the 03:15 purge on day 31, is not verified on hosted.**
 
 Each drain is listed by job id. pgTAP `0030` section 9 has already shown, locally, the per-video
 job counts for an account with several responses on one prompt.
