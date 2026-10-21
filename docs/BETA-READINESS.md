@@ -5530,6 +5530,70 @@ guarded dry-run drain (the switch to `dry_run` and back to `off`). No live windo
   the app and on the web it is hidden. No sign-in as T2 may happen before the live drain: it would
   turn the pending job into a restore.
 
+## 44. E1 Stage B: V2's playback revoked through one guarded live window on hosted and real Mux (21 Oct 09:20 to 09:38 UTC; Nemat approved Stage B only)
+
+From `6d64704`. One live window (W1), one guarded live drain of job `d7e245e3…`, one Mux change (V2's
+playback id deleted). No sign-in, no E2 or E3, no other asset change, no deployment, migration or
+push.
+
+- **Job selection:**
+  - **The worker cannot take a job id.** `mux_cleanup_claim` takes every due `pending` job, up to 10.
+  - **What restricted it to one:**
+    - `provider-drain.sh` sets the switch live, and in the same transaction refuses unless the due
+      set is exactly {`d7e245e3…`}, then makes one drain request.
+    - `mux_cleanup_set_mode('live')` re-dues only dry-run-released jobs, and this was the only one.
+    - Every other job was `done` or `skipped`, so none could be claimed.
+    - The every-minute `mux-cleanup` cron does nothing while the switch is `off`, and the drain
+      starts just after a tick and turns the switch `off` before the next.
+    - The daily sweep runs at 04:45.
+  - **The remaining gap:** seconds between that check and the worker's claim. Nemat kept off the
+    apps, so no new job could appear in it.
+- **Preflight (09:20:58 to 09:23:02), all as expected:**
+  - **T2:** deleted 09:02:55, 0 sessions, 0 live refresh tokens.
+  - **The job:** the only open job is `d7e245e3…`. `sync_playback` / `account_deleted`, owner T2, V2's
+    asset and response, 0 attempts, plan `revoke` [`VpzPAAYF…`].
+  - **V2's row:** unchanged.
+  - **Mux:** Beta 6, spike 7. All 13 playback ids 200/200, V2's included. V2's asset `ready` with
+    [`VpzPAAYF…` public].
+  - **Protected:** unchanged against `baseline-e1`. Fresh `baseline-e1b.json` (600).
+  - **Clean-up:** `off`, health `ok`. Last worker run #11; `mux-cleanup` v14; 13 secrets, no
+    `MUX_CLEANUP_MODE`.
+- **W1 open:** Nemat ran `supabase secrets set MUX_CLEANUP_MODE=live`. The lead confirmed it at
+  09:25: 14 secrets, `MUX_CLEANUP_MODE` present, `mux-cleanup` v15.
+- **Live drain (09:25:20 to 09:26:21):** `PROVIDER_WRITE_STEP=E1-live scripts/provider-drain.sh
+  hosted live "Nemat: E1 Stage B revocation" d7e245e3-…`.
+  - Sent 09:26:08 (run #12).
+  - Worker answer 200: `mode live, claimed 1, done 1`, with found_asset, retry, release, skipped,
+    failed, stale and unrecorded all 0.
+  - Database switch `off` again at 09:26:17.
+- **Reconciled (09:29:39 to 09:29:46):**
+  - **Job:** `d7e245e3…` `done`, `{"outcome": "revoked"}`, 1 attempt, finished 09:26:12.
+  - **V2's row:** `mux_playback_id` null, asset kept.
+  - **Mux API:** asset `xMQeMrW0…` `ready`, `playback_ids` `[]`.
+  - **The old URL:** `VpzPAAYF…` HLS 404, thumbnail 404. This is backed by Mux's own record, not
+    only a CDN answer.
+- **W1 closed:** Nemat ran `supabase secrets unset MUX_CLEANUP_MODE`. The lead confirmed it at
+  09:36: 13 secrets, no `MUX_CLEANUP_MODE` (nor `MUX_API_BASE` or `MUX_STREAM_BASE`), `mux-cleanup`
+  v16 (each secret change bumps the version; the bundle is unchanged). The function's switch was
+  set for about 11 minutes; the database switch was live only inside the drain, about 10 s.
+- **Postflight (09:36:42 to 09:37:45):**
+  - **Clean-up:** switch `off`, last changed by "Nemat: E1 Stage B revocation (finished)" at
+    09:26:17. Health `ok`, no problems. 0 open jobs, 7 in all. No worker run after #12. 0 cron
+    failures.
+  - **Only V2's playback was revoked:**
+    - Beta 6 assets, 5 playback ids, all 200/200: the 5 original assets each keep their one id.
+    - V2's asset is `ready` with none.
+    - Spike 7 assets, 7 ids, all 200/200.
+    - So all 12 original playback ids work.
+  - **Inventories:** Beta's hash is now `5f053d03…` (only V2's playback list changed); the protected
+    hash of the other 5 is unchanged. Spike `315652b2…` unchanged. All 13 assets exist.
+  - **Protected:** `provider-check compare` against `baseline-e1b` unchanged. T1's and the founder's
+    accounts, rows, playback ids, ledgers and session ids are as before.
+  - **T2:** still deleted (09:02:55), 0 sessions. 3 accounts.
+- **Next:** E2 (T2 signs back in within 30 days; a new playback id for V2) needs its own approval. E2
+  restores through a new sign-in only: `get_onboarding_state` on a session that began after
+  09:02:55. E2 has its own dry run and live window.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
