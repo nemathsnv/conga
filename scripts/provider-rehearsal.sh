@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Rehearses the provider tests C2, E1, E2 and E3 (docs/release/PROVIDER-TESTS.md) on a LOCAL stack
 # against a fake Mux, with the same scripts the hosted run uses (provider-member.mjs,
-# provider-drain.sh, provider-sql.sh, provider-mux-read.mjs). Real Mux and the hosted project are
-# never contacted.
+# provider-drain.sh, provider-sql.sh, provider-mux-read.mjs, provider-check.mjs), then the T2 tooling
+# (provider_t2_rehearsal_test.ts). The Mux API and the hosted project are never contacted. (One
+# exception, not an API call: mux-upload-status prewarms a live video's HLS on stream.mux.com, an
+# unauthenticated GET of a made-up playback id here, answered 404.)
+#   T2_ONLY=1   skips the first suite; T2_CLIP=<mp4> reuses a clip (otherwise one is generated).
 #
 #   scripts/provider-rehearsal.sh [stack folder]     (default: the repository; the folder whose
 #                                                     supabase/config.toml names the stack)
@@ -54,4 +57,11 @@ done
 
 eval "$(sed -n -e 's/^API_URL=/export SUPABASE_URL=/p' -e 's/^ANON_KEY=/export SUPABASE_ANON_KEY=/p' -e 's/^SERVICE_ROLE_KEY=/export SUPABASE_SERVICE_ROLE_KEY=/p' <<<"$STATUS")"
 export DB_CONTAINER="supabase_db_$PROJECT" STACK_DIR="$STACK" FAKE_MUX_PORT="$PORT" CLEANUP_KEY="provider-rehearsal-cleanup-key"
-deno test --allow-env --allow-net --allow-run --allow-read --allow-write "$REPO/supabase/functions/_tests/provider_rehearsal_test.ts"
+[ "${T2_ONLY:-0}" = 1 ] || deno test --allow-env --allow-net --allow-run --allow-read --allow-write "$REPO/supabase/functions/_tests/provider_rehearsal_test.ts"
+# The T2 tooling (E1 to E3 on a disposable account), with the same 6-second clip the hosted run uses.
+CLIP_DIR="$(mktemp -d)"
+T2_CLIP="${T2_CLIP:-$CLIP_DIR/t2-clip.mp4}"
+[ -f "$T2_CLIP" ] || swift "$REPO/scripts/make-test-clip.swift" "$T2_CLIP" 2>/dev/null
+export T2_CLIP
+deno test --allow-env --allow-net --allow-run --allow-read --allow-write "$REPO/supabase/functions/_tests/provider_t2_rehearsal_test.ts"
+rm -rf "$CLIP_DIR"

@@ -137,7 +137,10 @@ async function script(cmd: string, args: string[], env: Record<string, string> =
   try { json = start >= 0 ? JSON.parse(text.slice(start, text.lastIndexOf("}") + 1)) : null; } catch { json = null; }
   return { code: out.code, out: text, json };
 }
-const memberEnv = () => ({ PT_SUPABASE_URL: API, PT_ANON_KEY: ANON, PT_TOKEN_FILE: tokenFile, PT_LOCAL_UPLOAD_BASE: `http://127.0.0.1:${PORT}` });
+// The member the scripts act as (PT_EXPECT_USER): this run's stand-in T1, a new random id, so the
+// guards built into provider-member.mjs (the real T1 and founder ids) do not apply to it.
+let current = "";
+const memberEnv = () => ({ PT_SUPABASE_URL: API, PT_ANON_KEY: ANON, PT_TOKEN_FILE: tokenFile, PT_LOCAL_UPLOAD_BASE: `http://127.0.0.1:${PORT}`, PT_EXPECT_USER: current });
 const t1 = (...args: string[]) => script("node", ["scripts/provider-member.mjs", ...args], memberEnv());
 const muxRead = (...args: string[]) => script("node", ["scripts/provider-mux-read.mjs", ...args], {
   MUX_TOKEN_ID: "rehearsal-id", MUX_TOKEN_SECRET: "rehearsal-secret", MUX_API_BASE: `http://127.0.0.1:${PORT}`,
@@ -159,6 +162,7 @@ async function member(name: string, keepToken: boolean) {
   const link = await http("/auth/v1/admin/generate_link", { method: "POST", body: { type: "magiclink", email } });
   const otp = (link.json as { email_otp: string }).email_otp;
   if (keepToken) {
+    current = id;
     const v = await t1("verify", email, otp);
     assertEquals(v.json?.token_saved, true, "verify saves the token");
     noSecrets(v, "verify");
