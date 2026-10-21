@@ -1,7 +1,8 @@
 # Invite-linked account deletion fix (21 Oct 2026)
 
 Branch `claude/invite-account-deletion-fix-693183`, on `claude/provider-t2-tooling` (`c0d0ba8`).
-Local only: nothing is deployed, pushed or merged. No hosted query, Mux call or real deletion was made.
+**Deployed to hosted 21 Oct 07:06:52 UTC (Nemat's approval) and verified:** `docs/BETA-READINESS.md`
+section 40. Nothing else was deployed, pushed or merged; no Mux call or real deletion was made.
 
 ## The defect
 
@@ -59,7 +60,7 @@ row changes. Every existing row satisfies the new check, because the old one was
   old predicate, a deleted member's invite would have counted as unused: the guard would have refused
   CP0′-a, and the read-back would have found two rows.
 
-## Not changed, for Nemat to decide (the spec does not say)
+## Not changed; both decided by Nemat on 21 Oct (`docs/DECISIONS.md`)
 
 1. **The inviter's slot comes back.** `invites_left` counts an invite against its inviter while
    `expires_at > now()`, or while its redeemer still has a profile. Once the invitee is permanently
@@ -67,7 +68,7 @@ row changes. Every existing row satisfies the new check, because the old one was
    are valid for 7 days and the purge runs after 30, so in practice the inviter gets the slot back at
    the purge. `my_invites` also stops listing it under "Joined". SPEC Section 14 says only "Cancelling
    an unused invite returns it". It does not say what happens when the invitee is deleted. The code
-   was already written this way; the defect just meant the state never occurred.
+   was already written this way; the defect just meant the state never occurred. **Decision: keep it.**
 2. **What the kept row still holds.** It keeps `code`, `cohort`, `inviter_id`, `created_at`,
    `expires_at`, `redeemed_at` and `cancelled_at`, with no account id, name, email or username.
    - The approved decision keeps exactly this history, so the row is not changed further.
@@ -75,6 +76,8 @@ row changes. Every existing row satisfies the new check, because the old one was
      be a chosen word: `scripts/create-invite.sh PUTU-7K2` makes the code `PUTU-7K2`.
    - **No retention period is defined** for invite rows.
    - `docs/policies/ACCOUNT-DELETION.md` now lists the kept row.
+   - **Decision:** a provisional 90-day retention target after permanent deletion, subject to privacy
+     and legal review, implemented separately later. Nothing in this migration enforces it.
 
 ## Tests
 
@@ -122,7 +125,7 @@ Results are in `docs/BETA-READINESS.md` section 39.
   - Unchanged and still out of scope: the in-process integration suites stub `fetch`, so they never
     reached the network.
 
-## Hosted deployment (needs Nemat's separate approval; not done)
+## Hosted deployment (approved and done 21 Oct; the record is in `BETA-READINESS.md` section 40)
 
 ### Preflight (read-only)
 

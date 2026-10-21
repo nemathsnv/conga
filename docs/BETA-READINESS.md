@@ -5304,6 +5304,70 @@ Branch `claude/invite-account-deletion-fix-693183` on `c0d0ba8`. The full record
   - whether the inviter gets the slot back once the invitee is purged (what the code does today);
   - a retention period for invite rows.
 
+## 40. Invite deletion migration deployed to hosted (21 Oct 07:03 to 07:08 UTC; Nemat approved this one migration only)
+
+From `096fe7a` (clean tree). The migration was pushed from a `git archive` of `supabase/migrations`,
+`config.toml` and `templates` in a scratch folder. Every read used `supabase db query --linked
+--project-ref` (Management API) and was select-only. The checks are in
+`scripts/invite-migration-hosted-check.sh pre|post <outdir>`; they print counts, hashes and verdicts,
+never a code, email or secret. Nothing else was done: no row, grant, function or index change, no
+Edge Function, secret, switch, Mux call, Auth user, T2, EAS update or git push.
+
+- **Preflight (07:03:50), all PASS:**
+  - **Migrations and schema:**
+    - 27 migrations, the latest `20261019000200`.
+    - Fingerprint 866 lines, line for line `docs/release/mr-expected-27-migrations.fp`.
+    - `invites_redeemed_pair` `CHECK (((redeemed_by IS NULL) = (redeemed_at IS NULL)))`.
+    - The code check unchanged.
+    - Foreign keys: cohort no action; `inviter_id` and `redeemed_by` set null.
+  - **Invites:** 2, none unused, none inconsistent, none orphaned. Both answer `used`.
+  - **Accounts:** 2, none deleted, so no purge is pending. 2 Auth users. 0 purge failures.
+  - **Clean-up:**
+    - Switch `off`, health `ok`, 0 open jobs (6 in all, 2 `delete_asset`, all closed).
+    - 0 avatar removals pending.
+    - Cron: 10 jobs active, 0 failures since 20 Oct, the 03:15 purge succeeded today.
+  - **Secrets:** 13 names; no `MUX_CLEANUP_MODE`, `MUX_API_BASE` or `MUX_STREAM_BASE`.
+  - **Table hashes:** row count and content md5 recorded for each of the 36 public tables and
+    `auth.users`.
+- **Dry run:** `supabase db push --linked --project-ref picvoavfxnajfjkqawju --workdir <scratch>
+  --dry-run` listed exactly `20261021000100_invite_member_deletion.sql` (md5
+  `97478520288ae63497c1c560c49a2a2a`), with seeds and roles both `[]`.
+- **Backup (07:05:16):** `public.invites`, data only, all 9 columns, 2 rows, as JSON.
+  - **File:** `~/.conga-provider/backups/invites-before-20261021000100-20261021T070516Z.json`, mode
+    600, in a mode-700 folder outside git; sha256 `9faa4d18…`. Not displayed.
+  - **Restore, if ever needed:** `insert … select * from json_populate_recordset(null::public.invites,
+    <rows>)`.
+- **Push, first attempt (07:05:32):** the CLI failed before connecting:
+  `DbConfigLoginRoleNetworkError … TransportError`.
+  - A read-only check confirmed nothing had applied: still 27 migrations, the old check.
+  - A repeated dry run listed the same single migration, so the same push was run again.
+- **Push (07:06:48 to 07:06:52):** "Applying migration 20261021000100_invite_member_deletion.sql",
+  "Finished supabase db push".
+- **Postflight (07:07:07), all PASS:**
+  - **Schema:**
+    - 28 migrations, the latest `20261021000100`.
+    - Fingerprint 866 lines, line for line `docs/release/inv-expected-28-migrations.fp` (the
+      rehearsed listing).
+    - Against the hosted preflight, exactly one line differs:
+      `constraint|invites.invites_redeemed_pair|75b9cec6…` became
+      `constraint|invites.invites_redeemer_has_time|33d7d7b0…`.
+    - The new check is `CHECK (((redeemed_by IS NULL) OR (redeemed_at IS NOT NULL)))`. The code check
+      and the foreign keys are unchanged.
+    - Both column comments are present.
+  - **Data:**
+    - Every one of the 36 public tables and `auth.users` has the same row count and content hash as
+      before, `invites` and `mux_cleanup_jobs` included.
+    - Both invites still answer `used`. `invite_lookup_unlimited` still tests `redeemed_at`.
+  - **Clean-up:** switch `off`, health `ok`, 0 open jobs, the job totals unchanged. 0 purge failures,
+    0 deleted accounts, 0 cron failures. Secret names unchanged.
+- **Not verified on hosted:** an actual removal of an invited member. The rehearsal on the isolated
+  stack covered it (section 39); on hosted the first will be E3, which needs its own approval.
+- **Next (each its own approval):** creating and onboarding T2 (CP0′-a, CP0′-b), then E1 to E3.
+- **Decided with the approval:**
+  - an inviter gets the slot back once the invitee is purged (existing behaviour);
+  - a provisional 90-day retention target for anonymised redeemed-invite records, subject to legal
+    review. It is not implemented.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

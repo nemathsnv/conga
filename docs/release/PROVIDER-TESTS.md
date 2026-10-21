@@ -325,9 +325,8 @@ restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
    (`account_purged`), is the only one that verifies the automatic purge. **E3(ii)**, deleting the Auth
    user in the Dashboard (`account_removed`, `accounts_before_delete`, due at once), verifies that path
    and the asset deletion, not the purge; if it is chosen, the purge stays unverified on hosted and the
-   record says so. **Both are blocked until `20261021000100` is on hosted:** an account that redeemed an
-   invite cannot be removed (`invites_redeemed_pair`; fixed locally 21 Oct,
-   `INVITE-DELETION-FIX-21OCT.md`).
+   record says so. The invite defect that blocked both (`invites_redeemed_pair`) is fixed:
+   `20261021000100` deployed 21 Oct (`INVITE-DELETION-FIX-21OCT.md`).
 5. **Rollback:** none. Once a is deleted, V cannot be restored. Nemat accepts this before E3.
 
 ## 7. After every step

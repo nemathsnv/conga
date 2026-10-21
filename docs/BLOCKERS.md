@@ -122,7 +122,7 @@ Tracked here so they cannot disappear; none is closed by code alone.
   fixed). `invites.redeemed_by` is `on delete set null` but `redeemed_at` stays, so
   `invites_redeemed_pair` refuses the row. The 03:15 purge then fails for that account every day: the
   failure is recorded and its videos are never deleted at Mux. Deleting the Auth user by hand fails
-  too. Every closed-beta member redeems an invite. **Fixed locally, not deployed (21 Oct):** Nemat
-  decided the invite keeps its history, loses the link to the person and stays used;
-  `20261021000100_invite_member_deletion.sql`. Closed only once the hosted migration is approved and
-  verified (`docs/release/INVITE-DELETION-FIX-21OCT.md`).
+  too. Every closed-beta member redeems an invite. **Fixed and deployed (21 Oct 07:06 UTC):**
+  Nemat decided the invite keeps its history, loses the link to the person and stays used;
+  `20261021000100_invite_member_deletion.sql` is on hosted and verified (`docs/BETA-READINESS.md`
+  section 40). No member has been removed on hosted since; E3 is the first real exercise.

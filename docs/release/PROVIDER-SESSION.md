@@ -110,11 +110,11 @@ spike 7, one disposable asset fits.
 
    Cancellation is never assumed, and no new URL is minted while Mux has not proven the old one empty.
 
-**Blocker for E3, found by the rehearsal (21 Oct; fixed locally, not deployed):** an account that
+**Blocker for E3, found by the rehearsal (21 Oct; fixed and deployed 21 Oct 07:06 UTC):** an account that
 redeemed an invite cannot be removed. Nemat decided (21 Oct) that the invite keeps its history, loses
 the link to the person and stays used: `20261021000100_invite_member_deletion.sql`, rehearsed locally
-(`docs/release/INVITE-DELETION-FIX-21OCT.md`). The hosted migration is its own approval, before
-CP0′-a.
+(`docs/release/INVITE-DELETION-FIX-21OCT.md`). Deployed and verified on hosted
+(`docs/BETA-READINESS.md` section 40); E3(i) and E3(ii) are no longer blocked by it.
 
 - **Cause:** `invites.redeemed_by` is `on delete set null`, but `redeemed_at` stays set, so
   `invites_redeemed_pair` refuses the row and the whole deletion rolls back.
@@ -167,7 +167,7 @@ ends with the postflight.**
 - **E1, E2, E3a:** as in section 5's E rows, with T2 for T1 and V2 for V, using
   `provider-member-verify.sh` for each code. W1 opens before E1 live and closes after E3a live. Rule 1
   applies throughout W1.
-- **E3b:** blocked until the invite fix is deployed. Then (i) or (ii), as in rule 2.
+- **E3b:** the invite fix is deployed (21 Oct). Then (i) or (ii), as in rule 2.
 
 Each drain is listed by job id. pgTAP `0030` section 9 has already shown, locally, the per-video
 job counts for an account with several responses on one prompt.
