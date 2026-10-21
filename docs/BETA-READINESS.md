@@ -5368,6 +5368,58 @@ Edge Function, secret, switch, Mux call, Auth user, T2, EAS update or git push.
   - a provisional 90-day retention target for anonymised redeemed-invite records, subject to legal
     review. It is not implemented.
 
+## 41. CP0′-a: disposable account T2 created and onboarded on hosted (21 Oct 07:28 to 08:36 UTC; Nemat approved CP0′-a only)
+
+From `c94043a`, as `PROVIDER-SESSION.md` section 0 describes. No video, upload or Mux asset; no Mux
+write (GETs only); no E test, deletion, switch, deployment or push. Nothing printed an address,
+code, invite code or token.
+
+- **Preflight (07:28 to 07:30), all as expected:**
+  - **Schema:** 28 migrations, fingerprint equal to `inv-expected-28-migrations.fp`.
+  - **Accounts and invites:** 2 accounts (T1 `test_t1`, founder `nemathsnv`), none deleted. 2 invites,
+    both redeemed, none unused or inconsistent. No purge failures.
+  - **Clean-up:** `off`, health `ok`, 0 open jobs, no cron failures.
+  - **Since the deployment postflight:** every table's row count and content hash unchanged.
+  - **Baseline `~/.conga-provider/baseline-cp0a.json` (600):**
+    - T1: 7 rows, 4 live, 5 sessions.
+    - Founder: 2 rows, 1 live.
+    - Mux Beta 5 `2fee7234…`, spike 7 `315652b2…` (GETs).
+- **Address:** Nemat wrote `~/.conga-provider/t2.email` (600, a `+` alias). It was checked for shape
+  only and never displayed.
+- **Write 1, the invite (08:28:52):** `provider-t2-invite.sh hosted 2`, guarded.
+  - Invite `eaf264e9-4715-421c-8f10-b085e296fae1`: team, Canggu, expires 28 Oct 08:29 UTC.
+  - Code only in `~/.conga-provider/t2.invite` (600).
+  - Then: 3 invites, exactly 1 unused (the new one).
+- **Write 2, one code (08:29:28):** `provider-member.mjs otp --create`. The address check found no
+  account, then `/auth/v1/otp` answered 200.
+  - One new Auth user for the address: unconfirmed, 1 email identity.
+  - Its `accounts` row was made at once by the `on_auth_user_created` trigger, not by the first
+    sign-in as the plan said; the plan is corrected.
+- **Nemat, `provider-member-verify.sh --new`:**
+  - 200, user `4fd43a83-1ade-4025-9695-4d6137532b36`, new account, id recorded. `t2.id` and
+    `t2.token` are 600.
+  - Checked from the server: the only user with the address, confirmed, one email identity, one
+    session, not T1 or the founder, no age, profile, cohort or invite yet.
+- **Write 3, onboarding (08:35:03):** `provider-member.mjs onboard --name "test two" --username
+  test_t2`: `confirm_age` 204, `redeem_invite` 200 `valid`, `create_profile` 200,
+  `acknowledge_disclosure` 204. `ok: true`.
+- **Postflight (08:35 to 08:36):**
+  - **Totals:** 3 accounts, 3 Auth users, 3 invites, 0 unused, 0 inconsistent.
+  - **T2's invite:** redeemed by T2, `redeemed_at` 08:35:04, not cancelled; `invite_lookup` now
+    answers `used`, so it cannot be reused.
+  - **T2's account:** Canggu cohort, follows Canggu (1 place follow), profile `test_t2`, 1 session.
+    Nothing else: 0 rows, 0 ledger, 0 submissions.
+  - **Protected:** `provider-check compare` unchanged. T1's and the founder's accounts, rows,
+    ledgers and session ids are as at the baseline; Mux Beta 5 and spike 7, the same inventories, 0
+    T2 assets.
+  - **Clean-up:** `off`, health `ok`, no open job, job totals unchanged (6). 0 purge failures, 0
+    cron failures. Fingerprint unchanged.
+  - **Tables changed, all expected:** `accounts`, `auth.users`, `invites`, `place_follows` and
+    `profiles` +1 each.
+  - **`rate_limit_counters` +2:** `signin_address` and `signin_client`, one hit each, from the app's
+    address check before the code. Both expire after 15 minutes.
+- **Next:** CP0′-b (T2's one video, one new Beta asset) needs its own approval.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

@@ -130,7 +130,8 @@ the link to the person and stays used: `20261021000100_invite_member_deletion.sq
 **Operations, each its own approval. Each starts with a fresh baseline and the read-only checks, and
 ends with the postflight.**
 
-- **CP0′-a: invite and account (hosted DB and Auth; one email; no Mux call).**
+- **CP0′-a: invite and account (hosted DB and Auth; one email; no Mux call).** **Done 21 Oct 08:28 to
+  08:35 UTC; T2 is `4fd43a83-1ade-4025-9695-4d6137532b36`** (`BETA-READINESS.md` section 41).
   - Before: Nemat writes T2's address (a `+` alias of an inbox he controls) to `~/.conga-provider/t2.email`, mode 600.
   - The lead, in a shell that has run `source scripts/provider-env.sh`:
     1. **Preflight (read-only):**
@@ -145,7 +146,8 @@ ends with the postflight.**
        - First the app's address check (`auth-signin-method`); refused if the address has an account.
        - Then `/auth/v1/otp` with `create_user: true`: one Auth user, unconfirmed, and one email.
     4. **Nemat:** `scripts/provider-member-verify.sh --new` confirms the address and starts T2's first session.
-       - `get_onboarding_state` creates T2's `accounts` row.
+       - T2's `accounts` row already exists: the `on_auth_user_created` trigger makes it in write 2,
+         when the Auth user is created (seen 21 Oct; this line used to say `get_onboarding_state`).
        - T2's id is written to `~/.conga-provider/t2.id`.
        - Any mismatch removes the token and writes nothing.
     5. **Write 3, onboarding:** `node scripts/provider-member.mjs onboard --invite-file "$PT_INVITE_FILE" --name "test two" --username test_t2`, which runs:
@@ -158,7 +160,7 @@ ends with the postflight.**
        - `provider-check state hosted --t2 <id>`: onboarded, 0 rows, 0 ledger rows, 0 jobs;
        - 3 accounts, 3 invites (T2's redeemed);
        - Mux unchanged: Beta 5 `2fee7234…`, spike 7 `315652b2…`.
-  - **Rollback:** none needed, since T2 holds nothing. Because of the blocker, T2 cannot be removed until the fix.
+  - **Rollback:** none needed, since T2 holds nothing. With `20261021000100` deployed, T2 can be removed.
 - **CP0′-b: V2 (one new Beta asset).**
   - `respond --prompt ddd5a383-be11-475f-9576-0a6db79cabe3 --file ~/.conga-provider/t2-clip.mp4`.
     The clip is 6.000 s, no person, sha256 `11d12a97…`.
