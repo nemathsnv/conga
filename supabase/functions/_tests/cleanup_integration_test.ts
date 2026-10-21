@@ -143,7 +143,7 @@ const members: Member[] = [];
 async function member(name: string): Promise<Member> {
   const email = `sec3-${run}-${name}@example.com`;
   const created = await http("/auth/v1/admin/users", { method: "POST", body: { email, email_confirm: true } });
-  assertEquals(created.status, 200, `create ${name}`);
+  assertEquals(created.status, 200, `create ${name}: ${JSON.stringify(created.json)}`);
   const id = (created.json as { id: string }).id;
   const link = await http("/auth/v1/admin/generate_link", { method: "POST", body: { type: "magiclink", email } });
   const otp = (link.json as { email_otp: string }).email_otp;
@@ -944,6 +944,191 @@ Deno.test("G5: the sweep pages past 100 assets, judges only what it listed when 
 });
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Left on unattended (20261021000200): unknown results, the emergency stop, the deletion cap, a
+// worker that is not live, forged jobs.
+/** Mux does what was asked, but the answer never arrives (the worker's 15 s timeout, sooner). */
+const lostAnswer = (method: string, path: string, body: string | null = null) =>
+  fakeMux(method, new URL(`https://api.mux.com${path}`), body, false).then(() => Promise.reject(new DOMException("answer lost", "TimeoutError")));
+const health = async () => await service("mux_cleanup_health") as { status: string; problems: { check: string; level: string }[]; metrics: Record<string, unknown> };
+const hasProblem = (h: { problems: { check: string; level: string }[] }, check: string, level: string) => h.problems.some((p) => p.check === check && p.level === level);
+
+Deno.test("no jobs: a drain leases nothing and does not call Mux", async () => {
+  await drainAll();
+  muxCalls.length = 0;
+  const r = await drain() as Record<string, unknown>;
+  assertEquals([r.ok, r.claimed, r.mode], [true, 0, "live"]);
+  assertEquals(muxCalls, []);
+});
+
+Deno.test("unknown result: Mux deletes the asset but the answer is lost; the retry finds it gone; one DELETE", async () => {
+  const una = await member("una");
+  const v = await liveVideo(una);
+  assertEquals((await rpc(una, "delete_video", { p_id: v.id })).status, 204);
+  fault = (method, path) => method === "DELETE" && path === `/video/v1/assets/${v.asset.id}` ? lostAnswer(method, path) : null;
+  muxCalls.length = 0;
+  const first = await drain(1) as Record<string, number>;
+  fault = () => null;
+  assertEquals([first.claimed, first.retry], [1, 1], "the lost answer is a retry");
+  assert(!assets.has(v.asset.id), "Mux did delete it");
+  const [pending] = await jobs(v.asset.id);
+  assertEquals([pending.status, pending.last_error], ["pending", "mux_timeout"]);
+  await patchJobs(v.asset.id, { not_before: due() });
+  await drainAll();
+  const [job] = await jobs(v.asset.id);
+  assertEquals([job.status, job.result?.outcome], ["done", "already_gone"]);
+  assertEquals(calls("DELETE", v.asset.id), 1, "no second DELETE");
+  assertEquals((await row(v.id))?.mux_asset_id, null, "the video forgets the asset");
+});
+
+Deno.test("unknown result: a restore's new playback id is made but the answer is lost; the retry keeps that id; one POST", async () => {
+  const vic = await member("vic");
+  const v = await liveVideo(vic);
+  assertEquals((await rpc(vic, "delete_account")).status, 204);
+  await drainAll();
+  assertEquals(assets.get(v.asset.id)!.playback_ids, [], "revoked");
+  assertEquals((await rpc(await signInAgain(vic), "get_onboarding_state")).json.has_profile, true);
+  fault = (method, path) => method === "POST" && path === `/video/v1/assets/${v.asset.id}/playback-ids` ? lostAnswer(method, path, JSON.stringify({ policy: "public" })) : null;
+  muxCalls.length = 0;
+  const first = await drain(1) as Record<string, number>;
+  fault = () => null;
+  assertEquals(first.retry, 1);
+  assertEquals(assets.get(v.asset.id)!.playback_ids.length, 1, "Mux made the id");
+  assertEquals((await row(v.id))?.mux_playback_id, null, "not recorded yet: the answer was lost");
+  await patchJobs(v.asset.id, { not_before: due() });
+  await drainAll();
+  const made = assets.get(v.asset.id)!.playback_ids[0].id;
+  assertEquals((await row(v.id))?.mux_playback_id, made, "the retry records the id Mux made");
+  assertEquals(calls("POST", `${v.asset.id}/playback-ids`), 1, "no second playback id");
+  assertEquals((await web(v.id)).video?.playback_id, made);
+});
+
+Deno.test("unknown result: a revocation's DELETE is lost; the retry sees no public id and finishes; one DELETE", async () => {
+  const wes = await member("wes");
+  const v = await liveVideo(wes);
+  const pb = v.asset.playback_ids[0].id;
+  assertEquals((await rpc(wes, "delete_account")).status, 204);
+  fault = (method, path) => method === "DELETE" && path === `/video/v1/assets/${v.asset.id}/playback-ids/${pb}` ? lostAnswer(method, path) : null;
+  muxCalls.length = 0;
+  assertEquals((await drain(1) as Record<string, number>).retry, 1);
+  fault = () => null;
+  assertEquals(assets.get(v.asset.id)!.playback_ids, [], "Mux did revoke it");
+  await patchJobs(v.asset.id, { not_before: due() });
+  await drainAll();
+  const [job] = await jobs(v.asset.id);
+  assertEquals([job.status, job.result?.outcome], ["done", "revoked"]);
+  assertEquals(calls("DELETE", `/playback-ids/${pb}`), 1, "no second DELETE");
+  assertEquals((await row(v.id))?.mux_playback_id, null);
+  assert(assets.has(v.asset.id), "the asset stays for the 30 days");
+});
+
+Deno.test("unknown result: an upload's cancel is lost; the retry reads it cancelled; one PUT", async () => {
+  const xan = await member("xan");
+  const u = await mint(xan);
+  const p = await rpc(xan, "post_response", { p_prompt: await prompt(), p_upload_id: u, p_caption: null, p_duration_ms: 9000 });
+  assertEquals((await rpc(xan, "delete_video", { p_id: p.json.id })).status, 204);
+  fault = (method, path) => method === "PUT" && path === `/video/v1/uploads/${u}/cancel` ? lostAnswer(method, path) : null;
+  muxCalls.length = 0;
+  assertEquals((await drain(1) as Record<string, number>).retry, 1);
+  fault = () => null;
+  assertEquals(uploads.get(u)?.status, "cancelled");
+  await patchJobs(u, { not_before: due() });
+  await drainAll();
+  const [job] = await jobs(u);
+  assertEquals([job.status, job.result?.outcome], ["done", "cancelled"]);
+  assertEquals(calls("PUT", u), 1, "no second PUT");
+});
+
+Deno.test("emergency stop: the switch goes off while the worker reads Mux; nothing is changed; going live again finishes it", async () => {
+  const yuki = await member("yuki");
+  const v = await liveVideo(yuki);
+  assertEquals((await rpc(yuki, "delete_video", { p_id: v.id })).status, 204);
+  // The worker has leased the job and is reading the asset when the team turns clean-up off.
+  fault = (method, path) => method === "GET" && path === `/video/v1/assets/${v.asset.id}`
+    ? setMode("off").then(() => fakeMux(method, new URL(`https://api.mux.com${path}`), null, false))
+    : null;
+  muxCalls.length = 0;
+  const r = await drain(1) as Record<string, number>;
+  fault = () => null;
+  assertEquals([r.claimed, r.release], [1, 1], "released, not acted on");
+  assertEquals(destructive(v.asset.id), [], "no DELETE after the switch went off");
+  assert(assets.has(v.asset.id));
+  const [held] = await jobs(v.asset.id);
+  assertEquals([held.status, held.attempts], ["pending", 0], "the job waits, no attempt used");
+  assertEquals(((await drain()) as Record<string, number>).claimed, 0, "off: nothing is leased");
+  await setMode("live");
+  await drainAll();
+  assert(!assets.has(v.asset.id), "back on, the deletion is done");
+  assertEquals((await jobs(v.asset.id))[0].status, "done");
+});
+
+Deno.test("deletion cap: past the cap deletions pause and alert, revocations go on, a resume finishes them", async () => {
+  const zoe = await member("zoe");
+  const ana = await member("ana");
+  const vs = [await liveVideo(zoe), await liveVideo(zoe), await liveVideo(zoe)];
+  const kept = await liveVideo(ana);
+  await drainAll();
+  // Nothing of this run's earlier deletions counts once resumed; the cap is 2 from here.
+  await service("mux_cleanup_resume_deletions", { p_by: `test-${run}` });
+  await service("mux_cleanup_set_deletion_cap", { p_cap: 2, p_by: `test-${run}` });
+  for (const v of vs) assertEquals((await rpc(zoe, "delete_video", { p_id: v.id })).status, 204);
+  assertEquals((await rpc(ana, "delete_account")).status, 204);
+  await drainAll();
+  assertEquals(vs.filter((v) => !assets.has(v.asset.id)).length, 2, "two deleted");
+  assertEquals(assets.get(kept.asset.id)!.playback_ids, [], "the revocation was not held up");
+  const waiting = vs.find((v) => assets.has(v.asset.id))!;
+  const [job] = await jobs(waiting.asset.id);
+  assertEquals([job.status, job.attempts], ["pending", 0], "the third waits, no attempt used");
+  const h = await health();
+  assert(hasProblem(h, "deletions_paused", "alert"), "paused deletions alert");
+  assertEquals([h.metrics.deletion_cap, h.metrics.deletions_due], [2, 1]);
+  assertEquals((await drain() as Record<string, number>).claimed, 0, "nothing more is leased while paused");
+  await service("mux_cleanup_resume_deletions", { p_by: `test-${run}` });
+  await drainAll();
+  assert(!assets.has(waiting.asset.id), "resumed: the third is deleted");
+  assert(!hasProblem(await health(), "deletions_paused", "alert"));
+  await service("mux_cleanup_set_deletion_cap", { p_cap: null, p_by: `test-${run}` });
+});
+
+Deno.test("worker not live: the switch live and the function in dry run; nothing changes at Mux and the health check alerts", async () => {
+  const bo = await member("boris");
+  const v = await liveVideo(bo);
+  await setMode("live"); // the switch's time is now: only what follows counts
+  assertEquals((await rpc(bo, "delete_video", { p_id: v.id })).status, 204);
+  Deno.env.set("MUX_CLEANUP_MODE", "dry_run");
+  try {
+    muxCalls.length = 0;
+    const r = await drain() as Record<string, unknown>;
+    assertEquals([r.mode, r.release], ["dry_run", 1]);
+    assertEquals(destructive(v.asset.id), []);
+    const h = await health();
+    assert(hasProblem(h, "worker_not_live", "alert"), `worker_not_live: ${JSON.stringify(h.problems)}`);
+  } finally {
+    Deno.env.set("MUX_CLEANUP_MODE", "live");
+  }
+  await setMode("live"); // as the team would: the planned job is due again at once
+  await drainAll();
+  assert(!assets.has(v.asset.id));
+  assert(!hasProblem(await health(), "worker_not_live", "alert"), "cleared once the worker is live");
+});
+
+Deno.test("forged jobs: a deletion of a live video's asset is kept whichever owner it names, and never reaches Mux", async () => {
+  const before = JSON.stringify(assets.get(founderVideo.asset.id));
+  for (const owner of [founder.id, crypto.randomUUID()]) {
+    const r = await http("/rest/v1/mux_cleanup_jobs", { method: "POST", prefer: "return=representation", body: {
+      action: "delete_asset", reason: "orphan", dedupe_key: `forged:${run}:${owner}`, asset_id: founderVideo.asset.id, upload_id: founderVideo.uploadId, owner_id: owner, not_before: due(),
+    } });
+    assertEquals(r.status, 201, "forged");
+    muxCalls.length = 0;
+    await drainAll();
+    assertEquals(destructive(founderVideo.asset.id), [], "never deleted");
+    const job = ((await http(`/rest/v1/mux_cleanup_jobs?dedupe_key=eq.forged:${run}:${owner}&select=status,result`)).json as { status: string; result: Record<string, unknown> }[])[0];
+    assertEquals([job.status, job.result?.outcome], ["skipped", "kept"], "kept: a live video uses it, whoever is named");
+  }
+  assertEquals(JSON.stringify(assets.get(founderVideo.asset.id)), before, "the founder's asset is unchanged at Mux");
+  await http(`/rest/v1/mux_cleanup_jobs?dedupe_key=like.forged:${run}:*`, { method: "DELETE" });
+});
+
 Deno.test("cleanup: remove the test members, their rows and the prompts", async () => {
   // Replies first (they reference their root), then tombstones, then everything else.
   for (const m of members) await http(`/rest/v1/responses?author_id=eq.${m.id}&kind=eq.reply`, { method: "DELETE" });
