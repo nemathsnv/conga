@@ -30,12 +30,13 @@ trap 'rm -rf "$TMP"' EXIT
 printf '%s\n' "$SQL" > "$TMP/q.sql"
 
 # A write: anything but a select, or a select calling a function known to change something.
-# (Conservative by text; the read-only checks in docs/release/PROVIDER-TESTS.md call only
-# mux_cleanup_overview, mux_cleanup_health and plain selects.)
+# (Conservative by text; the read-only checks in docs/release/PROVIDER-TESTS.md and
+# docs/release/MUX-CLEANUP-UNATTENDED.md call only mux_cleanup_overview, mux_cleanup_health and plain
+# selects. mux_cleanup_alert sends an email, so it counts as a write.)
 first="$(printf '%s' "$SQL" | sed -e 's/--.*$//' | tr -s ' \n\t' ' ' | sed -e 's/^ *//' | cut -d' ' -f1 | tr '[:upper:]' '[:lower:]')"
 WRITE=no
 case "$first" in select|with) ;; *) WRITE=yes ;; esac
-if printf '%s' "$SQL" | tr '[:upper:]' '[:lower:]' | grep -Eq '(^|[^a-z_])(insert|update|delete|merge|do|call|alter|create|drop|grant|revoke|truncate|copy|vacuum|nextval|setval|pg_terminate_backend|create_secret|update_secret)([^a-z_]|$)|set_mode|run_mux_cleanup|mux_cleanup_retry|purge_|delete_account|get_onboarding_state|mod_[a-z_]*\(|begin_submission_abandon|finish_submission_abandon'; then
+if printf '%s' "$SQL" | tr '[:upper:]' '[:lower:]' | grep -Eq '(^|[^a-z_])(insert|update|delete|merge|do|call|alter|create|drop|grant|revoke|truncate|copy|vacuum|nextval|setval|pg_terminate_backend|create_secret|update_secret)([^a-z_]|$)|set_mode|set_deletion_cap|resume_deletions|mux_cleanup_alert *\(|run_mux_cleanup|mux_cleanup_retry|purge_|delete_account|get_onboarding_state|mod_[a-z_]*\(|begin_submission_abandon|finish_submission_abandon'; then
   WRITE=yes
 fi
 

@@ -3,7 +3,7 @@
 -- not move, so "later" is written as moving recorded times back. pg_net requests made here are
 -- rolled back with the transaction and never sent.
 begin;
-select plan(105);
+select plan(110);
 
 delete from public.responses;
 delete from public.prompts;
@@ -100,13 +100,16 @@ select is((select changed_by || '|' || mode_before || '|' || mode_after from pub
 create temp table c1 as select public.mux_cleanup_claim(10, 120) as c;
 select is((select pg_temp.claimed(c, 'delete_asset') from c1), 2, 'two deletions are leased (the cap)');
 select is((select pg_temp.claimed(c, 'sync_playback') from c1), 1, 'the revocation is leased as well');
-select isnt((select deletions_paused_at from public.mux_cleanup_settings), null, 'the third deletion paused deletions');
-select is((select changed_by from public.mux_cleanup_settings_log order by id desc limit 1), 'deletion cap', 'the pause is logged as the cap''s');
+select is((select deletions_paused_at from public.mux_cleanup_settings), null, 'deletions in flight hold the others back without pausing');
 select is((select count(*)::int from public.mux_cleanup_jobs where action = 'delete_asset' and status = 'pending' and attempts = 0), 2, 'the other two wait, with no attempt used');
-select ok(pg_temp.problem('deletions_paused', 'alert'), 'paused deletions are an alert');
-select is(((public.mux_cleanup_health())->'metrics'->>'deletions_counted')::int, 2, 'the two leased deletions count');
+select is(((public.mux_cleanup_health())->'metrics'->>'deletions_counted')::int, 0, 'in flight, they are not counted as done');
 select pg_temp.finish_all(c, '{"outcome": "deleted"}') from c1;
-select is(((public.mux_cleanup_health())->'metrics'->>'deletions_counted')::int, 2, 'and still count once done');
+select is(((public.mux_cleanup_health())->'metrics'->>'deletions_counted')::int, 2, 'done, they count');
+create temp table c1b as select public.mux_cleanup_claim(10, 120) as c;
+select is((select pg_temp.claimed(c, 'delete_asset') from c1b), 0, 'with the cap reached, no deletion is leased');
+select isnt((select deletions_paused_at from public.mux_cleanup_settings), null, 'the next deletion due paused deletions');
+select is((select changed_by from public.mux_cleanup_settings_log order by id desc limit 1), 'deletion cap', 'the pause is logged as the cap''s');
+select ok(pg_temp.problem('deletions_paused', 'alert'), 'paused deletions are an alert');
 update public.mux_cleanup_jobs set finished_at = now() - interval '10 minutes' where action = 'delete_asset' and status = 'done';
 
 -- While paused: no deletion is leased, other jobs are, and the scheduler does not call the worker
@@ -159,6 +162,9 @@ update public.mux_cleanup_settings set deletions_resumed_at = now() - interval '
 select public.mux_cleanup_enqueue('delete_asset', 'author_deleted', 'asD5', 'upD5', 'd0000005-0000-0000-0000-000000000000', 'a1111111-1111-1111-1111-111111111111', now() - interval '1 minute');
 update public.mux_cleanup_jobs set result = '{"outcome": "already_gone"}' where asset_id = 'asD4';
 select is(((public.mux_cleanup_health())->'metrics'->>'deletions_counted')::int, 1, 'an asset already gone at Mux does not count');
+update public.mux_cleanup_jobs set attempts = 2 where asset_id = 'asD4';
+select is(((public.mux_cleanup_health())->'metrics'->>'deletions_counted')::int, 2, 'unless an earlier attempt''s answer was lost (it was deleted then)');
+update public.mux_cleanup_jobs set attempts = 1 where asset_id = 'asD4';
 -- A day later the earlier deletions no longer count either.
 update public.mux_cleanup_settings set deletions_resumed_at = now() - interval '2 days' where id;
 update public.mux_cleanup_jobs set finished_at = now() - interval '25 hours' where action = 'delete_asset' and status = 'done';
@@ -184,10 +190,12 @@ insert into public.mux_cleanup_runs (request_id, mode, requested_at, collected_a
 values (-13, 'drain', now() - interval '1 minute', now(), 200, true, '{"mode": "live", "claimed": 1}');
 select ok(not pg_temp.has_problem('worker_not_live'), 'the next live answer clears it');
 delete from public.mux_cleanup_runs where request_id in (-11, -12, -13);
--- Before any answer is collected, a job the worker released as a dry run shows it.
+-- Before any answer is collected, a job a dry-run worker released well after going live shows it.
 select public.mux_cleanup_enqueue('sync_playback', 'account_restored', 'asA1', 'upA1', 'a0000000-0000-0000-0000-0000000000a1', 'b2222222-2222-2222-2222-222222222222');
 update public.mux_cleanup_jobs set result = '{"dry_run": true}', not_before = now() + interval '1 hour' where action = 'sync_playback' and status = 'pending';
-select ok(pg_temp.problem('worker_not_live', 'alert'), 'a job released as a dry run since going live is an alert');
+select ok(not pg_temp.has_problem('worker_not_live'), 'released within 16 minutes of going live (a drain that was under way): nothing');
+update public.mux_cleanup_settings set changed_at = now() - interval '30 minutes' where id;
+select ok(pg_temp.problem('worker_not_live', 'alert'), 'released 30 minutes after going live: an alert');
 update public.mux_cleanup_jobs set result = null, not_before = now() - interval '1 minute' where action = 'sync_playback' and status = 'pending';
 select ok(not pg_temp.has_problem('worker_not_live'), 'without it, nothing');
 
@@ -283,8 +291,10 @@ select is((public.mux_cleanup_alert('test'))->>'kind', 'test', 'a test message i
 select is((public.mux_cleanup_alert('auto'))->>'reason', 'ok', 'neither starts a new alert');
 -- At most 30 messages in 24 hours.
 insert into public.account_purge_failures (account_id, last_error) values ('d0000000-0000-0000-0000-000000000009', 'test');
-insert into public.mux_cleanup_alerts (kind, status, signature, created_at) select 'weekly', 'ok', 'x', now() - interval '1 hour' from generate_series(1, 30);
-select is((public.mux_cleanup_alert('auto'))->>'reason', 'daily_limit', 'over 30 messages in 24 hours the next waits');
+insert into public.mux_cleanup_alerts (kind, status, signature, created_at) select 'test', 'ok', 'x', now() - interval '1 hour' from generate_series(1, 30);
+select is((public.mux_cleanup_alert('auto'))->>'kind', 'alert', 'test messages do not count toward the daily limit');
+insert into public.mux_cleanup_alerts (kind, status, signature, created_at) select 'alert', 'warn', 'x', now() - interval '1 hour' from generate_series(1, 30);
+select is((public.mux_cleanup_alert('auto'))->>'reason', 'daily_limit', 'over 30 automatic messages in 24 hours the next waits');
 select is((public.mux_cleanup_alert('test'))->>'kind', 'test', 'a test message is not limited');
 -- Old records go after 90 days.
 update public.mux_cleanup_alerts set created_at = now() - interval '91 days' where signature = 'x';

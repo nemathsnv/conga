@@ -616,14 +616,14 @@ function|mod_video_detail(uuid)|1f81c90b6df3816aa7348172b1fa292d
 function|mod_whoami(uuid)|3a145de38e01bc470e28f14f0a9a62e8
 function|moderation_case_closed_at(uuid)|793a7fdb4bbdd31549a6bf021b12f257
 function|mux_asset_hold(text,text)|ab5f63e1b30f93d6e6f04748708358f3
-function|mux_cleanup_alert(text)|3721a75476b3a9131c1edfcd925b05d4
+function|mux_cleanup_alert(text)|2c37628bc52bc4212bd7a9bbbd2cacfd
 function|mux_cleanup_check(uuid,uuid)|a09248d789f02fe57d3ea5de2fb6b013
-function|mux_cleanup_claim(integer,integer)|31196442d736a93f6e84c3a5ea01bed3
+function|mux_cleanup_claim(integer,integer)|e827110ba776d46cc297bd4deb449157
 function|mux_cleanup_collect_runs()|ad9e69d438227ae4798ce0806e924e49
-function|mux_cleanup_deletions_counted()|f10080837c21e8059b193e56efb46a8c
+function|mux_cleanup_deletions_counted()|6e9c60dfefcf8db1d64b63c77d045d7d
 function|mux_cleanup_enqueue(text,text,text,text,uuid,uuid,timestamp with time zone)|e05b3558e9e4490b271d333f5a0fbe1d
 function|mux_cleanup_finish(uuid,uuid,text,jsonb)|d1bf0418df9251c092a7a6329585016e
-function|mux_cleanup_health()|59114b84c4a80ef318905765eb273509
+function|mux_cleanup_health()|39967bd0d0ac877ac4ee90841aadedb3
 function|mux_cleanup_health_base()|03320505c3e9918f13e95d0abe7d3dae
 function|mux_cleanup_mode()|e9fbfd1425ad309b3e13546ad39a6d47
 function|mux_cleanup_overview()|f52fe8fbad4000a1edab0d906538efd0
@@ -696,7 +696,7 @@ function|response_card(responses,uuid)|fe84b3ae09ce336fbedbb37a4ff9704c
 function|response_count(uuid)|29ad57969a7cbecdd6648868e7263a3a
 function|retry_response_upload(uuid,text)|d34b5f2b365879e85f56f65be3e24094
 function|run_avatar_cleanup()|d97d26b5ff80c6fe45dc8fe46b0fb1eb
-function|run_mux_cleanup(text)|ac51cb3da4f3f8fc243bc323a2e9e0d2
+function|run_mux_cleanup(text)|e664d4fd82c1aae760dd87ee822f2481
 function|run_push_sender()|e7b7b5c9c98bacd9c73a8457fe501efe
 function|search(text)|54fd56b133d174612aafab4a4e35e802
 function|session_is_current()|2218cc3281989bd706095692801eb942

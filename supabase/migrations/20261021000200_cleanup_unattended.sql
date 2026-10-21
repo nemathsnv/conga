@@ -9,8 +9,9 @@
 --
 -- U1. A cap on asset deletions, the one change at Mux that cannot be undone. At most
 --     mux_cleanup_settings.deletion_cap assets are deleted in any 24 hours (counted from the last
---     resume); the next deletion due pauses deletions until a person resumes them
---     (mux_cleanup_resume_deletions). While paused, playback revocations and restores and upload
+--     resume); once that many are done, the next deletion due pauses deletions until a person
+--     resumes them (mux_cleanup_resume_deletions). Deletions still in flight hold back further ones
+--     but do not pause. While paused, playback revocations and restores and upload
 --     cancellations go on, and the deletions wait in the queue with no attempt used. A cap of 0
 --     holds every deletion. Null (after the migration) is no cap, as before.
 -- U2. The health check also reports: deletions paused; jobs retried 3 or more times; the
@@ -71,21 +72,24 @@ $$;
 create trigger mux_cleanup_settings_audit after update on public.mux_cleanup_settings
   for each row execute function public.mux_cleanup_settings_audit();
 
--- Asset deletions that count against the cap: done at Mux in the last 24 hours and since the last
--- resume, plus any leased now (its outcome is not known yet).
+-- Asset deletions done at Mux in the last 24 hours and since the last resume: outcome deleted, or
+-- already_gone after more than one attempt (an earlier attempt's answer was lost after Mux acted, so
+-- it is counted as done). Deletions still leased are counted by the claim, not here.
 create or replace function public.mux_cleanup_deletions_counted()
 returns integer language sql stable security definer set search_path = '' as $$
   select count(*)::int from public.mux_cleanup_jobs j
-   where j.action = 'delete_asset'
-     and (j.status = 'running'
-          or (j.status = 'done' and j.result->>'outcome' = 'deleted'
-              and j.finished_at > greatest(now() - interval '24 hours',
-                                           coalesce((select s.deletions_resumed_at from public.mux_cleanup_settings s), '-infinity'::timestamptz))));
+   where j.action = 'delete_asset' and j.status = 'done'
+     and (j.result->>'outcome' = 'deleted' or (j.result->>'outcome' = 'already_gone' and j.attempts > 1))
+     and j.finished_at > greatest(now() - interval '24 hours',
+                                  coalesce((select s.deletions_resumed_at from public.mux_cleanup_settings s), '-infinity'::timestamptz));
 $$;
 
 -- As in 20261012000200, with the cap: in live mode a deletion that may go ahead (nothing holds it)
--- is leased only while fewer than the cap count; the first one over pauses deletions, and while
--- they are paused none is leased. Other jobs are leased as before.
+-- is leased only while the deletions done plus those in flight are fewer than the cap. Once the
+-- done ones alone reach it, the next one pauses deletions; while they are paused none is leased.
+-- Other jobs are leased as before. The settings row is locked first (before any job row, as
+-- mux_cleanup_set_mode does), so a change of the switch, the cap or a resume waits for the claim
+-- or is seen by it, never half.
 create or replace function public.mux_cleanup_claim(p_limit integer default 10, p_lease_seconds integer default 120)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -98,18 +102,20 @@ declare
   v_uploads text[] := '{}';
   v_limit integer := greatest(1, least(coalesce(p_limit, 10), 50));
   v_lease interval := make_interval(secs => greatest(30, least(coalesce(p_lease_seconds, 120), 900)));
-  v_deletions integer;
+  v_done integer;
+  v_in_flight integer;
 begin
   perform pg_advisory_xact_lock(hashtext('public.mux_cleanup_claim'));
+  select * into s from public.mux_cleanup_settings where id for update;
   update public.mux_cleanup_jobs
      set status = case when attempts >= max_attempts then 'failed' else 'pending' end,
          finished_at = case when attempts >= max_attempts then now() end,
          last_error = 'lease_expired', lease_id = null, locked_until = null
    where status = 'running' and locked_until < now();
-  select * into s from public.mux_cleanup_settings where id;
   v_mode := coalesce(s.mode, 'off');
   if v_mode = 'off' then return jsonb_build_object('mode', v_mode, 'jobs', v_out); end if;
-  v_deletions := public.mux_cleanup_deletions_counted();
+  v_done := public.mux_cleanup_deletions_counted();
+  select count(*)::int into v_in_flight from public.mux_cleanup_jobs where action = 'delete_asset' and status = 'running';
   for j in select * from public.mux_cleanup_jobs
             where status = 'pending' and not_before <= now()
             order by not_before, created_at
@@ -136,13 +142,14 @@ begin
       end if;
       if v_mode = 'live' then
         if s.deletions_paused_at is not null then continue; end if;
-        if s.deletion_cap is not null and v_deletions >= s.deletion_cap then
+        if s.deletion_cap is not null and v_done >= s.deletion_cap then
           perform set_config('mux_cleanup.by', 'deletion cap', true);
           update public.mux_cleanup_settings set deletions_paused_at = now() where id returning * into s;
           perform set_config('mux_cleanup.by', '', true);
           continue;
         end if;
-        v_deletions := v_deletions + 1;
+        if s.deletion_cap is not null and v_done + v_in_flight >= s.deletion_cap then continue; end if;
+        v_in_flight := v_in_flight + 1;
       end if;
     end if;
     update public.mux_cleanup_jobs
@@ -160,15 +167,15 @@ begin
 end;
 $$;
 
--- As in 20261013000100, except that deletions waiting on a pause do not count as due: the worker
--- is not called every minute for jobs it may not lease.
+-- As in 20261013000100, except that in live mode deletions waiting on a pause do not count as due:
+-- the worker is not called every minute for jobs it may not lease. (A dry run still plans them.)
 create or replace function public.run_mux_cleanup(p_mode text default 'drain')
 returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_url text;
   v_key text;
   v_request bigint;
-  v_paused boolean := (select deletions_paused_at is not null from public.mux_cleanup_settings);
+  v_paused boolean := (select deletions_paused_at is not null and mode = 'live' from public.mux_cleanup_settings);
 begin
   if p_mode not in ('drain', 'sweep') then raise exception 'invalid_mode' using errcode = 'P0001'; end if;
   if public.mux_cleanup_mode() = 'off' then return; end if;
@@ -249,8 +256,9 @@ revoke execute on function public.mux_cleanup_health_base() from public, anon, a
 -- {"status", "checked_at", "mode", "problems", "metrics", "thresholds"} as before, with these
 -- checks added (and their metrics):
 --   alert: deletions paused; the database live but the worker's last answer since the switch went
---          live in another mode, or a job a dry-run worker released since then; the alert schedule
---          inactive, failing or late by 30 minutes
+--          live in another mode, or a job released by a dry-run worker over 16 minutes after it went
+--          live (by then a live worker has re-planned every job set aside before); the alert
+--          schedule inactive, failing or late by 30 minutes
 --   warn:  a job retried 3 or more times; while live, no deletion cap or no alert channel; the
 --          weekly status schedule inactive; the last alert message not delivered
 create or replace function public.mux_cleanup_health()
@@ -276,11 +284,12 @@ declare
 begin
   select * into s from public.mux_cleanup_settings where id;
   select count(*) filter (where status = 'pending' and action = 'delete_asset' and not_before <= now()),
-         count(*) filter (where status = 'pending' and attempts >= c_retrying and last_error is not null)
+         count(*) filter (where status in ('pending', 'running') and attempts >= c_retrying and last_error is not null)
     into v_due_deletions, v_retrying
     from public.mux_cleanup_jobs;
   select max(requested_at) into v_last_ok from public.mux_cleanup_runs where ok;
-  v_alerts_ready := (select count(distinct name) from vault.secrets where name in ('mux_cleanup_alert_key', 'mux_cleanup_alert_to', 'mux_cleanup_alert_from')) = 3;
+  v_alerts_ready := (select count(distinct name) from vault.decrypted_secrets
+                      where name in ('mux_cleanup_alert_key', 'mux_cleanup_alert_to', 'mux_cleanup_alert_from') and coalesce(btrim(decrypted_secret), '') <> '') = 3;
   select * into a from public.mux_cleanup_alerts where request_id is not null order by id desc limit 1;
 
   if s.deletions_paused_at is not null then
@@ -290,13 +299,13 @@ begin
   end if;
   if v_retrying > 0 then
     v_problems := v_problems || jsonb_build_object('level', 'warn', 'check', 'retrying_jobs',
-      'detail', v_retrying || ' job(s) failed ' || c_retrying || ' or more times and are being retried: see last_error of the pending jobs with attempts > 0');
+      'detail', v_retrying || ' job(s) failed ' || c_retrying || ' or more times and are being retried: see last_error of the jobs with attempts >= ' || c_retrying);
   end if;
   if s.mode = 'live' then
     select r.summary->>'mode' into v_worker_mode from public.mux_cleanup_runs r
      where r.ok and r.summary ? 'mode' and r.requested_at > s.changed_at order by r.requested_at desc limit 1;
     select count(*) into v_released from public.mux_cleanup_jobs
-     where status = 'pending' and (result->>'dry_run') = 'true' and updated_at > s.changed_at;
+     where status = 'pending' and (result->>'dry_run') = 'true' and updated_at > s.changed_at + interval '16 minutes';
     if v_worker_mode is distinct from 'live' and (v_worker_mode is not null or v_released > 0) then
       v_problems := v_problems || jsonb_build_object('level', 'alert', 'check', 'worker_not_live',
         'detail', 'the switch is live but the worker answered in ' || coalesce(v_worker_mode, 'dry_run') || ' (' || v_released
@@ -354,7 +363,9 @@ $$;
 -- alert), every 24 hours while the same problems last (a reminder), or once the status is ok after
 -- a message about problems (a recovery). Within 30 minutes of the last message only a change to
 -- 'alert' is sent at once; anything else waits for a later run, so a problem that comes and goes
--- does not send a message each time. At most 30 messages in 24 hours.
+-- does not send a message each time. At most 30 automatic messages in 24 hours. What counts as a
+-- change is the status and the set of level/check pairs; a count growing within one check (1 failed
+-- job, then 40) waits for the 24-hour reminder.
 -- 'weekly': the status whatever it is. 'test': the same, marked as a test (for checking delivery).
 -- Returns what it did; records each message sent; collects Resend's answers to earlier ones.
 create or replace function public.mux_cleanup_alert(p_kind text default 'auto')
@@ -408,7 +419,8 @@ begin
      and not (v_status = 'alert' and v_prev.status <> 'alert') then
     return jsonb_build_object('sent', false, 'status', v_status, 'reason', 'too_soon', 'would', v_kind);
   end if;
-  if p_kind = 'auto' and (select count(*) from public.mux_cleanup_alerts where created_at > now() - interval '24 hours') >= 30 then
+  if p_kind = 'auto' and (select count(*) from public.mux_cleanup_alerts where created_at > now() - interval '24 hours'
+                           and kind in ('alert', 'reminder', 'recovery')) >= 30 then
     return jsonb_build_object('sent', false, 'status', v_status, 'reason', 'daily_limit', 'would', v_kind);
   end if;
 

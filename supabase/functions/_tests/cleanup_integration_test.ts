@@ -1101,6 +1101,10 @@ Deno.test("worker not live: the switch live and the function in dry run; nothing
     const r = await drain() as Record<string, unknown>;
     assertEquals([r.mode, r.release], ["dry_run", 1]);
     assertEquals(destructive(v.asset.id), []);
+    // What mux-cleanup-monitor would copy from pg_net: the worker's answer, just after the switch went live.
+    const [settings] = (await http("/rest/v1/mux_cleanup_settings?select=changed_at")).json as { changed_at: string }[];
+    const at = new Date(Date.parse(settings.changed_at) + 1).toISOString();
+    assertEquals((await http("/rest/v1/mux_cleanup_runs", { method: "POST", body: { request_id: -Date.now(), mode: "drain", requested_at: at, collected_at: at, status_code: 200, ok: true, summary: { mode: r.mode, claimed: r.claimed, release: r.release } } })).status, 201);
     const h = await health();
     assert(hasProblem(h, "worker_not_live", "alert"), `worker_not_live: ${JSON.stringify(h.problems)}`);
   } finally {
@@ -1109,7 +1113,8 @@ Deno.test("worker not live: the switch live and the function in dry run; nothing
   await setMode("live"); // as the team would: the planned job is due again at once
   await drainAll();
   assert(!assets.has(v.asset.id));
-  assert(!hasProblem(await health(), "worker_not_live", "alert"), "cleared once the worker is live");
+  assert(!hasProblem(await health(), "worker_not_live", "alert"), "a switch change since then: only later answers count");
+  await http("/rest/v1/mux_cleanup_runs?request_id=lt.0", { method: "DELETE" });
 });
 
 Deno.test("forged jobs: a deletion of a live video's asset is kept whichever owner it names, and never reaches Mux", async () => {

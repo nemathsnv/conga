@@ -15,8 +15,7 @@
 -- in force ends with its columns, so the waiting deletions are leased again by the next claim with
 -- no cap (put the switch off first, as above, and decide before turning it back on).
 
-select cron.unschedule('mux-cleanup-alert');
-select cron.unschedule('mux-cleanup-weekly');
+select cron.unschedule(jobid) from cron.job where jobname in ('mux-cleanup-alert', 'mux-cleanup-weekly');
 drop function public.mux_cleanup_alert(text);
 drop table public.mux_cleanup_alerts;
 
