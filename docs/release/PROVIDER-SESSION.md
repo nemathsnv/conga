@@ -161,7 +161,8 @@ ends with the postflight.**
        - 3 accounts, 3 invites (T2's redeemed);
        - Mux unchanged: Beta 5 `2fee7234…`, spike 7 `315652b2…`.
   - **Rollback:** none needed, since T2 holds nothing. With `20261021000100` deployed, T2 can be removed.
-- **CP0′-b: V2 (one new Beta asset).**
+- **CP0′-b: V2 (one new Beta asset).** **Done 21 Oct 08:53:49 UTC: V2 `cec0cef7-1566-431b-b5fc-aaaf7be46f60`, live; Beta 6
+  (`BETA-READINESS.md` section 42).**
   - `respond --prompt ddd5a383-be11-475f-9576-0a6db79cabe3 --file ~/.conga-provider/t2-clip.mp4`.
     The clip is 6.000 s, no person, sha256 `11d12a97…`.
   - Expected: one mint, one row, one complete PUT, `live`. Beta 6 (spike 7 unchanged); T1 and the founder unchanged.

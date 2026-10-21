@@ -5420,6 +5420,48 @@ code, invite code or token.
     address check before the code. Both expire after 15 minutes.
 - **Next:** CP0′-b (T2's one video, one new Beta asset) needs its own approval.
 
+## 42. CP0′-b: T2's one disposable video V2 is live on hosted and Mux Beta (21 Oct 08:52 to 08:55 UTC; Nemat approved CP0′-b only)
+
+From `d780563`, as `PROVIDER-SESSION.md` section 0 describes, with T2's existing token. That token
+was issued 08:31:29 and expires 09:31:29, so it was valid throughout; no new sign-in. Writes: one
+upload URL, one row, one transfer. Mux reads were GETs only. No E test, deletion, switch, secret,
+deployment, update or push. IDs are kept privately in `~/.conga-provider/t2.v2.json` (600) for E1
+to E3.
+
+- **Preflight (08:53:12 to 08:53:31), all as expected:**
+  - **Hosted:** 28 migrations, 3 accounts.
+  - **T2:** 0 rows, 0 uploads, 0 submissions, 1 session, no journal.
+  - **Clean-up:** `off`, health `ok`, no open jobs.
+  - **Protected:** `provider-check compare` against the CP0′-a baseline unchanged. Mux Beta 5
+    `2fee7234…`, spike 7 `315652b2…`. Fresh baseline `~/.conga-provider/baseline-cp0b.json` (600).
+  - **Prompt:** `ddd5a383-be11-475f-9576-0a6db79cabe3`, `live`.
+  - **Clip:** `~/.conga-provider/t2-clip.mp4`, 403,933 bytes, sha256 `11d12a97…`.
+- **Write, `provider-member.mjs respond` (08:53:42 to 08:53:49), one pass:**
+  - **Mint:** 200, upload `cZN6ajHr…`.
+  - **`post_response`:** 200, not replayed. Response V2 `cec0cef7-1566-431b-b5fc-aaaf7be46f60`,
+    submission `1b8312e8-d676-4383-ba51-1ee0c041e390`.
+  - **Transfer:** one complete PUT, 403,933 of 403,933 bytes, 200.
+  - **Result:** upload `asset_created`, asset `ready`, row `live`, playback `VpzPAAYF…`.
+  - No retry, no resume, no second URL.
+- **Postflight (08:54 to 08:55):**
+  - **T2:** exactly 1 row, a `live` response with asset `xMQeMrW0…` and playback `VpzPAAYF…`. Its
+    ledger has 1 upload, `claimed` by V2. 1 submission, for V2.
+  - **The asset at Mux:** `ready`, 6.07 s, passthrough T2's id, `upload_id` the minted upload, one
+    public playback id.
+  - **Mux Beta:** 6 assets (`6bbd4333…`): the original 5 unchanged (protected hash equal) plus V2.
+  - **Mux spike:** 7, `315652b2…` unchanged.
+  - **Playback:** every playback id in both environments, the 5 originals, the 7 spike and V2's,
+    answers HLS 200 and thumbnail 200.
+  - **Protected:** `provider-check compare` unchanged. T1's and the founder's accounts, rows,
+    playback ids, ledgers and session ids are as at the baseline.
+  - **Clean-up:** `off`, health `ok`, no problems, no open jobs, total jobs still 6 (the newest from
+    03:05).
+  - **A slip in my read-only loop:** Mux lists each playback id as "<id> public", and the shell split
+    it, so 13 extra GETs asked `stream.mux.com` for the playback id "public" (404). No credential was
+    sent and nothing was changed.
+- **Next:** E1 needs its own approval. T2's token expires 09:31:29 UTC; E1 starts with a new code
+  (`provider-member-verify.sh`), as the plan says.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
