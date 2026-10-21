@@ -5798,6 +5798,110 @@ already contains `provider-t2-tooling` and `invite-account-deletion-fix`). Commi
   closed beta, is in section 7 of the runbook. That is Nemat's decision.
 - **Next:** one approval for rollout U0 to U5 (runbook section 4).
 
+## 49. Mux clean-up left on unattended on hosted: rollout U0 to U5 (21 Oct 14:36 to 16:25 UTC; Nemat approved U0 to U5 with cap 2)
+
+From `a17d89c` on `claude/conga-mux-production-ready-2aad5b` (local commits only, not pushed). Every read
+went through `scripts/cleanup-unattended-hosted-check.sh` or plain selects through
+`scripts/provider-sql.sh`. Every write was a guarded step through `provider-sql.sh` with
+`PROVIDER_WRITE_STEP=U<n>`.
+
+The access restriction that had stopped the hosted read on 21 Oct (section 48) is resolved: with
+Nemat's approval in the session, the reads ran.
+
+**No account, invite, video, upload or Mux asset was created. Nothing was deleted at Mux.** No Edge
+Function was deployed. T1, the founder and the spike were not touched.
+
+- **U0, preflight (14:36, all PASS, the actual hosted state):**
+  - **Schema:** 28 migrations, the fingerprint equal to `inv-expected-28-migrations.fp`.
+  - **Clean-up:** switch `off`, health `ok`, 0 open jobs (10 in all: 9 `done`, 1 `skipped`).
+  - **Accounts:** 2 accounts and 2 Auth users, 0 deleted, 0 purge failures.
+  - **Schedules:** 10, all active; 0 cron failures in 24 hours.
+  - **Worker:** `mux-cleanup` v22.
+  - **Secrets:** 13. No `MUX_CLEANUP_MODE`, `MUX_API_BASE` or `MUX_STREAM_BASE`. The worker's Mux
+    token is Shortcut Beta's by digest, not the spike's.
+  - **Protected baseline:** `baseline-u0.json` (mode 600), with Beta 5 `2fee7234…` and spike 7
+    `315652b2…`. All 12 playback ids returned 200 for HLS and thumbnail.
+  - **Reconciliation:** `mux-reconcile.mjs` returned `ok`: 5 in use, no candidates.
+  - **Backup:** the settings row and the 10 jobs, sha256 `3581bc2d…`, saved to
+    `~/.conga-provider/backups/cleanup-before-20261021000200-20261021T144040Z.json` (mode 600).
+- **U1, the migration:**
+  - The dry run listed exactly `20261021000200_cleanup_unattended.sql` (md5 `710ac951…`).
+  - Applied 14:41:52 to 14:41:55.
+  - `check post`, all PASS:
+    - 29 migrations, the fingerprint equal to `cu-expected-29-migrations.fp`;
+    - 12 schedules; switch `off`, no cap, health `ok`;
+    - the only table that changed is `mux_cleanup_settings` (three new null columns), and the new
+      tables are empty;
+    - functions unchanged.
+- **U2, alerts:**
+  - **Secrets:** Nemat created a Resend sending-only key (`auth.churntech.com`) and put the key,
+    the recipient (one address) and the sender `Conga ops <alerts@auth.churntech.com>` into Vault.
+  - **A placeholder slip:** Nemat's first run stored the placeholder text. Nothing was sent with it
+    (0 messages; health `ok`). The three secrets were deleted and recreated at 15:02:35.
+  - **Checked without reading the values:** non-empty, the key `re_…`, the recipient a single
+    address, the sender as above.
+  - **Messages, all answered 200 by Resend with a message id; Nemat confirmed all three arrived:**
+
+    | Time (UTC) | Message | Sent by |
+    |---|---|---|
+    | 15:03:52 | the test | the lead |
+    | 15:05:00 | `warn (alert_not_delivered)` | the schedule |
+    | 15:35:00 | `recovered, status ok` | the schedule, after its 30-minute wait |
+
+  - **The delivery failure was synthetic.** A labelled `mux_cleanup_alerts` row recorded a 401.
+    Health then showed `warn alert_not_delivered`. The row was removed after the alert was sent. This
+    checks the health check and the alert path, not a real Resend refusal.
+- **U3, going live:**
+  - **a.** Cap 2 at 15:08. It counts 1 already: the E3b deletion at 12:23 today. Until about 12:23
+    UTC on 22 Oct, one more deletion can run before deletions pause.
+  - **b.** `MUX_CLEANUP_MODE=live` at 15:45 (the lead's shell could write it). 14 secrets, the
+    digest of `live`. Every function went up one version with identical bundles (`mux-cleanup` v23,
+    `5adecf46…`).
+  - **c.** Guarded dry-run sweep at 15:49 (request 22): 200, `mode dry_run`, `listed 5`,
+    `complete`, `in_use 5`, `queued 0`, `review 0`, nothing it would queue or review.
+  - **d.** Guarded `live` at 15:49:50.
+  - **e.** Live sweep (request 23): 200, `mode live`, `listed 5`, `in_use 5`, `queued 0`,
+    `review 0`. This verifies the function's switch and the configuration. **It proves no provider
+    write**; that evidence remains the earlier real lifecycle tests (12 Oct, A2, B2, C2a, C2w, E1 to
+    E3b).
+- **U4, emergency stop and observation:**
+  - **Drill, with no job queued:**
+    - The switch was `off` from 15:50:46 to 15:52:09.
+    - The drain schedule ran twice, both succeeded, and neither it nor an explicit sweep request
+      reached the worker (0 requests).
+    - Back to `live`.
+    - All five switch changes are in `mux_cleanup_settings_log` with who made them.
+    - Not run on hosted: unsetting `MUX_CLEANUP_MODE` (the second layer) and a stop during a live
+      call. Both are tested locally.
+  - **Observed 15:52 to 16:25 (33 minutes):**
+    - `mux-cleanup` 32/32 succeeded, one per minute. No worker call, since nothing was due.
+    - `mux-cleanup-monitor` 3/3 and `mux-cleanup-alert` 3/3, with no message while `ok`.
+    - Health `ok` throughout.
+    - Jobs: 0 created, 0 pending, running, failed, for review or retrying.
+  - **`check live`, all PASS:** switch `live`, cap 2, not paused, 3 alert secrets, no URL override.
+  - **Data:** every product table hash equal to U1's.
+  - **`provider-check compare`:** `unchanged`, 0 differences (T1, the founder, Beta 5, spike 7).
+  - **Playback:** all 12 ids 200/200.
+- **U5, left on:**
+  - database switch `live`, `MUX_CLEANUP_MODE=live`;
+  - cap 2 per 24 hours (1 counted), alerts to Nemat;
+  - 12 schedules, `mux-cleanup` v23.
+- **Not yet observed on hosted:**
+  - the first scheduled 04:45 sweep while live;
+  - the first weekly status (Monday 27 Oct, 02:00 UTC);
+  - a real deletion, revocation or restore by the unattended worker (no job has existed since
+    going live);
+  - the cap pausing a real deletion;
+  - a real Resend refusal.
+- **Still not passed:** E3(i), the scheduled day-31 purge (runbook section 7). No account was
+  created for it.
+- **Time, wall clock:**
+  - Local build and tests: about 1 h 05 min.
+  - Rollout: 14:36 to 16:25 UTC, about 1 h 49 min. About 20 minutes of it waited for the Resend
+    secrets, about 30 minutes for the recovery email's throttle, and 33 minutes were the
+    observation.
+  - Active working time was not measured separately.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

@@ -1,7 +1,8 @@
 # Mux clean-up left on unattended
 
-Status, 21 Oct 2026: **built and tested locally; not deployed.** Rollout steps U0 to U5 below need
-Nemat's one approval (`docs/BETA-READINESS.md` section 48).
+Status, 21 Oct 2026: **live on hosted since 15:49:50 UTC** (database switch `live`,
+`MUX_CLEANUP_MODE=live`, deletion cap 2, email alerts to Nemat). Rollout U0 to U5 approved by Nemat
+and recorded in `docs/BETA-READINESS.md` section 49; the build is in section 48.
 
 ## 1. What already existed, and what was missing
 
