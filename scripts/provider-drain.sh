@@ -34,7 +34,9 @@ else echo "expected: comma-separated job ids, or none" >&2; exit 2; fi
 if [ "$TARGET" = hosted ] && [ -z "${PROVIDER_WRITE_STEP:-}" ]; then echo "hosted: set PROVIDER_WRITE_STEP to the approved step" >&2; exit 2; fi
 
 scalar() { # first column of the first row, from provider-sql.sh's JSON
-  "$SQL" "$TARGET" "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);if(j._tag==="Error"){console.error(j.error.message);process.exit(1)}const r=(j.rows||[])[0];const v=r?Object.values(r)[0]:null;process.stdout.write(v===null||v===undefined?"":typeof v==="object"?JSON.stringify(v):String(v))})'
+  # `supabase db query` prints a bare array in a plain shell and {"boundary", "rows"} when it detects
+  # an agent's shell: read both, so a drain behaves the same from Nemat's terminal and the lead's.
+  "$SQL" "$TARGET" "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);if(j._tag==="Error"){console.error(j.error.message);process.exit(1)}const r=(Array.isArray(j)?j:(j.rows||[]))[0];const v=r?Object.values(r)[0]:null;process.stdout.write(v===null||v===undefined?"":typeof v==="object"?JSON.stringify(v):String(v))})'
 }
 
 before="$(scalar "select coalesce(max(request_id), 0) as n from public.mux_cleanup_runs")"
