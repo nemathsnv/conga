@@ -5258,6 +5258,52 @@ Branch `claude/provider-t2-tooling` on `3340b08`.
   - CP0′-a (exact writes in `PROVIDER-SESSION.md` section 0);
   - a decision on the invite defect before E3.
 
+## 39. Invite-linked account deletion fixed locally (21 Oct; nothing hosted, no Mux, no real deletion, no push)
+
+Branch `claude/invite-account-deletion-fix-693183` on `c0d0ba8`. The full record is in
+`docs/release/INVITE-DELETION-FIX-21OCT.md`.
+
+- **Decision (Nemat, 21 Oct):** an invite keeps its redemption history after its member is
+  permanently deleted, loses the link to the person, and can never be redeemed again.
+- **Migration `20261021000100_invite_member_deletion.sql`:** `invites_redeemed_pair` is replaced by
+  `invites_redeemer_has_time` (`redeemed_by is null or redeemed_at is not null`), plus two column
+  comments. No function, grant, index or row changes. Its rollback is in `supabase/rollback/`; it
+  refuses once a deleted member's invite exists.
+- **Eligibility checked:** every lookup answers `used` on `redeemed_at`. Only
+  `scripts/provider-t2-invite.sh` treated `redeemed_by is null` as unused; it now uses `redeemed_at`.
+- **Mux leak in rehearsals fixed:** `prewarm()` no longer reaches `stream.mux.com` when `MUX_API_BASE`
+  names a fake. `MUX_STREAM_BASE` can point it at the fake, and `provider-rehearsal.sh` does so. Hosted
+  behaviour is unchanged.
+- **Runner fix:** `full-local-verification.sh` no longer runs `provider_t2_rehearsal_test.ts` as a unit
+  test (it needs the stack; `provider-rehearsal.sh` runs it).
+- **Results on the isolated stack `shortcut-inv`** (28 migrations from a reset, fake Mux; stopped
+  afterwards):
+  - **pgTAP:** 23 files, 1775 tests, all pass. The new `0033` has 62.
+  - **Deno unit:** all pass. `mux_test` is 22, including the new prewarm isolation test.
+  - **Deno integration:** all 10 suites pass. Scheduler 13/13, C1 rehearsal and auth integration pass.
+  - **Provider rehearsal, after a clean reset:** 8/8.
+  - **T2 rehearsal, after a clean reset:** 15/15. E3(i) and E3(ii) now assert the fix; the stand-in is
+    gone. The prewarm GET reached the fake.
+  - **In the uninterrupted full run, T2's E1 failed its health check.** The earlier suites' leftovers
+    (the scheduler's unproven "stranger" orphan and worker errors) put health at `alert`. It passed
+    after the reset; section 34 also ran the rehearsals after a reset.
+  - **Rollback and fingerprint rehearsal:** 15/15.
+    - Under the old check, the defect reproduces: the Auth deletion fails on `invites_redeemed_pair`,
+      the purge removes nobody and records the failure.
+    - The forward migration on top fixes both, and both invites stay used.
+    - The rollback refuses once a deleted member's invite exists and changes nothing.
+    - The fingerprint diff is exactly `invites.invites_redeemed_pair` →
+      `invites.invites_redeemer_has_time`.
+- **Known failures, not from this change:**
+  - `idempotency-rollback-check.sh` fails 0002 #27 and 0009 #88: stale since `20261019000200`,
+    section 34.
+  - App typecheck and lint did not run: this worktree has no `app/node_modules`. No app code changed.
+- **Not run:** hosted, real Mux, a device.
+- **Waiting on Nemat:**
+  - approval of the hosted migration (preflight, backup and postflight in the release note);
+  - whether the inviter gets the slot back once the invitee is purged (what the code does today);
+  - a retention period for invite rows.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

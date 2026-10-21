@@ -110,8 +110,11 @@ spike 7, one disposable asset fits.
 
    Cancellation is never assumed, and no new URL is minted while Mux has not proven the old one empty.
 
-**Blocker for E3, found by the rehearsal (21 Oct; not fixed; Nemat's decision needed):** an account that
-redeemed an invite cannot be removed.
+**Blocker for E3, found by the rehearsal (21 Oct; fixed locally, not deployed):** an account that
+redeemed an invite cannot be removed. Nemat decided (21 Oct) that the invite keeps its history, loses
+the link to the person and stays used: `20261021000100_invite_member_deletion.sql`, rehearsed locally
+(`docs/release/INVITE-DELETION-FIX-21OCT.md`). The hosted migration is its own approval, before
+CP0′-a.
 
 - **Cause:** `invites.redeemed_by` is `on delete set null`, but `redeemed_at` stays set, so
   `invites_redeemed_pair` refuses the row and the whole deletion rolls back.
