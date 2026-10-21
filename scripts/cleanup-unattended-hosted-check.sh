@@ -54,7 +54,7 @@ if [ "$PHASE" = live ]; then EXP_MODE=live; else EXP_MODE=off; fi
 v "clean-up switch" "$EXP_MODE" "$(q "select public.mux_cleanup_mode() as v")"
 if [ "$PHASE" != pre ]; then
   v "deletion cap|paused" "$([ "$PHASE" = live ] && echo "2|no" || echo "none|no")" "$(q "select coalesce(deletion_cap::text, 'none') || '|' || case when deletions_paused_at is null then 'no' else 'yes' end as v from public.mux_cleanup_settings")"
-  echo "INFO  settings log: $(q "select count(*) || ' change(s); last: ' || coalesce(max(changed_at)::text, 'none') as v from public.mux_cleanup_settings_log")"
+  echo "INFO  settings log: $(q "select count(*) || ' change(s), last ' || coalesce(max(changed_at)::text, 'none') as v from public.mux_cleanup_settings_log")"
 fi
 v "open clean-up jobs (not done/skipped)" "0" "$(q "select count(*) as v from public.mux_cleanup_jobs where status not in ('done', 'skipped')")"
 echo "INFO  clean-up jobs: $(q "select count(*) || ' total, ' || count(*) filter (where status = 'done') || ' done, ' || count(*) filter (where status = 'skipped') || ' skipped' as v from public.mux_cleanup_jobs")"
