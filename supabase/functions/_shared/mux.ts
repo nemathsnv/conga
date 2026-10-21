@@ -38,6 +38,21 @@ export function muxBase(): string {
   return u.origin;
 }
 
+/**
+ * Where prewarm() fetches: https://stream.mux.com; or a local fake named by MUX_STREAM_BASE (the
+ * MUX_API_BASE rule); or nowhere when MUX_API_BASE names a fake and MUX_STREAM_BASE is unset, so a run
+ * against a fake Mux never sends its made-up playback ids to the real stream host.
+ */
+export function muxStreamBase(): string | null {
+  const override = Deno.env.get("MUX_STREAM_BASE");
+  if (override) {
+    const u = new URL(override);
+    if (u.protocol !== "http:" || !LOCAL_MUX_HOSTS.includes(u.hostname)) throw new Error("invalid_mux_stream_base");
+    return u.origin;
+  }
+  return Deno.env.get("MUX_API_BASE") ? null : "https://stream.mux.com";
+}
+
 export async function mux<T>(path: string, init: RequestInit = {}): Promise<T> {
   const base = muxBase();
   const url = new URL(base + path);
@@ -85,7 +100,9 @@ export function json(data: unknown, status = 200, headers: Record<string, string
 export async function prewarm(playbackId: string): Promise<void> {
   if (!isMuxId(playbackId)) return;
   try {
-    const base = `https://stream.mux.com/${playbackId}.m3u8`;
+    const stream = muxStreamBase();
+    if (!stream) return;
+    const base = `${stream}/${playbackId}.m3u8`;
     const master = await (await fetch(base)).text();
     const variants = master.split("\n").filter((l) => l.trim() && !l.startsWith("#")).slice(0, 3);
     await Promise.all(variants.map(async (v) => {

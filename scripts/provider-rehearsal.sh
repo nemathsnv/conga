@@ -2,9 +2,8 @@
 # Rehearses the provider tests C2, E1, E2 and E3 (docs/release/PROVIDER-TESTS.md) on a LOCAL stack
 # against a fake Mux, with the same scripts the hosted run uses (provider-member.mjs,
 # provider-drain.sh, provider-sql.sh, provider-mux-read.mjs, provider-check.mjs), then the T2 tooling
-# (provider_t2_rehearsal_test.ts). The Mux API and the hosted project are never contacted. (One
-# exception, not an API call: mux-upload-status prewarms a live video's HLS on stream.mux.com, an
-# unauthenticated GET of a made-up playback id here, answered 404.)
+# (provider_t2_rehearsal_test.ts). Neither Mux (API or stream host) nor the hosted project is ever
+# contacted: MUX_STREAM_BASE sends mux-upload-status's HLS prewarm to the fake too.
 #   T2_ONLY=1   skips the first suite; T2_CLIP=<mp4> reuses a clip (otherwise one is generated).
 #
 #   scripts/provider-rehearsal.sh [stack folder]     (default: the repository; the folder whose
@@ -31,6 +30,7 @@ ENV_FILE="$(mktemp)"
 LOG="$(mktemp)"
 cat > "$ENV_FILE" <<EOF
 MUX_API_BASE=http://host.docker.internal:$PORT
+MUX_STREAM_BASE=http://host.docker.internal:$PORT
 MUX_TOKEN_ID=provider-rehearsal-id
 MUX_TOKEN_SECRET=provider-rehearsal-secret
 MUX_WEBHOOK_SECRET=provider-rehearsal-webhook

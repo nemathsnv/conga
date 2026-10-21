@@ -109,7 +109,7 @@ step "pgTAP" bash -c "cd '$STACK' && supabase test db"
 
 # --- 2. Deno unit ------------------------------------------------------------------------------
 for t in "$REPO"/supabase/functions/_tests/*_test.ts; do
-  case "$(basename "$t")" in *integration_test.ts|provider_rehearsal_test.ts|admin_http_test.ts) ;; *) step "deno unit $(basename "$t")" deno test --allow-env --allow-read "$t" ;; esac
+  case "$(basename "$t")" in *integration_test.ts|provider_rehearsal_test.ts|provider_t2_rehearsal_test.ts|admin_http_test.ts) ;; *) step "deno unit $(basename "$t")" deno test --allow-env --allow-read "$t" ;; esac
 done
 
 # --- 3. Deno integration (served Edge runtime) ------------------------------------------------

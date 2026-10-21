@@ -92,6 +92,30 @@ Deno.test("prewarm() fetches only stream.mux.com for a valid playback id", async
   }
 });
 
+Deno.test("prewarm() never reaches stream.mux.com while MUX_API_BASE names a fake Mux", async () => {
+  const f = withFetch(() => new Response("#EXTM3U\nseg0.ts\n"));
+  try {
+    Deno.env.set("MUX_API_BASE", "http://host.docker.internal:55713");
+    Deno.env.delete("MUX_STREAM_BASE");
+    await prewarm(REAL_PLAYBACK);
+    assertEquals(f.calls.length, 0, "no stream base given: nothing is fetched");
+    Deno.env.set("MUX_STREAM_BASE", "http://host.docker.internal:55713");
+    await prewarm(REAL_PLAYBACK);
+    assert(f.calls.length >= 1);
+    for (const c of f.calls) assertEquals(new URL(c.url).origin, "http://host.docker.internal:55713");
+    f.calls.length = 0;
+    for (const bad of ["https://stream.mux.com", "http://10.0.0.5:80", "https://localhost:1", "http://127.0.0.1.evil.example"]) {
+      Deno.env.set("MUX_STREAM_BASE", bad);
+      await prewarm(REAL_PLAYBACK);
+    }
+    assertEquals(f.calls.length, 0, "a stream base that is not a local http fake fetches nothing");
+  } finally {
+    Deno.env.delete("MUX_API_BASE");
+    Deno.env.delete("MUX_STREAM_BASE");
+    f.restore();
+  }
+});
+
 Deno.test("timingSafeEqual", () => {
   const a = new Uint8Array([1, 2, 3, 4]);
   assert(timingSafeEqual(a, new Uint8Array([1, 2, 3, 4])));
