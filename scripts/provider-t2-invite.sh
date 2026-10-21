@@ -23,7 +23,7 @@ begin
   if (select count(*) from public.invites) <> ${EXPECTED} then
     raise exception 'precondition_failed: % invites, expected ${EXPECTED}', (select count(*) from public.invites);
   end if;
-  if exists (select 1 from public.invites where redeemed_by is null and cancelled_at is null and expires_at > now()) then
+  if exists (select 1 from public.invites where redeemed_at is null and cancelled_at is null and expires_at > now()) then
     raise exception 'precondition_failed: an unused invite already exists';
   end if;
   perform public.team_create_invite(null, 'canggu', null, null);
@@ -38,7 +38,7 @@ if [ "$status" != 0 ] || printf '%s' "$out" | grep -q '"_tag":"Error"'; then
 fi
 
 # Read back the one unused invite (plain select) and keep its code in the file only.
-new="$("$SQL" "$TARGET" "select id, code, cohort, inviter_id, expires_at from public.invites where redeemed_by is null and cancelled_at is null and expires_at > now() order by created_at desc" | rows)"
+new="$("$SQL" "$TARGET" "select id, code, cohort, inviter_id, expires_at from public.invites where redeemed_at is null and cancelled_at is null and expires_at > now() order by created_at desc" | rows)"
 umask 077
 printf '%s' "$new" | node -e '
   let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{

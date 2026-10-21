@@ -343,6 +343,7 @@ Deno.test("respond: a transfer cut part-way leaves Mux waiting; --resume asks Mu
   const rows = await rowsOf(T2.id);
   assertEquals(rows.map((x) => [x.status, x.mux_upload_id, x.mux_asset_id]), [["live", j.uploadId, assetsOf(T2.id)[0].id]]);
   assertEquals((await journal(T2)).phase, "live");
+  assert(calls.some((c) => c.method === "GET" && c.path === `/${rows[0].mux_playback_id}.m3u8`), "the HLS prewarm went to the fake (MUX_STREAM_BASE), not to stream.mux.com");
   // Resuming a live response sends nothing.
   const n = calls.length;
   assertEquals((await pm(T2, "respond", "--resume")).json?.reason, "already live; nothing sent");
@@ -490,19 +491,20 @@ Deno.test("E2: the old session is refused; a new sign-in restores T2; a live dra
   await unchanged("E2");
 });
 
-// KNOWN DEFECT, found by this rehearsal (21 Oct; reported to Nemat, not fixed here): an account that
-// redeemed an invite cannot be removed. invites.redeemed_by is `on delete set null` but redeemed_at
-// stays, so the check invites_redeemed_pair refuses the row and the whole deletion rolls back: the
-// 03:15 purge records a failure for it every day, and the Dashboard's "Delete user" answers 500. Every
-// closed-beta member redeemed an invite, T2 included. Each E3 test below first asserts the defect as it
-// is, then clears that one account's redemption BY HAND, locally, as a stand-in for a fix, so the rest
-// of the E3 tooling (jobs, drains, Mux calls) is still rehearsed. The stand-in is not a fix and proves
-// nothing about the eventual one.
-const standIn = (id: string) => sql(`update public.invites set redeemed_by = null, redeemed_at = null where redeemed_by = ${lit(id)}`);
+// The invite defect found by this rehearsal (21 Oct) is fixed by 20261021000100: an account that
+// redeemed an invite is removed, and its invite stays used with redeemed_at kept and redeemed_by null.
+// Each E3 test checks that invite before and after.
+const inviteOf = async (id: string) => JSON.parse(await sql(`select coalesce(json_agg(json_build_object('id', id, 'code', code, 'redeemed_at', redeemed_at))::text, '[]') from public.invites where redeemed_by = ${lit(id)}`))[0] as { id: string; code: string; redeemed_at: string };
+const assertConsumed = async (inv: { id: string; code: string; redeemed_at: string }) => {
+  assertEquals(await sql(`select redeemed_by is null and redeemed_at = ${lit(inv.redeemed_at)}::timestamptz and cancelled_at is null from public.invites where id = ${lit(inv.id)}`), "t", "the invite keeps its time and names no one");
+  assertEquals(await sql(`select public.invite_lookup_unlimited(${lit(inv.code)})->>'status'`), "used", "and stays used");
+};
 
-Deno.test("E3 outcome (i), the automatic purge: deleted again and revoked; on day 31 the purge FAILS on the invite (known defect); with the stand-in it queues delete_asset/account_purged and a live drain deletes the asset", async () => {
+Deno.test("E3 outcome (i), the automatic purge: deleted again and revoked; on day 31 the purge removes T2, queues delete_asset/account_purged and a live drain deletes the asset; T2's invite stays used", async () => {
   await saveBaseline();
   const V2 = (await rowsOf(T2.id))[0];
+  const inv = await inviteOf(T2.id);
+  assert(inv?.redeemed_at, "T2 redeemed an invite");
   await signIn(T2);
   assertEquals((await pm(T2, "delete-account")).json?.http, 204);
   const e3a = await jobs(`response_id=eq.${V2.id}&status=eq.pending`);
@@ -512,13 +514,10 @@ Deno.test("E3 outcome (i), the automatic purge: deleted again and revoked; on da
   assertEquals((await jobs(`id=eq.${e3a[0].id}`))[0].result?.outcome, "revoked");
   // Day 31, locally only: the deletion moved back; the 03:15 job's function itself runs.
   await sql(`update public.accounts set deleted_at = now() - interval '31 days' where id = ${lit(T2.id)}`);
-  assertEquals(await sql("select public.purge_deleted_accounts()"), "0", "the defect: nothing purged");
-  assert((await sql(`select last_error from public.account_purge_failures where account_id = ${lit(T2.id)}`)).includes("invites_redeemed_pair"), "the failure is recorded, with the constraint named");
-  assertEquals(await jobs(`asset_id=eq.${V2.mux_asset_id}&status=eq.pending`), [], "nothing queued: the asset would stay at Mux");
-  assertEquals(await sql(`select count(*) from public.accounts where id = ${lit(T2.id)}`), "1", "the account stays, deleted but not purged");
-  await standIn(T2.id);
-  assertEquals(await sql("select public.purge_deleted_accounts()"), "1");
-  assertEquals(await sql(`select count(*) from public.account_purge_failures where account_id = ${lit(T2.id)}`), "0", "the failure row is cleared on success");
+  assertEquals(await sql("select public.purge_deleted_accounts()"), "1", "T2 is purged");
+  assertEquals(await sql(`select count(*) from public.account_purge_failures where account_id = ${lit(T2.id)}`), "0", "no failure recorded");
+  assertEquals(await sql("select public.purge_deleted_accounts()"), "0", "a second run has nothing to do");
+  await assertConsumed(inv);
   const e3b = await jobs(`asset_id=eq.${V2.mux_asset_id}&status=eq.pending`);
   assertEquals(e3b.map((j) => [j.action, j.reason, j.owner_id]), [["delete_asset", "account_purged", T2.id]]);
   calls.length = 0;
@@ -532,19 +531,21 @@ Deno.test("E3 outcome (i), the automatic purge: deleted again and revoked; on da
   await unchanged("E3 (i)");
 });
 
-Deno.test("E3 outcome (ii), deleting the Auth user by hand: FAILS on the invite too (known defect); with the stand-in it is a different path (delete_asset/account_removed, no purge) that does not stand in for (i)", async () => {
+Deno.test("E3 outcome (ii), deleting the Auth user by hand: a different path (delete_asset/account_removed, no purge) that does not stand in for (i); the invite stays used", async () => {
   const m = await createMember("manual");
   assertEquals((await pm(m, "respond", "--prompt", promptId, "--file", CLIP)).json?.reason, "live");
   await saveBaseline();
   const V = (await rowsOf(m.id))[0];
+  const inv = await inviteOf(m.id);
+  assert(inv?.redeemed_at, "the member redeemed an invite");
   // What the Dashboard's "Delete user" does: the Auth user is removed at once, with no 30 days.
-  assertEquals((await http(`/auth/v1/admin/users/${m.id}`, { method: "DELETE" })).status, 500, "the defect: the deletion is refused");
-  assertEquals(await sql(`select count(*) from auth.users where id = ${lit(m.id)}`), "1", "nothing was removed");
-  assertEquals(await jobs(`asset_id=eq.${V.mux_asset_id}&status=eq.pending`), [], "nothing queued");
-  await standIn(m.id);
   assertEquals((await http(`/auth/v1/admin/users/${m.id}`, { method: "DELETE" })).status, 200);
+  assertEquals(await sql(`select count(*) from auth.users where id = ${lit(m.id)}`), "0", "the Auth user is gone");
+  await assertConsumed(inv);
   const queued = await jobs(`asset_id=eq.${V.mux_asset_id}&status=eq.pending`);
   assertEquals(queued.map((j) => [j.action, j.reason]), [["delete_asset", "account_removed"]], "account_removed, not account_purged: purge_deleted_accounts() never ran");
+  assert((await http(`/auth/v1/admin/users/${m.id}`, { method: "DELETE" })).status >= 400, "a second deletion finds no user");
+  assertEquals((await jobs(`asset_id=eq.${V.mux_asset_id}`)).length, 1, "and queues nothing more");
   calls.length = 0;
   assertEquals((await drain("dry_run", [queued[0].id])).code, 0);
   assertEquals((await drain("live", [queued[0].id])).code, 0);
@@ -569,7 +570,6 @@ Deno.test("cleanup: switch off, secrets removed, invite rule restored, this run'
   await sql(`update public.app_config set invite_required = ${inviteRequiredBefore === "t" ? "true" : "false"}`);
   const ids = (await sql(`select coalesce(string_agg(id::text, ','), '') from auth.users where email like '%-${run}@example.com'`)).split(",").filter(Boolean);
   for (const id of ids) {
-    await standIn(id); // the known defect would refuse the removal otherwise
     await http(`/rest/v1/responses?author_id=eq.${id}`, { method: "DELETE" });
     await http(`/auth/v1/admin/users/${id}`, { method: "DELETE" });
   }
