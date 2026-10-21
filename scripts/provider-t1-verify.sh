@@ -3,6 +3,10 @@
 # never printed; the token goes to PT_TOKEN_FILE (mode 600). docs/release/PROVIDER-TESTS.md section 2.
 #   scripts/provider-t1-verify.sh        (T1's address is read from ~/.conga-provider/t1.email)
 set -u
+# Closed 21 Oct: T1's tests are done, and E1 to E3 run on T2 (scripts/provider-member-verify.sh).
+# provider-member.mjs refuses to act as T1 in any case.
+echo "provider-t1-verify.sh is retired: T1's tests are closed; use scripts/provider-member-verify.sh for T2" >&2
+exit 2
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 # shellcheck disable=SC1091
