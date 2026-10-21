@@ -192,11 +192,13 @@ Stop at any FAIL or anything unexpected; the switch stays `off` until U3d.
 
 | Suite | Result |
 |---|---|
-| pgTAP, all files | **1880/1880**: 1775 existing plus `0034_cleanup_unattended.sql` 105 |
+| pgTAP, all files | **1885/1885**: 1775 existing plus `0034_cleanup_unattended.sql` 110 |
 | `cleanup_integration_test.ts` | **37/37**: 28 existing plus 9 new (below) |
 | `alert_integration_test.ts` (new): pg_cron, then pg_net, then a fake Resend | **4/4** |
 | `scheduler-integration.sh` (pg_cron, then pg_net, then the served worker) | **13/13** |
 | Deno unit (`cleanup_unit_test`, `mux_test`) | 11/11, 22/22 |
+| `provider-rehearsal.sh` (the hosted E1 to E3 tooling, fake Mux) | **8/8** and **15/15** |
+| Independent review of the migration (a second agent, reading only) | no bypass of the cap; 6 low-impact bugs, all fixed and covered by the tests above |
 | Rollback | Schema after it equals `inv-expected-28-migrations.fp` (0 lines differ); forward again equals `cu-expected-29-migrations.fp` |
 
 The new integration cases are:

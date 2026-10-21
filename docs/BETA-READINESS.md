@@ -5745,6 +5745,59 @@ day 31), which has still not run against a deleted account on hosted.
   changes. Active working time was not measured separately.
 - **E1 to E3 status:** E1, E2 and E3a passed; E3(ii) passed; E3(i) is open.
 
+## 48. Mux clean-up left on unattended: built and tested locally, rollout plan ready (21 Oct; nothing hosted, no Mux, no push)
+
+Branch `claude/conga-mux-production-ready-2aad5b`, based on `2832e8a` (lifecycle-verify, which
+already contains `provider-t2-tooling` and `invite-account-deletion-fix`). Commits `21b5892`,
+`813edb8` and `90c3e8d`. Design, operations and the rollout are in
+`docs/release/MUX-CLEANUP-UNATTENDED.md`.
+
+- **Reconciliation:**
+  - The worker, its schedules (drain every minute, sweep at 04:45, monitor every 10 minutes) and
+    the health check were already built and deployed (`mux-cleanup` v22, 28 migrations). They were
+    switched off, and ran only in supervised windows.
+  - No hosted migration is missing from source: the 28 match `inv-expected-28-migrations.fp`, and
+    the local 28-migration schema equals that listing.
+  - `rollback-check-27` holds 2 docs and tooling commits about the migration rollback check. They
+    have nothing to do with clean-up and are left out.
+  - Hosted was not re-read this session (a read with the approval flag set by the lead was refused
+    by the permission classifier). The figures above are section 47's; U0 re-reads them.
+- **Missing for unattended use, now built:** migration `20261021000200_cleanup_unattended.sql`
+  (md5 `710ac9518ecc255062e4cf3615014db9`). The worker's code is unchanged.
+  - **U1, a deletion cap with a latch.** At most N asset deletions in 24 hours; then deletions pause
+    until a person resumes them. Revocations, restores and cancellations continue.
+  - **U2, new health checks:**
+    - `worker_not_live`: the switch live while `MUX_CLEANUP_MODE` is not, which no check saw
+      before;
+    - `deletions_paused`, `retrying_jobs`, `no_deletion_cap`, `alerts_not_configured` and
+      `alert_not_delivered`;
+    - the two new schedules.
+  - **U3, email alerts** through Resend:
+    - sent on a change, with a reminder every 24 hours and a recovery message;
+    - a weekly status as a dead-man signal;
+    - check names, counts and times only.
+  - **An audit log** of every change to the settings.
+- **Also fixed:** `scripts/provider-sql.sh` classified `mux_cleanup_alert()`, the cap and the resume
+  as reads.
+- **Tests:** isolated stack `shortcut-mxp`, with fake Mux and fake Resend only.
+  - pgTAP 1885/1885 (110 new).
+  - Cleanup integration 37/37, 9 of them new: lost answers after Mux acted, for each of the four
+    writes; the switch off mid-call; the cap; a worker not live; forged deletions of the founder's
+    asset.
+  - Alert end to end (pg_cron, pg_net, fake Resend) 4/4.
+  - Scheduler 13/13. Provider rehearsal 8/8 and 15/15. Unit 11/11 and 22/22.
+  - Rollback rehearsed: the schema afterwards equals the 28-migration fingerprint.
+  - One run of the T2 rehearsal failed on state left by earlier suites on the same stack. On a reset
+    stack it passed.
+- **Independent review** (a second agent, reading only): no bypass of the cap and no stuck work.
+  Six low-impact bugs were found (a false alert right after going live, an unlocked settings read
+  in the claim, lost-answer deletions not counted, in-flight retries pausing deletions, a flapping
+  warning, a rollback that could refuse). All were fixed in `90c3e8d`.
+- **Not run:** anything on hosted, real Mux or real Resend; a device.
+- **Scheduled purge E3(i): still not passed.** What would verify it, and why it should not block the
+  closed beta, is in section 7 of the runbook. That is Nemat's decision.
+- **Next:** one approval for rollout U0 to U5 (runbook section 4).
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
