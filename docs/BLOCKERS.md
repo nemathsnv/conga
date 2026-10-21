@@ -118,3 +118,9 @@ Tracked here so they cannot disappear; none is closed by code alone.
   is for development only.
 - **Real-device verification** of phases 2 to 5 on iPhone and Android.
 - **B-2** push credentials, **B-3** domain and app links and **B-4** store builds, above.
+- **Accounts that redeemed an invite cannot be removed** (found 21 Oct by the T2 rehearsal; not
+  fixed). `invites.redeemed_by` is `on delete set null` but `redeemed_at` stays, so
+  `invites_redeemed_pair` refuses the row. The 03:15 purge then fails for that account every day: the
+  failure is recorded and its videos are never deleted at Mux. Deleting the Auth user by hand fails
+  too. Every closed-beta member redeems an invite. Needs a migration and Nemat's decision on what an
+  invite keeps once its member is gone (`docs/release/PROVIDER-SESSION.md` section 0).

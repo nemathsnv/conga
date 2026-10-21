@@ -58,6 +58,14 @@ were rehearsed locally (section 8).
 | `scripts/provider-sql.sh` | One SQL statement through `supabase db query` (`--linked --project-ref` on hosted, from an empty scratch folder; `--db-url` locally) | `PROVIDER_HOSTED_REF`, `PROVIDER_APPROVED_BY_NEMAT=yes`; a write also needs `PROVIDER_WRITE_STEP=<step>` |
 | `scripts/provider-drain.sh` | One controlled drain: waits for seconds 3 to 15 of a minute, then one transaction that requires the switch `off`, sets `dry_run` or `live`, requires exactly the expected jobs to be due, records exactly one worker request; prints the worker's answer; always sets `off` again and checks it | as `provider-sql.sh` |
 | `scripts/provider-mux-read.mjs` | Mux `GET`s only (upload, asset, the asset inventory with a hash, HLS and thumbnail status) | none needed: it cannot send anything but `GET` |
+| `scripts/provider-check.mjs` | Read-only. `state`: S1 for T2. `save`/`compare`: the protected baseline (T1, the founder, every Mux asset not T2's) | as `provider-sql.sh` (plain selects only) |
+| `scripts/provider-t2-invite.sh` | CP0′-a's one invite: a guarded transaction (expected count, no unused invite), the code saved to a mode-600 file and never printed | as `provider-sql.sh`, plus `PROVIDER_WRITE_STEP=CP0a-invite` |
+| `scripts/provider-member-verify.sh` | T2's sign-in code entered without echo (`--new` for the first) | as `provider-member.mjs` |
+| `scripts/make-test-clip.swift` | The 6-second disposable clip (AVFoundation; no person, no place) | local only |
+
+Since 21 Oct `provider-member.mjs` also has `otp --create`, `verify --new`, `onboard`, `respond`,
+`respond --resume [--new-upload]` and `status`. Every acting command needs `PT_EXPECT_USER` and refuses
+T1 (`b0c14e38…`) and the founder (`70046556…`) unconditionally (`PROVIDER-SESSION.md` section 0).
 
 Environment, set once per session in a shell that is not logged (values never echoed):
 
@@ -245,6 +253,11 @@ node scripts/provider-member.mjs c2 --reply-to 52bbaabb-6faa-4bd2-94f9-015e43be7
 
 ## 6. Tests E1, E2, E3: account deletion, recovery and the purge (T1, reusing V)
 
+> **21 Oct: E1 to E3 no longer run on T1** (Nemat, 20 Oct). They run on the disposable account T2 and
+> its video V2, with the tooling, rules and the E3 blocker in `PROVIDER-SESSION.md` section 0. The
+> steps below still describe each test; read T2 for T1, V2 for V. Step 4 of E3 is superseded by the
+> two separate outcomes there.
+
 E1 to E3 use `delete_account`, the launch call `get_onboarding_state`, `purge_deleted_accounts` and
 the worker. **They run with `20261016000202_session_lifecycle` applied (H4, 16 Oct 12:07 UTC):**
 `delete_account` needs a sign-in (not a token refresh) from the last 10 minutes, ends **every**
@@ -308,9 +321,12 @@ restore when it runs; pgTAP `0014`), so E2 would then show no revocation.
 3. **E3 dry run**, then **E3 live** (each its own approval): plan `delete` with the ownership
    verified; then job `done` `{"outcome": "deleted"}`; `muxread asset a` 404; P3 HLS 404; Shortcut Beta
    1 asset (the founder's).
-4. **Fallback if 30 days is too long:** delete T1's Auth user in the Dashboard (`account_removed`,
-   the same trigger, `accounts_before_delete`); the deletion is then due at once. The 03:15 purge
-   itself stays unverified on hosted.
+4. **Two outcomes, not a fallback** (revised 21 Oct). **E3(i)**, the 03:15 purge on day 31
+   (`account_purged`), is the only one that verifies the automatic purge. **E3(ii)**, deleting the Auth
+   user in the Dashboard (`account_removed`, `accounts_before_delete`, due at once), verifies that path
+   and the asset deletion, not the purge; if it is chosen, the purge stays unverified on hosted and the
+   record says so. **Both are blocked today:** an account that redeemed an invite cannot be removed
+   (`invites_redeemed_pair`; `PROVIDER-SESSION.md` section 0).
 5. **Rollback:** none. Once a is deleted, V cannot be restored. Nemat accepts this before E3.
 
 ## 7. After every step

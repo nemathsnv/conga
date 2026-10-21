@@ -71,19 +71,100 @@ if the session has expired, then
 `provider-member.mjs c2 --reply-to <V> --submission yes --bytes partial --discard abandon-submission`.
 Expected: `{"outcome": "abandoned", "reason": "cancelled"}`, U7 `cancelled` at Mux, no job, 5 assets.
 
-**E1 to E3 on a disposable account T2 (not approved; prerequisites first):**
+**E1 to E3 on a disposable account T2 (revised 21 Oct; tooling rehearsed locally; nothing approved
+on hosted).** The quota scope is settled for this purpose (`BETA-READINESS.md` section 38): Beta 5,
+spike 7, one disposable asset fits.
 
-1. **Confirm the quota scope** (read-only). See the capacity note in `BETA-READINESS.md`
-   section 35.
-2. **CP0′ (approval):** T2 is created with a disposable inbox Nemat controls. An invite is needed,
-   since `invite_required` is on. T2 records one short response V2 on a test prompt: **1 new asset**
-   (6 of 10 if the cap is per environment).
-3. **E1** (T2 deletes the account): exactly 1 `sync_playback`; dry run, then a live drain revokes
-   V2's playback.
-4. **E2** (a new sign-in): 1 job; dry run, then a live drain gives V2 a new playback id.
-5. **E3:** T2 deletes the account again. The purge is either the 30-day path or the same-day
-   fallback (deleting T2's Auth user in the Dashboard). Then 1 `delete_asset`; dry run, then a live
-   drain deletes V2's asset, and Beta is back to 5.
+*Tooling* (`PROVIDER-TESTS.md` section 2, rehearsed in `provider_t2_rehearsal_test.ts`):
+
+- `provider-member.mjs` acts only as the account in `PT_EXPECT_USER` (T2's id, from
+  `~/.conga-provider/t2.id`). Every acting command refuses T1 and the founder unconditionally: both ids
+  are built in and no setting removes them.
+- T2 is made with `otp --create` (refused if the address already has an account) and
+  `verify --new`. The latter refuses, and removes the token, unless the account is brand new, has one
+  email identity, matches the address and is not onboarded.
+- `onboard` does what the app's sign-up does, and `respond` makes the one video as the app posts it.
+- `provider-check.mjs` gives S1 for T2 (`state`) and the protected baseline (`save`/`compare`): T1, the
+  founder, and every Mux asset in Beta and the spike that is not T2's.
+- T2's files are separate (`provider-env.sh`, `PT_MEMBER=t2`; T1's are refused).
+
+*Three rules (Nemat, 21 Oct):*
+
+1. **T1's iPhone is not frozen.** Normal use of the app as T1 is fine between operations. It is
+   restricted only while an operation runs: from its fresh baseline to its postflight, and for all of
+   W1. Each operation starts with `provider-check save` (a fresh baseline that absorbs any normal use
+   since the last one) and ends with `provider-check compare`; inside the operation nothing protected
+   may change. A difference is a stop until it is explained.
+2. **The 31-day purge and a manual Auth-user deletion are different outcomes,** recorded separately.
+   - **E3(i)**, the real 03:15 `purge_deleted_accounts()` on day 31: the only outcome that verifies the
+     automatic purge (`delete_asset` / `account_purged`).
+   - **E3(ii)**, Nemat deleting T2's Auth user in the Dashboard: the same day, a different trigger path
+     (`account_removed`). It verifies that path and the asset deletion, and **not** the purge.
+   - Choosing (ii) leaves the automatic purge unverified on hosted, and the record says so.
+3. **An uncertain upload is inspected at the provider before anything is retried.** `respond --resume`
+   asks `mux-upload-status` (the server reads Mux) first, and acts only on a definite answer:
+   - asset made: wait for live and send nothing;
+   - still waiting: the same file to the same URL (one upload makes at most one asset);
+   - cancelled or timed out with no asset: stop, unless Nemat approves `--new-upload`;
+   - errored, unknown or no answer: stop.
+
+   Cancellation is never assumed, and no new URL is minted while Mux has not proven the old one empty.
+
+**Blocker for E3, found by the rehearsal (21 Oct; not fixed; Nemat's decision needed):** an account that
+redeemed an invite cannot be removed.
+
+- **Cause:** `invites.redeemed_by` is `on delete set null`, but `redeemed_at` stays set, so
+  `invites_redeemed_pair` refuses the row and the whole deletion rolls back.
+- **The purge:** the 03:15 purge records an `account_purge_failures` row for such an account every day
+  and never queues its `delete_asset`.
+- **A manual deletion:** the Dashboard's "Delete user" fails (500).
+- **Who it affects:** every closed-beta member redeemed an invite, T1 and T2 included. On hosted today
+  no account is deleted, so nothing has failed yet.
+- **Consequence for this plan:** CP0′-a, CP0′-b, E1, E2 and E3a are unaffected. E3(i) and E3(ii) both
+  fail until a migration fixes it.
+- **Also:** once T2 redeems its invite, T2 cannot be removed by any route until then.
+
+**Operations, each its own approval. Each starts with a fresh baseline and the read-only checks, and
+ends with the postflight.**
+
+- **CP0′-a: invite and account (hosted DB and Auth; one email; no Mux call).**
+  - Before: Nemat writes T2's address (a `+` alias of an inbox he controls) to `~/.conga-provider/t2.email`, mode 600.
+  - The lead, in a shell that has run `source scripts/provider-env.sh`:
+    1. **Preflight (read-only):**
+       - `node scripts/provider-check.mjs save hosted ~/.conga-provider/baseline-cp0a.json --mux "$MUXENV" --mux <spike env>`;
+       - one select for 2 accounts, 2 invites, none unused;
+       - switch `off`, 0 open jobs.
+    2. **Write 1, one invite:** `PROVIDER_WRITE_STEP=CP0a-invite scripts/provider-t2-invite.sh hosted 2 "$PT_INVITE_FILE"`.
+       - One guarded transaction: it requires exactly 2 invites and no unused one, then makes one team
+         invite (`team_create_invite(null, 'canggu', null, null)`).
+       - The code goes to `~/.conga-provider/t2.invite` (600) and is not printed.
+    3. **Write 2, the account and one email:** `node scripts/provider-member.mjs otp "$(cat "$PT_EMAIL_FILE")" --create`.
+       - First the app's address check (`auth-signin-method`); refused if the address has an account.
+       - Then `/auth/v1/otp` with `create_user: true`: one Auth user, unconfirmed, and one email.
+    4. **Nemat:** `scripts/provider-member-verify.sh --new` confirms the address and starts T2's first session.
+       - `get_onboarding_state` creates T2's `accounts` row.
+       - T2's id is written to `~/.conga-provider/t2.id`.
+       - Any mismatch removes the token and writes nothing.
+    5. **Write 3, onboarding:** `node scripts/provider-member.mjs onboard --invite-file "$PT_INVITE_FILE" --name "test two" --username test_t2`, which runs:
+       - `confirm_age`;
+       - `redeem_invite` (T2 follows Canggu, as redemption does);
+       - `create_profile`;
+       - `acknowledge_disclosure`.
+    6. **Postflight:**
+       - `provider-check compare` unchanged;
+       - `provider-check state hosted --t2 <id>`: onboarded, 0 rows, 0 ledger rows, 0 jobs;
+       - 3 accounts, 3 invites (T2's redeemed);
+       - Mux unchanged: Beta 5 `2fee7234…`, spike 7 `315652b2…`.
+  - **Rollback:** none needed, since T2 holds nothing. Because of the blocker, T2 cannot be removed until the fix.
+- **CP0′-b: V2 (one new Beta asset).**
+  - `respond --prompt ddd5a383-be11-475f-9576-0a6db79cabe3 --file ~/.conga-provider/t2-clip.mp4`.
+    The clip is 6.000 s, no person, sha256 `11d12a97…`.
+  - Expected: one mint, one row, one complete PUT, `live`. Beta 6 (spike 7 unchanged); T1 and the founder unchanged.
+  - Any uncertain state: rule 3.
+- **E1, E2, E3a:** as in section 5's E rows, with T2 for T1 and V2 for V, using
+  `provider-member-verify.sh` for each code. W1 opens before E1 live and closes after E3a live. Rule 1
+  applies throughout W1.
+- **E3b:** blocked until the invite fix is deployed. Then (i) or (ii), as in rule 2.
 
 Each drain is listed by job id. pgTAP `0030` section 9 has already shown, locally, the per-video
 job counts for an account with several responses on one prompt.

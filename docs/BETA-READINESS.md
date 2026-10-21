@@ -5189,6 +5189,75 @@ test, no continuous clean-up, no schedule, no deployment, no push.
 disposable account, after the quota scope is confirmed), continuous clean-up, scheduled
 reconciliation.
 
+## 38. Mux capacity, E preflight, T2 tooling rehearsed locally; invite defect found (21 Oct; read-only on hosted and Mux; nothing created, sent, switched, deployed or pushed)
+
+Branch `claude/provider-t2-tooling` on `3340b08`.
+
+- **Mux capacity (read-only, 21 Oct about 03:50 UTC; GETs only):**
+  - **Live counts:** Beta (`948jfr`) 5 assets, `2fee7234…`; spike ("short", `arc32j`) 7 assets,
+    `315652b2…`; all `ready`. Both environments are development environments in one organization,
+    "Churn" (`qa5gin`).
+  - **The 10-asset cap is not refused across the organization at upload time.** Mux holds 12, and
+    accepted the 11th and 12th on 20 Oct.
+  - Whether the cap counts per environment, or across the organization but softly, is not documented.
+  - One disposable asset fits either way.
+  - Both tokens hold `video:write`; they were used for GETs only.
+- **E preflight (read-only, 04:10 to 04:15 UTC):**
+  - **Mux:** 12 assets, and all 12 playback ids answer HLS and thumbnail 200.
+  - **Cleanup:** switch `off`; no `MUX_CLEANUP_MODE` (13 secret names); 9 functions `ACTIVE`; health
+    `ok`; 0 open jobs.
+  - **Accounts:** 27 migrations; 2 accounts; 2 invites, none unused.
+  - **T1 and the founder:** T1's 4 live videos and the founder's are unchanged.
+  - **T1's sessions:** 5. One is the iPhone's (13 Oct, refreshed 03:40); four are from test sign-ins.
+  - **T1's upload `zxdf…`** was minted by the phone at 03:43. Read again at 05:33: `timed_out` at Mux
+    with no asset; the ledger still `active` and expired, with no row and no job. Not changed.
+- **Tooling** (`PROVIDER-SESSION.md` section 0, `PROVIDER-TESTS.md` section 2):
+  - **Changed:** `provider-member.mjs` (T2 commands; guards that refuse T1 and the founder
+    unconditionally) and `provider-env.sh` (T2's own files; T1 refused).
+  - **New:** `provider-check.mjs` (S1 for T2, protected baseline), `provider-t2-invite.sh`,
+    `provider-member-verify.sh`, and `make-test-clip.swift`. The clip: 6.000 s, 720x1280, 404 KB,
+    sha256 `11d12a97…`, a colour sweep.
+  - **`provider-drain.sh` fix:** `supabase db query` prints a bare array in a plain shell and a
+    `{rows}` wrapper in an agent's. The drain read only the wrapper, so from Nemat's terminal every
+    drain would have stopped at "switch is not off". It now reads both.
+- **Rehearsal** (isolated stack `shortcut-t2r`, fake Mux; `scripts/provider-rehearsal.sh`):
+  - **The existing C2, E1 to E3 suite:** 8 of 8.
+  - **The new `provider_t2_rehearsal_test.ts`:** 15 of 15. The stack stand-ins for T1 and the founder
+    have the real ids, so the built-in guards are what is tested. It covers:
+    - the guards: every acting command, three `PT_EXPECT_USER` values each;
+    - T2 creation and its refusals: an address with an account, an id already recorded, an old
+      account, an onboarded account, another account;
+    - onboarding;
+    - the upload cases: a cut transfer resumed on the same URL; a lost PUT answer with the asset
+      already made; Mux making an upload but answering an error; a lost `post_response` answer
+      replayed to the same row; cancelled and errored uploads refused, and `--new-upload` only after
+      Mux proves the old upload empty;
+    - E1 and E2;
+    - both E3 outcomes;
+    - the protected baseline before and after every operation.
+  - **Not covered:** real Mux, the hosted project, Resend email, the app on a device.
+  - **A real-Mux request:** after a video goes live, `mux-upload-status` sends one unauthenticated
+    prewarm GET to the real `stream.mux.com`. In the rehearsal the playback id is made up, so the
+    request gets a 404 and creates nothing. Left as it is (product code).
+- **Defect found, blocking E3 (not fixed; Nemat's decision needed):** an account that redeemed an
+  invite cannot be removed. `invites.redeemed_by` is `on delete set null` and `redeemed_at` stays,
+  so `invites_redeemed_pair` refuses the row and the deletion rolls back.
+  - **Seen locally:** `purge_deleted_accounts()` returned 0 and recorded the constraint in
+    `account_purge_failures`, with nothing queued. The Auth admin deletion answered 500.
+  - **Who it affects:** every closed-beta member. No account is deleted on hosted yet.
+  - **The rehearsal's handling:** it asserts the defect, then clears that one account's redemption by
+    hand, locally, as a labelled stand-in, to rehearse the rest of E3.
+  - Logged in `docs/BLOCKERS.md`.
+- **Plan revised (Nemat, 21 Oct), in three places:**
+  - **T1's iPhone:** not frozen. Use is restricted only inside an operation and W1, with a fresh
+    baseline before each operation.
+  - **E3:** (i) the automatic purge and (ii) the manual Auth deletion are recorded as distinct
+    outcomes; only (i) verifies the purge.
+  - **Uploads:** an uncertain upload is inspected at Mux before any retry.
+- **Waiting on Nemat:**
+  - CP0′-a (exact writes in `PROVIDER-SESSION.md` section 0);
+  - a decision on the invite defect before E3.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
