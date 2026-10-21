@@ -9,7 +9,7 @@
 #   scripts/cleanup-unattended-hosted-check.sh pre|post|live <outdir>
 #     pre   before the migration:   28 migrations, switch off, no MUX_CLEANUP_MODE
 #     post  after the migration:    29 migrations, 12 schedules, switch off, no cap, no MUX_CLEANUP_MODE
-#     live  after enabling:         29 migrations, switch live, cap 5, MUX_CLEANUP_MODE=live, alerts set
+#     live  after enabling:         29 migrations, switch live, cap 2, MUX_CLEANUP_MODE=live, alerts set
 # Exit 0 only if every check passes.
 set -uo pipefail
 PHASE="${1:-}"; OUT="${2:-}"
@@ -53,7 +53,7 @@ v "fingerprint equals $(basename "$EXP_FP") line for line" "0" "$(grep -c '^[<>]
 if [ "$PHASE" = live ]; then EXP_MODE=live; else EXP_MODE=off; fi
 v "clean-up switch" "$EXP_MODE" "$(q "select public.mux_cleanup_mode() as v")"
 if [ "$PHASE" != pre ]; then
-  v "deletion cap|paused" "$([ "$PHASE" = live ] && echo "5|no" || echo "none|no")" "$(q "select coalesce(deletion_cap::text, 'none') || '|' || case when deletions_paused_at is null then 'no' else 'yes' end as v from public.mux_cleanup_settings")"
+  v "deletion cap|paused" "$([ "$PHASE" = live ] && echo "2|no" || echo "none|no")" "$(q "select coalesce(deletion_cap::text, 'none') || '|' || case when deletions_paused_at is null then 'no' else 'yes' end as v from public.mux_cleanup_settings")"
   echo "INFO  settings log: $(q "select count(*) || ' change(s); last: ' || coalesce(max(changed_at)::text, 'none') as v from public.mux_cleanup_settings_log")"
 fi
 v "open clean-up jobs (not done/skipped)" "0" "$(q "select count(*) as v from public.mux_cleanup_jobs where status not in ('done', 'skipped')")"

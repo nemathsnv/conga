@@ -48,16 +48,13 @@ Every change to `mux_cleanup_settings` is now kept, with who made it, in `mux_cl
   - leases of 120 s;
   - backoff from 1 minute to 6 hours, 10 attempts, then `failed`.
 - **New limits:**
-  - deletion cap **5 per 24 hours** to start;
+  - deletion cap **2 per 24 hours** to start (Nemat, 21 Oct; not raised automatically, revisited after observing normal operation);
   - alerts checked every 10 minutes (minute 5, after the monitor at minute 0);
   - at most 30 messages a day;
   - the weekly status on Mondays at 02:00 UTC.
-- **Why a cap of 5:**
-  - Shortcut Beta holds 5 assets and the free plan stops at 10.
-  - The two accounts produce about 0 to 2 deletions a week.
-  - Removing T1 completely would be 4 deletions, inside the cap.
-  - Raise it to 10 to 20 once outside testers join and the real pattern is known:
-    `mux_cleanup_set_deletion_cap(<n>, '<who>')`.
+- **Why a cap of 2:** Shortcut Beta holds 5 assets. The two accounts produce about 0 to 2 deletions
+  a week. Removing T1 completely (4 assets) would pause after 2 and wait for a person. Nemat raises
+  it once the real pattern is known: `mux_cleanup_set_deletion_cap(<n>, '<who>')`.
 - **What the cap does not hold:** playback revocations and restores, and upload cancellations. All
   three are reversible or harmless, and revocation is the privacy-protecting step, so it must not wait.
 - **What counts as a new alert:** the status and the set of problem checks. A count growing within
@@ -141,11 +138,11 @@ Stop at any FAIL or anything unexpected; the switch stays `off` until U3d.
 - The lead sees Resend's 2xx recorded in `mux_cleanup_alerts`. `mux_cleanup_alert_url` stays unset.
 
 **U3. Cap, function switch, dry run, live.**
-- **a.** `select public.mux_cleanup_set_deletion_cap(5, 'Nemat: unattended rollout');`
+- **a.** `select public.mux_cleanup_set_deletion_cap(2, 'Nemat: unattended rollout');`
 - **b.** Nemat: `supabase secrets set MUX_CLEANUP_MODE=live --project-ref picvoavfxnajfjkqawju`.
   Every function goes up one version and no bundle changes. With the database `off`, nothing can act.
 - **c.** One guarded transaction:
-  - checks: switch `off`, 0 open jobs, cap 5, 3 alert secrets;
+  - checks: switch `off`, 0 open jobs, cap 2, 3 alert secrets;
   - sets `dry_run`;
   - runs `run_mux_cleanup('sweep')`.
 
@@ -167,7 +164,7 @@ Stop at any FAIL or anything unexpected; the switch stays `off` until U3d.
   - `mux-cleanup-alert`: 3 runs.
 - Health `ok`, and no job created.
 - `check live`, all PASS:
-  - switch `live`, cap 5, `MUX_CLEANUP_MODE` digest of `live`;
+  - switch `live`, cap 2, `MUX_CLEANUP_MODE` digest of `live`;
   - 0 open jobs, health `ok`;
   - every table hash unchanged since U1, except the clean-up bookkeeping (`mux_cleanup_settings`,
     `_settings_log`, `_runs`, `_alerts`).
@@ -176,7 +173,7 @@ Stop at any FAIL or anything unexpected; the switch stays `off` until U3d.
 - `playbacks`: the same 12 ids, all 200/200, with the same inventory hashes.
 
 **U5. Final state and record.**
-- **Left on:** database switch `live`, `MUX_CLEANUP_MODE=live`, cap 5, alerts to Nemat, 12 schedules.
+- **Left on:** database switch `live`, `MUX_CLEANUP_MODE=live`, cap 2, alerts to Nemat, 12 schedules.
 - **Recorded:** in `BETA-READINESS.md` and `DECISIONS.md`.
 - **Follow-up reads, outside the window:** the first scheduled 04:45 sweep, and the first weekly
   message on Monday 27 Oct at 02:00 UTC.
