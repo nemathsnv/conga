@@ -153,6 +153,9 @@ before any byte, start the transfer, cut it, discard) without depending on the U
 
 ### C2w: the worker cancels it
 
+**PASSED on hosted and real Mux, 21 Oct 03:12 UTC (BETA-READINESS section 37):** J6 `cancelled`, U6
+`cancelled` with no asset; e48 (U5) closed `timed_out`; 0 open jobs; health `ok`; 5 assets unchanged.
+
 **16 Oct:** C2w-a and C2w-b passed with U5; U5 timed out at Mux before C2w-c, and its job
 `e48cdb45…` is still pending (BETA-READINESS section 28). The fresh run (C2w-a′, C2w-b′, C2w-c with
 both jobs listed) is in `PROVIDER-SESSION.md`; per Nemat's decision 3, U5 is not recreated and only

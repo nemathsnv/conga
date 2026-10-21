@@ -5118,6 +5118,77 @@ worker drain, switch, secret, deployment or push.
 
 *Next:* C2w, its own approval (`PROVIDER-SESSION.md` section 0, "Operation C2w").
 
+## 37. Provider test C2w passed on the hosted project and real Mux; U5's job closed (21 Oct 03:05 to 03:16 UTC; Nemat approved C2w only)
+
+Approved by Nemat on 20 Oct: the single C2w with one live window, Nemat present throughout. No E
+test, no continuous clean-up, no schedule, no deployment, no push.
+
+- **Preflight (20 Oct 16:22 UTC, read-only):** everything matched section 36.
+  - Mux: 5 assets, `2fee7234…`; all 5 playback ids HLS 200 and thumbnail 200.
+  - Jobs: only e48 open and due. U5 `timed_out` at Mux, no asset.
+  - Switches: database `off`, no `MUX_CLEANUP_MODE`.
+- **First token expired (stopped safely):**
+  - Nemat's "ready" came at 17:57, after the 16:23 token had lapsed. The mint answered `401` and
+    nothing was created (0 URLs, 0 rows; state unchanged).
+  - A new code was sent at 03:04:55 on 21 Oct and entered by Nemat; the token was 11 s old at the
+    mint.
+- **C2w-a′ (03:05:44 to 03:05:49):**
+  - Mint `200`, U6 `S3boBnAB…`, expiring 04:05:46.
+  - `post_reply` `200`: row R6 `a35a78ea…`, a reply to T1's own V.
+  - PUT cut after 262,144 of 8,388,608 bytes; `abandon_response` `204`.
+  - After: R6 `deleted`; exactly one new job J6 `230e5da4…` (`cancel_upload`, `abandoned`, U6, owner
+    T1, due). Mux: U6 `waiting`, no asset.
+- **C2w-b′ dry run (03:06:14, run 9):** worker `200`, `dry_run`, claimed 2, released 2. e48 would
+  close as `timed_out`; J6 would `cancel` the `waiting` upload, owner verified. Switch `off` after.
+- **First window refused before any action (03:07:27 to 03:07:35):**
+  - Nemat ran `scripts/provider-c2w-c.sh` with both ids. It set `MUX_CLEANUP_MODE=live`.
+  - The drain's first check, run from Nemat's shell, did not read the database switch as `off` and
+    refused ("precondition: the switch is not off"). The trap then unset the variable.
+  - The switch really was `off`; the same check passed from the lead's shell straight afterwards.
+    The likely cause is an unreadable database answer, which the check treats as not off (fail
+    closed); the refusal printed nothing else, so it is not confirmed.
+  - Nothing ran: no worker request (run 9 was still the only one), no Mux call, both jobs pending
+    with 0 attempts.
+- **Second window, with Nemat's go (03:11 to about 03:15):**
+  - Nemat set the variable; the lead confirmed it present.
+  - One guarded live drain of exactly e48 and J6 at 03:12:09 (run 10): worker `200`, `live`,
+    claimed 2, done 2, found_asset 0, failed 0, skipped 0, stale 0. Database switch `off` after.
+  - Nemat unset the variable; confirmed absent at 03:16:52.
+  - Total time the function switch was set: about 8 s in the first window plus about 4 minutes in
+    the second. The database switch was `off` throughout, except inside each guarded drain.
+- **Postflight (03:12 to 03:16):**
+  - **J6 `done` `{"outcome": "cancelled"}`; U6 at Mux `cancelled`, `asset_id` null.**
+  - **e48 `done` `{"outcome": "timed_out"}`** (U5 still `timed_out`, no asset). U5 was never
+    recreated.
+  - 0 open jobs; 6 in total; no other job created or changed.
+  - **Health `ok`, no problems** (the `waiting_while_not_live` warning is gone).
+  - Mux: still 5 assets, `2fee7234…` unchanged; reconciliation `ok`, exit 0. All 5 playback ids
+    still HLS 200 and thumbnail 200.
+  - T1's 4 videos are unchanged (rows, assets, playback ids); the founder video too. 0 activity
+    rows.
+  - Ledger U6 stays `claimed` with no `cancelled_at`, as designed: the worker never frees slots,
+    and the URL has expired anyway.
+  - Secrets: 13 names, no `MUX_CLEANUP_MODE`; database switch `off`.
+- **What this proves on the real provider:** a `cancel_upload` job from the legacy discard
+  (`abandon_response`) is cancelled at Mux by the worker for a waiting upload holding part of a
+  file, and Mux makes no asset. A job for an upload Mux reports `timed_out` closes with no Mux
+  change.
+- **Residual state; nothing needs cleanup:**
+  - R6 is a `deleted` tombstone; U6 is a `claimed` ledger row.
+  - T1 has 5 `auth.sessions`: the phone's 2 plus 3 test sign-ins (C2a and tonight's two codes).
+    Each test session holds only an access token that has expired or expires within the hour, and
+    no refresh token was kept, so they cannot be used again. They are not revoked (that would be a
+    change to T1); the phone's sessions were not touched.
+  - T1 minted 4 URLs in 24 h (limit 30). The token and address files were deleted from the Mac.
+  - Mux run 10's answer is collected by the 10-minute monitor as usual.
+- **Follow-up:** before `provider-c2w-c.sh` is used again, its drain check should print the raw
+  database answer when it cannot read the switch, so a refusal like the first window's can be
+  diagnosed.
+
+*Done with C2w and C2a:* the cancellation paths are proven on real Mux. *Not done:* E1 to E3 (a
+disposable account, after the quota scope is confirmed), continuous clean-up, scheduled
+reconciliation.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
