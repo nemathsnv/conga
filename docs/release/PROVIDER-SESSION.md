@@ -167,6 +167,8 @@ ends with the postflight.**
     The clip is 6.000 s, no person, sha256 `11d12a97…`.
   - Expected: one mint, one row, one complete PUT, `live`. Beta 6 (spike 7 unchanged); T1 and the founder unchanged.
   - Any uncertain state: rule 3.
+- **E1 Stage A done 21 Oct 09:02 to 09:05 UTC** (T2 deleted, job `d7e245e3…` dry-run `would_revoke`
+  [`VpzPAAYF…`]; `BETA-READINESS.md` section 43). Stage B, the live revocation, needs its own approval.
 - **E1, E2, E3a:** as in section 5's E rows, with T2 for T1 and V2 for V, using
   `provider-member-verify.sh` for each code. W1 opens before E1 live and closes after E3a live. Rule 1
   applies throughout W1.

@@ -5462,6 +5462,74 @@ to E3.
 - **Next:** E1 needs its own approval. T2's token expires 09:31:29 UTC; E1 starts with a new code
   (`provider-member-verify.sh`), as the plan says.
 
+## 43. E1 Stage A: T2 soft-deleted and the revocation dry-run on hosted (21 Oct 09:00 to 09:07 UTC; Nemat approved Stage A only)
+
+From `3a29e4e` plus the playback-check fix below. Writes: one sign-in code, T2's `delete_account`, one
+guarded dry-run drain (the switch to `dry_run` and back to `off`). No live window, no Mux change
+(GETs only), no E2 or E3, no deployment or push. Nothing printed an address, code or token.
+
+- **Playback-check fix (local tool):** `scripts/provider-mux-read.mjs playbacks`.
+  - It lists every asset and checks HLS and thumbnail for each id taken from Mux's structured
+    `playback_ids[].id`.
+  - Section 42's ad hoc loop split "<id> public" and also asked for the id "public".
+  - Tested against a local fake first: several ids per asset, an asset without ids, a 404 reported
+    as not all 200, and no request containing "public".
+- **Preflight (09:00:39 to 09:01:46), all as expected:**
+  - **Hosted:** 28 migrations, 3 accounts, none deleted.
+  - **T2:** exactly one row, V2 `live`, with asset `xMQeMrW0…` and playback `VpzPAAYF…`. 1 session,
+    0 push tokens.
+  - **V2 visible before:** `video_visible` true for anonymous viewers, T1 and the founder;
+    `web_video` `live`.
+  - **Clean-up:** `off`, health `ok`, 0 open jobs.
+  - **Protected:** `provider-check compare` against the CP0′-b baseline unchanged. Fresh baseline
+    `~/.conga-provider/baseline-e1.json` (600).
+  - **Mux:** Beta 6 (`6bbd4333…`), spike 7 (`315652b2…`); `playbacks`: 6 and 7 ids, all HLS 200 and
+    thumbnail 200.
+  - **Guards:** `delete-account` with `PT_EXPECT_USER` set to T1, then the founder, was refused
+    before any request.
+- **Sign-in:**
+  - `otp` without `--create` at 09:01:57, 200. Still 3 Auth users, 1 for the address.
+  - Nemat ran `provider-member-verify.sh` (no `--new`): token saved.
+  - Checked locally before use: subject T2, a new session (not session 1), issued 09:02:39 by `otp`.
+- **Deletion (09:02:54):** `provider-member.mjs delete-account`: 204, as T2, 15 s after the sign-in.
+- **Results:**
+  - **T2:** `deleted_at` 09:02:55.544. Auth sessions 0, live refresh tokens 0.
+  - **Tokens:** `sign-in-state` with the deletion's token, and with the earlier session-1 token
+    (still unexpired, a private copy since removed), both answered 403 `session_revoked`.
+    `deleted_at` stayed set: nothing was restored.
+  - **Exactly one new job:** `d7e245e3-5913-4116-acdc-34f41d6e8d71`, `sync_playback` /
+    `account_deleted`, asset `xMQeMrW0…`, response V2, owner T2, `pending`, due 09:02:55. Total jobs
+    7.
+- **Dry run (09:04:40 to 09:05:36):**
+  - `PROVIDER_WRITE_STEP=E1-dry scripts/provider-drain.sh hosted dry_run … d7e245e3-…`.
+  - Worker answer 200: `mode dry_run, claimed 1, release 1`, nothing done or failed. Switch after:
+    `off`.
+  - **The job's plan:** `direction revoke`, `owner_verified true`, `asset_status ready`,
+    `public_playback_ids` and `would_revoke` exactly [`VpzPAAYF…`]. No other asset.
+  - **Released, by design:** the job is `pending` with `not_before` 10:05:13 (release adds an hour).
+    `mux_cleanup_set_mode('live')`, which the live drain calls, makes dry-run-released jobs due at
+    once, so Stage B need not wait.
+- **Postflight (09:05:56 to 09:06:48):**
+  - **V2 hidden:** `video_visible` false for anonymous viewers, T1 and the founder; `web_video`
+    `unavailable`. The row is still `live` with its asset and playback id, as designed until the
+    revocation.
+  - **V2 at Mux, unchanged:** asset `ready` with exactly [`VpzPAAYF…` public]; HLS 200, thumbnail
+    200.
+  - **All 13 assets exist:** Beta 6 `6bbd4333…`, spike 7 `315652b2…`, both hashes unchanged. All 13
+    playback ids answer 200.
+  - **Protected:** `provider-check compare` against `baseline-e1` unchanged. T1's and the founder's
+    accounts, rows, playback ids, ledgers and session ids are as before.
+  - **Clean-up:** `off`, health `ok` with no problems. The only open job is `d7e245e3…`. 0 cron
+    failures. Accounts: 3, 1 deleted (T2).
+- **Two transient read failures, each retried once, read-only:**
+  - `provider-check state` at 09:03 (empty error from the CLI);
+  - Beta `playbacks` at 09:06 (connect timeout to Mux).
+- **Next:** E1 Stage B, the live revocation, needs its own approval. It needs W1
+  (`MUX_CLEANUP_MODE=live`), then `PROVIDER_WRITE_STEP=E1-live scripts/provider-drain.sh hosted live
+  … d7e245e3-…`, then closing W1. Until then V2 plays at Mux for anyone who has its playback id; in
+  the app and on the web it is hidden. No sign-in as T2 may happen before the live drain: it would
+  turn the pending job into a restore.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
