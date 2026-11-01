@@ -131,7 +131,8 @@ async function viaCron(mode: "drain" | "sweep", times = 1) {
 }
 type JobRow = { status: string; attempts: number; last_error: string | null; result: Record<string, unknown> | null; reason: string };
 async function job(asset: string): Promise<JobRow> {
-  const r = await http(`/rest/v1/mux_cleanup_jobs?asset_id=eq.${asset}&order=created_at.desc&limit=1&select=status,attempts,last_error,result,reason`);
+  // The deletion; an author's deletion also queues a playback revocation (20261101000100).
+  const r = await http(`/rest/v1/mux_cleanup_jobs?asset_id=eq.${asset}&action=eq.delete_asset&order=created_at.desc&limit=1&select=status,attempts,last_error,result,reason`);
   return (r.json as JobRow[])[0];
 }
 type Member = { id: string; token: string };
@@ -349,7 +350,7 @@ Deno.test("monitoring: every call to the worker is recorded; its answer collecte
   const rows = (await sql(`select coalesce(status_code::text, 'none') || '|' || coalesce(ok::text, 'null') || '|' || (error is not null)::text || '|' || coalesce(summary->>'claimed', '-') from public.mux_cleanup_runs where requested_at >= ${lit(since)} order by request_id`)).split("\n");
   assertEquals(rows[0], "401|null|false|-", "the wrong key: 401");
   assert(rows[1].startsWith("none|null|true"), `unreachable: an error, no status (${rows[1]})`);
-  assertEquals(rows[2], "200|true|false|1", "the right key: 200, ok, one job claimed");
+  assertEquals(rows[2], "200|true|false|2", "the right key: 200, ok, two jobs claimed (the revocation and the deletion)");
   assertEquals(await sql(`select count(*) from public.mux_cleanup_runs where requested_at >= ${lit(since)} and summary::text like '%${v.asset.id}%'`), "0", "no Mux id kept from the answers");
   const health = JSON.parse(await sql("select public.mux_cleanup_health()"));
   assertEquals(health.status, "alert");

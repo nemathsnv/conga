@@ -102,6 +102,10 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return realFetch(input, init);
 }) as typeof fetch;
 const calls = (method: string, fragment: string) => muxCalls.filter((c) => c.method === method && c.path.includes(fragment)).length;
+/** DELETEs of the asset itself, not of one of its playback ids. */
+const assetDeletes = (id: string) => muxCalls.filter((c) => c.method === "DELETE" && c.path === `/video/v1/assets/${id}`).length;
+/** The calls on an asset in order, a playback id's DELETE marked as such. */
+const assetCalls = (id: string) => muxCalls.filter((c) => c.path.includes(id)).map((c) => c.method + (c.path.includes("/playback-ids/") ? " playback" : ""));
 const destructive = (id: string) => muxCalls.filter((c) => (c.method === "DELETE" || c.method === "PUT") && c.path.includes(id));
 
 /** What Mux does when the bytes arrive: the upload becomes a ready asset with public playback. */
@@ -182,6 +186,14 @@ type JobRow = { action: string; reason: string; status: string; attempts: number
 async function jobs(target: string): Promise<JobRow[]> {
   const r = await http(`/rest/v1/mux_cleanup_jobs?or=(asset_id.eq.${target},upload_id.eq.${target})&select=id,action,reason,status,attempts,last_error,not_before,owner_id,result,max_attempts&order=created_at`);
   return r.json as JobRow[];
+}
+const jobOf = async (target: string, action: string) => (await jobs(target)).filter((j) => j.action === action).at(-1)!;
+/** An author's deletion queues the playback revocation ahead of the deletion (20261101000100); one batch runs it. */
+async function revokeFirst(v: { asset: FakeAsset }) {
+  await drain(1);
+  const sync = await jobOf(v.asset.id, "sync_playback");
+  assertEquals([sync.status, sync.reason], ["done", "author_deleted"]);
+  assertEquals(assets.get(v.asset.id)!.playback_ids, [], "the playback is revoked first");
 }
 async function patchJobs(target: string, patch: Record<string, unknown>) {
   await http(`/rest/v1/mux_cleanup_jobs?or=(asset_id.eq.${target},upload_id.eq.${target})&status=eq.pending`, { method: "PATCH", body: patch });
@@ -292,12 +304,14 @@ Deno.test("author deletion: hidden at once everywhere, the asset deleted at Mux 
   assertEquals((await web(v.id)).status, "unavailable", "the web shows it unavailable before Mux is touched");
   muxCalls.length = 0;
   const r = await drainAll();
-  assertEquals(r.done, 1);
-  assertEquals(muxCalls.filter((c) => c.path.includes(v.asset.id)).map((c) => c.method), ["GET", "DELETE"], "read and verified, then deleted");
+  assertEquals(r.done, 2, "the revocation and the deletion");
+  assertEquals(assetCalls(v.asset.id), ["GET", "DELETE playback", "GET", "DELETE"], "revoked first, then read and verified, then deleted");
   assert(!assets.has(v.asset.id), "the asset is gone at Mux");
   assertEquals((await row(v.id))?.mux_asset_id, null);
-  const [job] = await jobs(v.asset.id);
-  assertEquals([job.status, job.reason, job.owner_id], ["done", "author_deleted", null]);
+  for (const action of ["sync_playback", "delete_asset"]) {
+    const job = await jobOf(v.asset.id, action);
+    assertEquals([job.status, job.reason, job.owner_id], ["done", "author_deleted", null], action);
+  }
   assertEquals(destructive(founderVideo.asset.id), []);
 });
 
@@ -425,7 +439,7 @@ Deno.test("concurrency: three workers at once act on each job exactly once", asy
   const results = await Promise.all([drain(), drain(), drain()]) as Record<string, number>[];
   assert(results.reduce((n, r) => n + r.claimed, 0) >= 6, "all six jobs leased");
   for (const v of videos) {
-    assertEquals(calls("DELETE", `/assets/${v.asset.id}`), 1, `asset ${v.asset.id} deleted once`);
+    assertEquals(assetDeletes(v.asset.id), 1, `asset ${v.asset.id} deleted once`);
     assert(!assets.has(v.asset.id));
   }
 });
@@ -435,9 +449,10 @@ Deno.test("retry: a Mux failure is retried with backoff; the asset is deleted on
   const ola = await member("ola");
   const v = await liveVideo(ola);
   await rpc(ola, "delete_video", { p_id: v.id });
-  fault = (method, path) => method === "DELETE" && path.includes(v.asset.id) ? Response.json({ error: "busy" }, { status: 503 }) : null;
+  await revokeFirst(v);
+  fault = (method, path) => method === "DELETE" && path === `/video/v1/assets/${v.asset.id}` ? Response.json({ error: "busy" }, { status: 503 }) : null;
   await drain();
-  let [job] = await jobs(v.asset.id);
+  let job = await jobOf(v.asset.id, "delete_asset");
   assertEquals([job.status, job.attempts, job.last_error], ["pending", 1, "mux_503"]);
   const wait = (Date.parse(job.not_before) - Date.now()) / 1000;
   assert(wait > 50 && wait < 70, `retried after about a minute, got ${wait}`);
@@ -445,12 +460,12 @@ Deno.test("retry: a Mux failure is retried with backoff; the asset is deleted on
   fault = (method, path) => method === "GET" && path.includes(v.asset.id) ? Promise.reject(new TypeError("network down")) : null;
   await patchJobs(v.asset.id, { not_before: due() });
   await drain();
-  [job] = await jobs(v.asset.id);
+  job = await jobOf(v.asset.id, "delete_asset");
   assertEquals([job.status, job.attempts, job.last_error], ["pending", 2, "network down"]);
   fault = () => null;
   await patchJobs(v.asset.id, { not_before: due() });
   await drainAll();
-  assertEquals((await jobs(v.asset.id))[0].status, "done");
+  assertEquals((await jobOf(v.asset.id, "delete_asset")).status, "done");
   assert(!assets.has(v.asset.id));
 });
 
@@ -458,19 +473,20 @@ Deno.test("failure: out of attempts the job fails, shows in the overview, and a 
   const pia = await member("pia");
   const v = await liveVideo(pia);
   await rpc(pia, "delete_video", { p_id: v.id });
+  await revokeFirst(v);
   await patchJobs(v.asset.id, { max_attempts: 2 });
-  fault = (method, path) => method === "DELETE" && path.includes(v.asset.id) ? Response.json({ error: "down" }, { status: 500 }) : null;
+  fault = (method, path) => method === "DELETE" && path === `/video/v1/assets/${v.asset.id}` ? Response.json({ error: "down" }, { status: 500 }) : null;
   await drain();
   await patchJobs(v.asset.id, { not_before: due() });
   await drain();
-  const [job] = await jobs(v.asset.id);
+  const job = await jobOf(v.asset.id, "delete_asset");
   assertEquals([job.status, job.attempts], ["failed", 2]);
   const overview = await service("mux_cleanup_overview") as { failed: { id: string }[] };
   assert(overview.failed.some((f) => f.id === job.id), "listed as failed");
   fault = () => null;
   await service("mux_cleanup_retry", { p_job: job.id });
   await drainAll();
-  assertEquals((await jobs(v.asset.id))[0].status, "done");
+  assertEquals((await jobOf(v.asset.id, "delete_asset")).status, "done");
   assert(!assets.has(v.asset.id));
 });
 
@@ -652,9 +668,11 @@ Deno.test("dry run (the function's switch): Mux is read, never changed; the plan
     assertEquals(mutations(), [], "only GETs");
     assert(assets.has(v.asset.id) && assets.get(w.asset.id)!.playback_ids.length === 1, "nothing changed at Mux");
     assertEquals((await row(w.id))!.mux_playback_id, w.asset.playback_ids[0].id, "nor in the database's videos");
-    const [job] = await jobs(v.asset.id);
-    assertEquals([job.status, job.attempts, (job.result as { dry_run: boolean }).dry_run], ["pending", 0, true]);
-    assertEquals((job.result as { would: { act: string } }).would.act, "delete");
+    for (const [action, act] of [["sync_playback", "sync"], ["delete_asset", "delete"]]) {
+      const job = await jobOf(v.asset.id, action);
+      assertEquals([job.status, job.attempts, (job.result as { dry_run: boolean }).dry_run], ["pending", 0, true], action);
+      assertEquals((job.result as { would: { act: string } }).would.act, act);
+    }
     const overview = await service("mux_cleanup_overview") as { dry_run_planned: { asset_id: string }[] };
     assert(overview.dry_run_planned.some((p) => p.asset_id === v.asset.id), "the overview lists the plan");
   } finally {
@@ -817,7 +835,7 @@ Deno.test("G2: removed, restored, then deleted by its author: the asset is delet
   muxCalls.length = 0;
   await drainAll();
   assert(!assets.has(v.asset.id), "the asset is deleted at Mux now, not in 30 days");
-  assertEquals(muxCalls.filter((c) => c.path.includes(v.asset.id)).map((c) => c.method), ["GET", "DELETE"], "read and verified, then deleted");
+  assertEquals(assetCalls(v.asset.id), ["GET", "DELETE playback", "GET", "DELETE"], "revoked first, then read and verified, then deleted");
   const last = (await jobs(v.asset.id)).filter((j) => j.action === "delete_asset").at(-1)!;
   assertEquals([last.status, last.reason], ["done", "author_deleted"]);
   const reports = (await http(`/rest/v1/reports?target_id=eq.${v.id}&select=status`)).json as { status: string }[];
@@ -965,19 +983,20 @@ Deno.test("unknown result: Mux deletes the asset but the answer is lost; the ret
   const una = await member("una");
   const v = await liveVideo(una);
   assertEquals((await rpc(una, "delete_video", { p_id: v.id })).status, 204);
+  await revokeFirst(v);
   fault = (method, path) => method === "DELETE" && path === `/video/v1/assets/${v.asset.id}` ? lostAnswer(method, path) : null;
   muxCalls.length = 0;
   const first = await drain(1) as Record<string, number>;
   fault = () => null;
   assertEquals([first.claimed, first.retry], [1, 1], "the lost answer is a retry");
   assert(!assets.has(v.asset.id), "Mux did delete it");
-  const [pending] = await jobs(v.asset.id);
+  const pending = await jobOf(v.asset.id, "delete_asset");
   assertEquals([pending.status, pending.last_error], ["pending", "mux_timeout"]);
   await patchJobs(v.asset.id, { not_before: due() });
   await drainAll();
-  const [job] = await jobs(v.asset.id);
+  const job = await jobOf(v.asset.id, "delete_asset");
   assertEquals([job.status, job.result?.outcome], ["done", "already_gone"]);
-  assertEquals(calls("DELETE", v.asset.id), 1, "no second DELETE");
+  assertEquals(assetDeletes(v.asset.id), 1, "no second DELETE");
   assertEquals((await row(v.id))?.mux_asset_id, null, "the video forgets the asset");
 });
 
@@ -1099,7 +1118,7 @@ Deno.test("worker not live: the switch live and the function in dry run; nothing
   try {
     muxCalls.length = 0;
     const r = await drain() as Record<string, unknown>;
-    assertEquals([r.mode, r.release], ["dry_run", 1]);
+    assertEquals([r.mode, r.release], ["dry_run", 2], "the revocation and the deletion, planned");
     assertEquals(destructive(v.asset.id), []);
     // What mux-cleanup-monitor would copy from pg_net: the worker's answer, just after the switch went live.
     const [settings] = (await http("/rest/v1/mux_cleanup_settings?select=changed_at")).json as { changed_at: string }[];

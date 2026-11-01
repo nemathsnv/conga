@@ -5,7 +5,7 @@
 -- cleanup_integration_test.ts. Inside one transaction now() does not move, so "later" is
 -- written as moving recorded times back.
 begin;
-select plan(363);
+select plan(364);
 
 delete from public.responses;
 delete from public.prompts;
@@ -237,7 +237,8 @@ select is((pg_temp.job('delete_asset', 'asA1')).reason, 'author_deleted', 'as th
 select is((pg_temp.job('delete_asset', 'asA1')).owner_id, 'b2222222-2222-2222-2222-222222222222'::uuid, 'owned by Adam (the passthrough the worker checks)');
 select is((pg_temp.job('delete_asset', 'asA1')).upload_id, 'upA1', 'with its upload id (checked at Mux too)');
 select is((pg_temp.job('delete_asset', 'asA1')).not_before, now(), 'due at once');
-select is(pg_temp.jobs('asA1'), 1, 'one job, not two');
+select is(pg_temp.jobs('asA1'), 2, 'two jobs: the deletion and the playback revocation (20261101000100), not two deletions');
+select is((pg_temp.job('sync_playback', 'asA1')).reason, 'author_deleted', 'the playback is revoked at once, whatever holds the deletion');
 select is((pg_temp.job('cancel_upload', 'upA2')).reason, 'author_deleted', 'with no asset yet, the upload is queued for cancellation');
 select is((pg_temp.job('cancel_upload', 'upA3')).reason, 'abandoned', 'an abandoned post too');
 select is((pg_temp.job('delete_asset', 'asD1')).reason, 'abandoned', 'a discarded draft''s asset is queued');
@@ -305,11 +306,11 @@ select is(pg_temp.finish('delete_asset', 'asD1', 'retry', '{"error": "mux_503"}'
 select is((pg_temp.job('delete_asset', 'asD1')).not_before, now() + interval '1 minute', 'after a minute');
 select is((pg_temp.job('delete_asset', 'asD1')).last_error, 'mux_503', 'with the error kept');
 select is(jsonb_array_length(pg_temp.claim_only('delete_asset', 'asD1')), 0, 'not before its time');
-update public.mux_cleanup_jobs set not_before = now() where asset_id = 'asD1';
+update public.mux_cleanup_jobs set not_before = now() where asset_id = 'asD1' and action = 'delete_asset';
 select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asD1'), 'delete_asset', 'asD1')->>'attempt', '2', 'second attempt');
 select is(pg_temp.finish('delete_asset', 'asD1', 'retry', '{"error": "mux_timeout"}'), 'pending', 'retried again');
 select is((pg_temp.job('delete_asset', 'asD1')).not_before, now() + interval '2 minutes', 'after two minutes');
-update public.mux_cleanup_jobs set not_before = now(), attempts = 9 where asset_id = 'asD1';
+update public.mux_cleanup_jobs set not_before = now(), attempts = 9 where asset_id = 'asD1' and action = 'delete_asset';
 select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asD1'), 'delete_asset', 'asD1')->>'attempt', '10', 'the tenth attempt');
 select is(pg_temp.finish('delete_asset', 'asD1', 'retry', '{"error": "mux_500"}'), 'failed', 'fails for good');
 select is((public.mux_cleanup_overview())->'failed'->0->>'last_error', 'mux_500', 'and shows in the overview');
@@ -318,11 +319,11 @@ select is((pg_temp.job('delete_asset', 'asD1')).status || ':' || (pg_temp.job('d
 
 -- A worker that dies: its lease runs out and the job is leased again; the old lease is stale.
 select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asD1'), 'delete_asset', 'asD1')->>'attempt', '1', 'leased');
-create temp table dead_lease as select lease_id from public.mux_cleanup_jobs where asset_id = 'asD1';
-update public.mux_cleanup_jobs set locked_until = now() - interval '1 second' where asset_id = 'asD1';
+create temp table dead_lease as select lease_id from public.mux_cleanup_jobs where asset_id = 'asD1' and action = 'delete_asset';
+update public.mux_cleanup_jobs set locked_until = now() - interval '1 second' where asset_id = 'asD1' and action = 'delete_asset';
 select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asD1'), 'delete_asset', 'asD1')->>'attempt', '2', 'leased again after the lease ran out');
 select is((public.mux_cleanup_finish((pg_temp.job('delete_asset', 'asD1')).id, (select lease_id from dead_lease), 'done', '{}'))->>'status', 'stale', 'the dead worker''s late answer is ignored');
-update public.mux_cleanup_jobs set locked_until = now() - interval '1 second', attempts = 10 where asset_id = 'asD1';
+update public.mux_cleanup_jobs set locked_until = now() - interval '1 second', attempts = 10 where asset_id = 'asD1' and action = 'delete_asset';
 select is(jsonb_array_length(pg_temp.claim_only('delete_asset', 'asD1')), 0, 'out of attempts when its lease runs out');
 select is((pg_temp.job('delete_asset', 'asD1')).status || ':' || (pg_temp.job('delete_asset', 'asD1')).last_error, 'failed:lease_expired', 'it fails as lease_expired');
 
@@ -707,7 +708,8 @@ select lives_ok($$ select public.delete_video('b7000000-0000-0000-0000-000000000
 select lives_ok($$ select public.delete_account() $$, 'then her account');
 select is((public.get_onboarding_state())->>'has_profile', 'true', 'and signs back in');
 reset role;
-select is((select count(*)::int from public.mux_cleanup_jobs where asset_id = 'asK3' and action = 'sync_playback'), 0, 'recovery queues nothing for the deleted video');
+select is((select string_agg(reason, ',') from public.mux_cleanup_jobs where asset_id = 'asK3' and action = 'sync_playback'), 'author_deleted',
+          'recovery queues nothing for the deleted video: its one sync is the author''s revocation (20261101000100)');
 select is((pg_temp.job('delete_asset', 'asK3')).status, 'pending', 'its deletion still stands');
 select is(pg_temp.claimed(pg_temp.claim_only('delete_asset', 'asK3'), 'delete_asset', 'asK3')->>'reason', 'author_deleted', 'and goes ahead');
 select is(pg_temp.finish('delete_asset', 'asK3', 'done', '{"outcome": "deleted"}'), 'done', 'deleted');
