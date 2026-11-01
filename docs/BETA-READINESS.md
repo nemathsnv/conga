@@ -5988,6 +5988,47 @@ Mux asset was touched, nothing was installed on a device, no EAS update was publ
   The stack was stopped afterwards. Two earlier runs that day failed on the tests this section
   updates; the first one hung in the scheduler suite's cleanup for over an hour and was stopped.
 
+## 51. Founder iPhone re-signed and installed in place (1 Nov, 19:22 to 19:31 +07; Nemat approved after signing in to Xcode)
+
+Nothing pushed, deployed or published; no hosted service, Mux or migration touched.
+
+- **Profile:** new free Personal Team profile `ea5cbcbb…` for `app.shortcut.founder`, team
+  `BP7TM32HCQ`. It runs until 8 Nov 2026 19:27 +07. It lists the iPhone 17 Pro only.
+  - It was minted by building a throwaway one-file app with the same bundle id against the
+    connected iPhone (`-allowProvisioningUpdates -allowProvisioningDeviceRegistration`).
+  - A generic-device build refused with "Your team has no devices", and the phone had to be
+    unlocked.
+- **Build:** the accepted 19 Oct Release `.app` was re-signed through `xcodebuild -exportArchive`,
+  not rebuilt.
+  - Signer: Apple Development: nemathsnv@gmail.com (7D66TF323B). `codesign --verify --deep
+    --strict` passes.
+  - Entitlements are unchanged: application-identifier, team-identifier and get-task-allow.
+  - All 20 Mach-O files are byte-identical with signatures removed, and every other file is
+    unchanged.
+  - The embedded update is still `a5850469…` (19 Oct 08:55 UTC), runtime `593205d5…`, and
+    `Expo.plist` is unchanged.
+- **Before installing:** the app's data container was copied to the Mac (15 MB, kept in the
+  session scratchpad, not in the repo). It held:
+  - the Supabase session;
+  - no `shortcut.pendingPost.*` key, so no pending upload;
+  - one 1 MB recording from 18 Oct in `Documents/recordings` that no pending post refers to
+    (an orphan, see the deferred sweep);
+  - expo-updates with the founder update `01a15879…` (`c4d2ecb2`, 20 Oct) cached and ready,
+    newer than the embedded update.
+- **Install:** `devicectl device install app` over the existing app, with no uninstall. The same
+  files were present afterwards: AsyncStorage, the recording, the expo-updates database and the
+  cached bundle.
+  - iOS refused the first launch until the developer profile was trusted again on the phone
+    (Settings, VPN & Device Management); Nemat did this.
+- **Launch:** with no Metro running, the app launched and stayed running.
+  - expo-updates marked `01a15879…` accessed at 12:29:41 UTC on that launch, so the founder update
+    (the 20 Oct profile swipe fix) is what runs.
+- **Not yet checked on the phone:** signed in on launch, existing responses, Pause/Resume, the Me
+  tab, and a mid-take flip with sound across the joins.
+  - Post Review mints a Mux upload URL as it opens (`review.tsx`, `uploadTickets.prefetch`).
+  - So the flip check is done in Airplane Mode: record, flip and pause, open Review, watch it, then
+    Discard. The offline mint fails, is forgotten, and creates nothing at Mux.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
