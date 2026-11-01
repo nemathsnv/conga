@@ -157,15 +157,36 @@ agents' stacks could not run it at once (`5d9fd61`).
   (the 14 Oct handler), or delete it (`supabase functions delete abandon-submission`). Without the
   function the app's discards get no answer, so recordings stay on the phone and are asked again:
   nothing is deleted by the rollback.
-- **Migrations:** newest first, each as a **new forward migration** whose body is the rollback file
-  (never edit or remove an applied migration): `supabase/rollback/20261013000300_safe_submission_abandon.down.sql`,
-  then `supabase/rollback/20261013000200_post_idempotency.down.sql`; `supabase db push --dry-run`,
-  then the push. Rehearsed by `scripts/idempotency-rollback-check.sh` (passed 16 Oct): the
-  tombstones go, rows posted with submissions stay as ordinary rows, the four-argument functions
-  return, the five-argument versions stay (no default) so new builds keep posting without replay,
-  and `abandon-submission` then answers `kept`/`unverified` and deletes nothing.
-- **Going forward again** after a rollback: a migration that first drops the five-argument versions
-  (as the rollback check does), then the two migrations' bodies.
+- **Migrations (updated 20 Oct):** batch A can no longer be rolled back on its own. Eight later
+  migrations sit on top of it, the newest being `20261019000200` (several responses per prompt). A
+  rollback has to undo every one of them first, newest first, each as a **new forward migration** whose body is
+  its `supabase/rollback/*.down.sql` (never edit or remove an applied migration):
+  `20261019000200`, `20261016000301`, `0300`, `0204`, `0203`, `0202`, `0201`, `0200`, then
+  `20261013000300` and `20261013000200`. Each step needs `supabase db push --dry-run`, then the push.
+  - **Blocked on hosted today by data, by design.** The first step,
+    `20261019000200_multiple_responses.down.sql`, refuses with `multiple_responses_exist` while any
+    member has two or more processing, live or removed responses on one prompt, and changes nothing.
+    T1 has three on one prompt (`BETA-READINESS.md` section 34). Going back to one response per prompt
+    means deciding which of those responses stands, which is a product decision for Nemat (19 Oct),
+    not something a script or a rollback may do.
+  - The function-only rollback above is unaffected.
+  - Rehearsed by `scripts/idempotency-rollback-check.sh <stack>` on an isolated stack built from all
+    27 migrations (passed 20 Oct). It checks:
+    - the `20261019000200` rollback refuses on two responses to one prompt, naming the member and
+      prompt, and leaves the migration set and schema fingerprint unchanged;
+    - with that data gone, the whole chain applies. The tombstones go, rows posted with submissions
+      stay as ordinary rows, the four-argument functions return, and the five-argument versions stay
+      (no default) so new builds keep posting without replay. `abandon-submission` then answers
+      `kept`/`unverified` and deletes nothing;
+    - `0001`-`0011` pass as they were before batch A (1,089 tests). The later migrations' edits to
+      those files are reversed on a throwaway copy by `scripts/rollback-check/*.patch`.
+- **Going forward again** after a rollback: every migration again, oldest first, each from its own
+  file. Before `20261013000200`, a migration first drops the five-argument versions (as the rollback
+  check does). The check then confirms the migration set, the `schema_migrations` rows and the schema
+  fingerprint (`scripts/schema-fingerprint.sql`) match the start, and runs the whole suite (1,713).
+- **On a failure** at any step, the check re-applies everything it had rolled back, oldest first, and
+  removes its throwaway rows. It then compares the fingerprint with the start and says whether the
+  stack is back. This was tested by injecting failures at five points (section 11).
 - **The app** needs no rollback build; after a database rollback, a lost answer costs a Retry that
   can end as Upload failed (`upload_already_used` keeps the URL and mints nothing).
 
@@ -304,3 +325,26 @@ to forward, member removed) and in the real failure of run 14 (the next run pass
 Files touched outside this effort's usual ownership, as the follow-up asked:
 `supabase/tests/0003_conversation.sql` and `supabase/tests/0005_places_suggestions.sql` (one
 assertion each, by name instead of position).
+
+**Rewritten for all 27 migrations (20 Oct).** The check had gone stale: it rolled back batch A
+under the later migrations, and its recovery re-applied only batch A, leaving the one-response rule
+back. It now rolls back the whole chain newest first and goes forward again (section 6). It runs
+each step in one transaction, with that step's `schema_migrations` row, and tracks what it has rolled
+back. On a failure it re-applies exactly that, oldest first, and then compares the migration set,
+the `schema_migrations` rows and the schema fingerprint with the start.
+
+Recovery was tested on an isolated stack (`shortcut-rb27`) with a scratch copy of the script (not
+committed) that fails on purpose at five points:
+
+| Injected failure | Rolled back when it failed | Result |
+|---|---|---|
+| after the refusal check (step 1) | nothing | restored, fingerprint matches |
+| after rolling back `20261016000202` | 6 migrations | 6 re-applied, fingerprint matches |
+| an SQL error inside the `20261016000203` rollback | 4 (the failing step changed nothing) | 4 re-applied, fingerprint matches; the message names the step and file |
+| after the old suite (step 4) | all 10 | 10 re-applied, fingerprint matches |
+| before re-applying `20261016000201` (step 5) | 7 still rolled back | 7 re-applied, fingerprint matches |
+
+After each one, a separate check found 27 migrations, a fingerprint identical to a fresh
+`supabase db reset`, and no throwaway members, prompts or clean-up jobs left. Removing a throwaway
+member queues `cancel_upload` jobs for its fake uploads, and the old script left those behind. They
+are now removed, and the check ends by comparing every public table's row count with the start.

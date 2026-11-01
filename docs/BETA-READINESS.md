@@ -5017,17 +5017,35 @@ Report: `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`.
   - auth integration; app typecheck, lint and Jest.
   - After a clean reset: C1 rehearsal passed, and the provider rehearsal passed 8/8 (C2w, C2a,
     C2e as assumed, E1, E2, E3, guards).
-- *Found: `scripts/idempotency-rollback-check.sh` is stale since `20261019000200`.*
-  - It rolls back `20261013000200` and `0300` while the seven later migrations stay applied, so
-    the restored four-argument `post_response` brings back `already_responded`. pgTAP `0002` #27
-    and `0009` #88 then fail.
-  - Its failure recovery re-applies the 0200 body, which leaves the stack with the one-response
-    rule back. This only affects isolated stacks.
-  - The real consequence: section 18's "roll back batch A" is no longer a standalone option. It
-    would need every later migration rolled back first, and `20261019000200`'s rollback refuses
-    while anyone has two responses on one prompt, which T1 now has.
-  - The function-only rollback of `abandon-submission` is unaffected. Not fixed here; the script
-    needs a newest-first rewrite or retirement (Nemat).
+- *Found: `scripts/idempotency-rollback-check.sh` was stale since `20261019000200`, and is now fixed (below).*
+  - It rolled back `20261013000200` and `0300` while the eight later migrations stayed applied, so
+    the restored four-argument `post_response` brought back `already_responded`. pgTAP `0002` #27
+    and `0009` #88 then failed.
+  - Its failure recovery re-applied only the 0200 body, which left the stack with the one-response
+    rule back. This only affected isolated stacks.
+  - The function-only rollback of `abandon-submission` is unaffected.
+- *Fixed (20 Oct, isolated stack `shortcut-rb27`; nothing hosted, no real Mux, no migration or rollback file changed):*
+  `scripts/idempotency-rollback-check.sh` now works on all 27 migrations (`VIDEO-RELIABILITY.md`
+  sections 6 and 11).
+  - It rolls back every migration from `20261013000200` on, newest first, with its rollback file.
+    Then it runs `0001`-`0011` as they were before batch A (1,089/1,089). The later test edits are
+    reversed on a throwaway copy by `scripts/rollback-check/*.patch`. It then re-applies every
+    migration, oldest first, and runs the whole suite (1,713/1,713).
+  - Before that, it gives a throwaway member two responses on one prompt. It checks that the
+    `20261019000200` rollback refuses with `multiple_responses_exist` naming them, and that the
+    migration set and schema fingerprint are unchanged.
+  - On any failure, it re-applies what it had rolled back, removes its throwaway rows, and checks the
+    fingerprint against the start. This was tested with five injected failures in a scratch copy, and
+    each one restored the stack exactly.
+  - `scripts/full-local-verification.sh` passed twice in a row on 27 migrations (28/28 steps each
+    time, including pgTAP 1,713, scheduler, C1 and provider rehearsals, auth integration, typecheck,
+    lint and Jest 528/528).
+- *On hosted, rolling back batch A is now blocked by data. That is a product decision, not a script
+  problem.* Section 18's "roll back batch A" is no longer a standalone option: every later
+  migration must be undone first, newest first. The first of those, `20261019000200`'s rollback,
+  refuses while anyone has two responses on one prompt, and T1 has three. It changes nothing when it
+  refuses. Going back to one response per prompt would mean Nemat deciding which response stands.
+  No script can do that.
 - *Provider plan:* `PROVIDER-SESSION.md` section 0 now carries this baseline.
   - P0 expects 5 assets and `2fee7234…`.
   - E1 and E2 each make 4 jobs, not 1, and E1 revokes all four of T1's videos until E2.
