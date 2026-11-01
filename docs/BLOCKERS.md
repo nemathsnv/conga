@@ -6,7 +6,15 @@ Locked requirements that are not yet met in the app, so they cannot disappear be
 names the requirement, where the gap is in the code, what closes it, and how it is checked. Remove an
 entry only when the check has been run on a real device.
 
-## B-1 · Camera flip during a take (phase 3, open)
+## B-1 · Camera flip during a take (phase 3, open: iOS built and in use, Android not run)
+
+**State on 1 Nov 2026.** The paragraphs below "Why it is open" describe phase 3 and are history. Since
+16 Oct the flip works during a take: one segment per camera (and per Pause/Resume stretch), stitched
+on Post Review by `app/modules/video-stitcher` (iOS `AVMutableComposition`; Android Media3, compiled
+only). On the founder iPhone, Nemat reported zoom, flip and torch working, with the control placement
+still to refine (1 Nov chat); a mid-take flip with sound checked across the joins on a live response is
+not recorded anywhere. Still open: that check on the iPhone, and the whole check on a real Android
+phone.
 
 **Requirement.** `R-Record` has a camera flip control and the flip must work while recording
 (SPEC.md Section 6, "Controls: cancel, camera flip, light, 1× zoom …"; Nemat, 6 Oct 2026, recorded in
