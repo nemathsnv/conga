@@ -364,7 +364,8 @@ Deno.test("monitoring: every call to the worker is recorded; its answer collecte
 Deno.test("cleanup: switch off, secrets removed, this run's rows removed", async () => {
   await setMode("off");
   await setSecrets(null, null);
-  await http(`/rest/v1/mux_cleanup_jobs?status=in.(pending,running,review)&or=(asset_id.like.*${run}*,upload_id.like.*${run}*)`, { method: "PATCH", body: { status: "skipped", lease_id: null, locked_until: null, result: { outcome: "test_cleanup" } } });
+  // Deleted, not marked skipped: a review job has no owner, and mux_cleanup_jobs_owner refuses "skipped" without one.
+  await http(`/rest/v1/mux_cleanup_jobs?status=in.(pending,running,review)&or=(asset_id.like.*${run}*,upload_id.like.*${run}*)`, { method: "DELETE" });
   for (const m of members) {
     await http(`/rest/v1/responses?author_id=eq.${m.id}`, { method: "DELETE" });
     await http(`/rest/v1/profiles?id=eq.${m.id}`, { method: "DELETE" });
