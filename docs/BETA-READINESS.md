@@ -5920,6 +5920,74 @@ Function was deployed. T1, the founder and the spike were not touched.
     observation.
   - Active working time was not measured separately.
 
+## 50. Beta-readiness session (1 Nov): state recovered, hosted read-only check, iPhone signing, Android build, one backend fix (local only)
+
+On `claude/conga-beta-readiness-0d8b16`, fast-forwarded to `81e9a62` (the tip of
+`claude/conga-mux-production-ready-2aad5b`), with the stranded `claude/rollback-check-27-a5c6c7` merged
+(`3fe3e3c`). Local commits only, not pushed. **Nothing hosted was changed, nothing was deployed, no
+Mux asset was touched, nothing was installed on a device, no EAS update was published.**
+
+- **Hosted, read-only (1 Nov, about 15:20 local):**
+  - **Schema:** 29 migrations, the fingerprint equal to the expected one (empty diff).
+  - **Functions:** `mux-cleanup` still v23 (`5adecf46…`, the U3b bundle); the others unchanged.
+  - **Secrets:** 14 by name, as after U3b.
+  - **Rows:** 2 accounts and 2 Auth users, 0 purge failures, 9 responses, 10 clean-up jobs, 23
+    worker runs, 4 alert rows.
+  - **Clean-up:** health `ok`, live, cap 2. Since section 49 the daily 04:45 sweeps all answered
+    200, and the weekly status of 26 Oct was delivered.
+  - **Not yet seen on hosted:** a real unattended deletion or revocation, the cap pausing a real
+    deletion, a real Resend refusal, and the 03:15 purge removing an invited member (E3(i)).
+- **Founder iPhone:**
+  - **Profile:** the free Personal Team profile ran out on 28 Oct, so the installed 0.1.0 (1)
+    no longer opens. Its data stays on the phone.
+  - **Re-sign prepared:** the accepted 19 Oct `.app` is wrapped in an archive for
+    `xcodebuild -exportArchive`, so the embedded update stays older than the cached founder OTA
+    `c4d2ecb2`. The app's JavaScript has not changed since that OTA.
+  - **Blocked:** the export stopped with "No profiles for 'app.shortcut.founder'", and the Xcode
+    account has no credentials in the keychain.
+  - **Next:** Nemat signs in to Xcode again; a new free profile is minted (Xcode contacts Apple);
+    the build is installed over the app (same bundle id and team, so data, session and pending
+    recordings stay). Each step needs Nemat's approval. Not done.
+  - **Device seen:** `devicectl list devices` showed the iPhone paired and available. Its
+    "Install Started … Install Succeeded" line was Xcode updating its own device components on the
+    Mac; no app was installed.
+- **Android:**
+  - **Build:** the first local release APK built, about 133 MB universal. It needed a larger
+    Gradle Metaspace (`-Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=2g"`); without it KSP ran
+    out of memory and lint crashed.
+  - **Not run:** no emulator image is installed (about 1.5 GB to download, not done) and there is
+    no real device. Gate 1 on Android is not passed.
+- **Backend fix, local only (`20261101000100_forget_video_revokes_playback.sql`):**
+  - **The gap:** a video its author deleted, abandoned or replaced queued only the asset deletion.
+    Since 20261021000200 the cap can hold that deletion, and its playback id then kept working on
+    `stream.mux.com`. Revocation is the privacy step and is never capped
+    (`docs/release/MUX-CLEANUP-UNATTENDED.md` section 2).
+  - **The fix:** `mux_forget_video` now also queues `sync_playback`, due a second earlier so the
+    claim always runs it first. Account deletion and moderator removal already did this.
+  - **Tests:** pgTAP `0035`; `0010` updated; the Deno clean-up and scheduler suites updated for the
+    second job (selection by action, exact asset DELETE counts). The rollback file and
+    `scripts/rollback-check/tests-before-20261101000100.patch` are in place.
+  - **Cost:** one extra GET and DELETE at Mux per deleted video.
+  - **Not deployed:** it needs Nemat's approval.
+- **Decision for Nemat (not changed):** `pre_request` checks the session, not a profile or beta
+  access. An account that signed in but has no profile or redeemed invite can read what RLS allows
+  any member. Whether reads should also need beta access is a policy call.
+- **Scheduler suite cleanup fixed:** it marked its open jobs `skipped`, which
+  `mux_cleanup_jobs_owner` refuses for a review job with no owner. The whole PATCH failed and left
+  the orphan test's job open, and the provider rehearsal's preflight then found it. The suite now
+  deletes its own open jobs. Test-only; it never showed before because no full run had reached
+  both suites on these tests.
+- **Local verification (1 Nov, 17:45 to 18:05):** `scripts/full-local-verification.sh cbr 556`
+  passed 29 of 29 steps on 30 migrations:
+  - pgTAP 1901 tests;
+  - all Deno unit and integration suites (clean-up 37, scheduler 13, provider rehearsal 15);
+  - the idempotency rollback check (its old suite 1089 tests);
+  - the C1 rehearsal (52 of 52 checks) and auth integration;
+  - the app's typecheck, lint and jest (42 suites, 528 tests).
+
+  The stack was stopped afterwards. Two earlier runs that day failed on the tests this section
+  updates; the first one hung in the scheduler suite's cleanup for over an hour and was stopped.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
