@@ -1,7 +1,7 @@
 // Boards O-Email (enter email, then the 6-digit code) and E-Code (code didn't work).
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -9,6 +9,7 @@ import { signinProviders } from '@/lib/api';
 import { sendEmailCode, verifyEmailCode } from '@/lib/auth';
 import { formatCountdown, isValidEmail, normaliseOtp, OTP_LENGTH } from '@/lib/validation';
 import { Button, Header, Lead, Title } from '@/ui/components';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
 
 // Supabase sends at most one code a minute to the same address, so the countdown matches.
@@ -81,7 +82,7 @@ export default function EmailScreen() {
   const canContinue = sentTo ? code.length === OTP_LENGTH && !codeFailed : emailOk;
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.root} behavior={KEYBOARD_BEHAVIOR}>
       <Header />
       <View style={s.body}>
         <Title>Continue with email</Title>

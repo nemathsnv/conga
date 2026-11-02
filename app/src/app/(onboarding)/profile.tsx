@@ -1,7 +1,7 @@
 // Boards O-Profile (name and username, live availability) and E-Username (taken, with suggestions).
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createProfile, ServerError, usernameStatus, usernameSuggestions, type UsernameStatus } from '@/lib/api';
@@ -10,6 +10,7 @@ import { useAdvance } from '@/lib/useStepNavigation';
 import { NAME_MAX, nameOk, normaliseName, normaliseUsername, usernameFormatOk } from '@/lib/validation';
 import { Button, Chip, Group, Header, Lead, Separator, StepBar, Title } from '@/ui/components';
 import { CheckIcon } from '@/ui/Icons';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
 
 export default function ProfileScreen() {
@@ -78,7 +79,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.root} behavior={KEYBOARD_BEHAVIOR}>
       <Header>
         <StepBar step={1} total={2} />
       </Header>

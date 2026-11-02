@@ -7,7 +7,7 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, BackHandler, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -19,6 +19,7 @@ import { GlassTool, LiveProgressLine, VideoGradients } from '@/ui/dark';
 import { failedTitle } from '@/ui/failedPost';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
 import { OverlaySheet } from '@/ui/OverlaySheet';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { createProgress } from '@/ui/progress';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { ReplyCard } from '@/ui/ReplyCard';
@@ -235,7 +236,7 @@ export default function ReviewScreen() {
         />
       ) : null}
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.bottomArea} pointerEvents="box-none">
+      <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR} style={s.bottomArea} pointerEvents="box-none">
         <View style={{ paddingBottom: Math.max(insets.bottom, 10) + 10 }}>
           <LiveProgressLine source={progress} />
           <Glass style={s.captionBox} radius={14}>

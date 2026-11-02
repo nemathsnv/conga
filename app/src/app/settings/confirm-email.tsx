@@ -2,7 +2,7 @@
 // "confirm with the same sign-in method first"). Same code entry as O-Email / E-Code.
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { sendEmailCode, verifyEmailCode } from '@/lib/auth';
@@ -11,6 +11,7 @@ import { useSession } from '@/lib/session';
 import { normaliseOtp, OTP_LENGTH } from '@/lib/validation';
 import { Button, Header, Lead, Title } from '@/ui/components';
 import { useSignOutWarning } from '@/ui/SignOutWarning';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
 
 const BOX_W = 46;
@@ -55,7 +56,7 @@ export default function ConfirmEmailScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.root} behavior={KEYBOARD_BEHAVIOR}>
       <Header />
       <View style={s.body}>
         <Title>Confirm it&apos;s you</Title>
