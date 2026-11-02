@@ -2,7 +2,7 @@
 // "confirm with the same sign-in method first"). Same code entry as O-Email / E-Code.
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { sendEmailCode, verifyEmailCode } from '@/lib/auth';
@@ -126,7 +126,9 @@ const s = StyleSheet.create({
   boxError: { backgroundColor: colors.dangerFill, borderWidth: 1.5, borderColor: colors.dangerBorder },
   boxDigit: { fontSize: 24, lineHeight: 30, fontWeight: '600', color: colors.text, fontFamily },
   caret: { width: 2, height: 26, backgroundColor: colors.text, borderRadius: 1 },
-  codeInput: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, color: 'transparent', backgroundColor: 'transparent', fontSize: 1 },
+  // Android draws the 1pt digits despite the transparent colour (a grey speck by the first box), so
+  // there the field is also fully transparent; it still takes the focus, typing and paste.
+  codeInput: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, color: 'transparent', backgroundColor: 'transparent', fontSize: 1, ...Platform.select({ android: { opacity: 0 } }) },
   errorText: { marginTop: 12, ...type.caption13, lineHeight: 18, color: colors.danger, fontFamily },
   resendLink: { marginTop: 8, ...type.caption13, fontWeight: '600', color: colors.text, fontFamily },
   // In the flow, at the bottom (as on the sign-in code screen), so the keyboard avoidance moves it above the number pad.

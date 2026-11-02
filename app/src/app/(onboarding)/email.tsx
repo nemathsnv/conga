@@ -1,7 +1,7 @@
 // Boards O-Email (enter email, then the 6-digit code) and E-Code (code didn't work).
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -207,7 +207,9 @@ const s = StyleSheet.create({
   boxError: { backgroundColor: colors.dangerFill, borderWidth: 1.5, borderColor: colors.dangerBorder },
   boxDigit: { fontSize: 24, lineHeight: 30, fontWeight: '600', color: colors.text, fontFamily },
   caret: { width: 2, height: 26, backgroundColor: colors.text, borderRadius: 1 },
-  codeInput: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, color: 'transparent', backgroundColor: 'transparent', fontSize: 1 },
+  // Android draws the 1pt digits despite the transparent colour (a grey speck by the first box), so
+  // there the field is also fully transparent; it still takes the focus, typing and paste.
+  codeInput: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, color: 'transparent', backgroundColor: 'transparent', fontSize: 1, ...Platform.select({ android: { opacity: 0 } }) },
   resend: { ...type.body14, color: colors.textTertiary, marginTop: 16, fontFamily },
   resendLink: { ...type.semi15, color: colors.text, marginTop: 14, fontFamily },
   errorText: { ...type.body14, color: colors.danger, marginTop: 14, fontFamily },
