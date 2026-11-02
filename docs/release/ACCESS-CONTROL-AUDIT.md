@@ -221,46 +221,72 @@ member, so the gate does not touch it.
 - **Not run:** a real device or simulator. No app code changed, and the app reaches member calls
   only from Home.
 
-## 7. Deployment plan (needs Nemat's approval; not done)
+## 7. Deployment runbook (conditionally approved by Nemat, 2 Nov; not run)
 
-**Order: after the revocation migration.** The revocation runbook's D1 requires
-`db push --dry-run` to list exactly `20261101000100`. If this branch were merged first, D1 would list
-two files and be NO-GO. So:
+Conditions, from `docs/DECISIONS.md` (2 Nov):
+- only after `20261101000100` is deployed **and verified**, and as a separate deployment;
+- a fresh preflight; a verified backup; exactly this one migration;
+- no production test account;
+- **no automatic rollback.**
 
-- **Keep this branch separate** until the revocation deploy (D0 to D5 in
-  `REVOCATION-FIX-PREFLIGHT.md`) is done and verified. That is planned for after the 3 Nov 04:45 UTC
-  sweep answers 200.
-- **Then merge** this branch onto the revocation branch's tip.
+**Status at 2 Nov 10:35 UTC:** hosted has 29 migrations (latest `20261021000200`), so the
+precondition is not met and nothing was run.
 
-**G0. Preflight (read only):**
-- 30 migrations, latest `20261101000100`, the fingerprint equal to `rv-expected-30-migrations.fp`.
+**G0. Precondition (read only):**
+- 30 migrations, latest `20261101000100`.
+- The revocation runbook's D2 to D5 recorded as PASS in BETA-READINESS.
+- The fingerprint equal to `rv-expected-30-migrations.fp`.
+- If any of these fails, stop.
+
+**G1. Fresh preflight (read only):**
 - `pre_request` md5 `68e72efa…`.
-- 0 accounts without a profile, or list them as aggregates and decide first.
+- `pgrst.db_pre_request = public.pre_request`; `invite_required` true.
+- Accounts without a profile: 0, from the section 3 aggregates. If not 0, stop and report the
+  count, because those accounts lose member reads.
+- No open, failed or retrying Mux clean-up job, so the Mux deployment is not mid-flight.
 
-**G1. Migration:**
-- `git archive` `supabase/` into a scratch workdir.
+**G2. Verified backup** (hosted has no PITR and no backup list; see section 52):
+- **Schema dump:** a schema-only dump of `public` (`supabase db dump --linked`) into
+  `~/.conga-provider/backups/`, mode 600.
+- **Function definitions:** `pg_get_functiondef` of `pre_request`, saved alongside with its md5.
+- **Fingerprint:** the hosted fingerprint before the deploy.
+- **Verified means:** the dump restores into an isolated local stack, and that stack's
+  `pre_request` md5 and fingerprint lines equal the hosted ones.
+- **Rows:** the migration changes no row, so a full data dump adds nothing. The table row counts
+  and hashes are taken anyway, to prove that afterwards.
+
+**G3. Migration:**
+- `git archive` this branch's `supabase/` (rebased on the revocation tip) into a scratch workdir.
 - `supabase db push --linked --project-ref <ref> --workdir <scratch> --dry-run` must list exactly
-  `20261102000100_member_gate.sql`.
-- Run it without `--dry-run`. The migration is one transaction of `create or replace` and `revoke`,
-  with no row change and no lock beyond the function catalog.
+  `20261102000100_member_gate.sql`. Anything else means stop.
+- Then run it without `--dry-run`.
 
-**G2. Checks (select):**
-- 31 migrations.
-- The fingerprint equal to `docs/release/mg-expected-31-migrations.fp`.
-- `pre_member_allowed_path` not executable by anon or authenticated.
+**G4. Verification, with no test account:**
+- **Schema:** 31 migrations; the fingerprint equal to `mg-expected-31-migrations.fp`;
+  `pre_member_allowed_path` not executable by anon or authenticated; table counts and hashes equal
+  to G2's.
+- **Gate, server-side:**
+  - The test runs inside a `READ ONLY` transaction that is rolled back, impersonating each existing
+    account by its claims, with no session id and so no session lookup.
+  - Every existing account: `/rpc/home_feed` and `/rpc/get_profile` give `allowed`.
+  - A random uuid with no account (the state of a brand-new sign-in): `/rpc/get_onboarding_state`,
+    `/rpc/confirm_age`, `/rpc/redeem_invite`, `/rpc/create_profile` and `/rpc/web_video` give
+    `allowed`; `/rpc/home_feed` and `/places` give `profile_required`.
+  - The output is pass/fail per check only, with no ids printed.
+- **Member access:**
+  - Nemat on the founder iPhone: Home, a profile, comments, search and a video reply room load.
+  - Unauthenticated `POST /rest/v1/rpc/get_onboarding_state` gives 401, as before.
+- **Public links:** a known shared link on `conga.churntech.com` plays logged out, and anon
+  `web_video` gives 200.
+- **Onboarding end to end on production** needs a new account, so it is **not run** without
+  separate approval. The pgTAP 0037 and HTTP probe coverage stands in for it.
 
-**G3. Live smoke:**
-- **On the founder iPhone (member):** Home, a profile, comments, search. Nothing should change.
-- **With a throwaway email (needs Nemat's OK to create one account):** sign in, then
-  `get_onboarding_state` gives 200, `home_feed` gives 403 `profile_required`, `web_video` gives 200.
-  Then delete the account (`delete_account` gives 204).
-- **Logged out:** a shared web link still plays.
+**G5. If any G4 check fails:** **no automatic rollback**, because
+`20261102000100_member_gate.down.sql` reopens the authorization gap. Stop, record the failing check
+and the state, and report for Nemat's recovery decision. The options to put to him are:
+- a forward fix, for example adding a missing path to `pre_member_allowed_path`;
+- the rollback file, run only on his explicit instruction.
 
-**G4. Rollback, if anything in G3 fails:**
-- Run `20261102000100_member_gate.down.sql` in one transaction.
-- Delete the `schema_migrations` row.
-- Recheck that the `pre_request` md5 is `68e72efa…`.
-
-**What does not interfere with the Mux migration:**
-- the change touches no Mux table, function, job, schedule, secret or Edge function;
-- it runs only after the revocation deploy.
+**Separation from the Mux deployment:** the migration touches no Mux table, function, job,
+schedule, secret or Edge function. It is deployed in its own step after the revocation's D5. A
+problem in either one is reported on its own.

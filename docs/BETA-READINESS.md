@@ -6087,8 +6087,13 @@ access.** Full report: `docs/release/ACCESS-CONTROL-AUDIT.md`.
   - pgTAP 1972 of 1972; every Deno, rehearsal, auth and app step PASS.
 - **Separate finding, not fixed:** the `avatars` bucket can be listed with the anon key, which
   enumerates the ids of accounts with a photo.
-- **Deploy:** only after the revocation migration's D0 to D5. Merging earlier would break its D1
-  dry-run check. Needs Nemat's approval.
+- **Deploy:** conditionally approved by Nemat, 2 Nov (`docs/DECISIONS.md`):
+  - only after `20261101000100` is deployed and verified, as a separate step;
+  - a fresh preflight, a verified backup, and a dry run listing only this migration;
+  - no production test account;
+  - no automatic rollback.
+  - Runbook G0 to G5: `ACCESS-CONTROL-AUDIT.md` section 7.
+  - At 10:35 UTC hosted still had 29 migrations, so nothing was run.
 
 ## Gates
 
