@@ -1,7 +1,6 @@
 // Board LV-Followers: Followers / Following tabs; Follow back / Following pills. Swipe sideways or tap
 // the tabs to change list (ui/SwipePages.tsx).
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,7 +48,6 @@ export default function FollowsScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="dark" />
       <View style={[s.header, { marginTop: insets.top + 3 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={s.headerButton}>
           <ChevronLeft />

@@ -1,7 +1,6 @@
 // Board O-Welcome (iOS: Apple, Google, email) and O-Welcome-Android (Google, Apple, email).
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,7 +57,6 @@ export default function WelcomeScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
       <View style={s.collage} pointerEvents="none">
         {DEV_WELCOME_COLLAGE.map((col, i) => (
           <View key={i} style={[s.column, { marginTop: col.offset }]}>

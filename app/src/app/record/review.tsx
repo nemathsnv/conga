@@ -5,7 +5,6 @@
 // A take with a camera flip arrives as several segments: they are stitched once, here, and the
 // stitched file is what plays and what Post sends (docs/BLOCKERS.md B-1, video/stitch.ts).
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, BackHandler, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -196,7 +195,6 @@ export default function ReviewScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
       <VideoSurface playbackId={null} localUri={localUri} active={!discardAsk && !disclosure} loop onProgress={progress.set} />
       <VideoGradients top={240} bottom={330} topAlpha={0.55} bottomAlpha={0.7} />
 

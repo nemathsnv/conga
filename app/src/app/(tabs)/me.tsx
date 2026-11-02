@@ -1,7 +1,6 @@
 // Boards LV-MyProfile (own profile, populated) and X-Me-Empty (before any response).
 // The Settings icon opens S-Settings (app/settings).
 import { useFocusEffect, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,7 +38,6 @@ export default function MeTab() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="dark" />
       <View style={[s.header, { marginTop: insets.top + 3 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={s.headerButton}>
           <GearIcon />

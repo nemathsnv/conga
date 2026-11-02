@@ -4,7 +4,6 @@
 import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -195,7 +194,6 @@ export default function PlayerScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
       {pages === null ? (
         <View style={[s.root, { alignItems: 'center', justifyContent: 'center' }]}>
           <Spinner />
