@@ -1096,8 +1096,13 @@ Deno.test("deletion cap: past the cap deletions pause and alert, revocations go 
   assertEquals(vs.filter((v) => !assets.has(v.asset.id)).length, 2, "two deleted");
   assertEquals(assets.get(kept.asset.id)!.playback_ids, [], "the revocation was not held up");
   const waiting = vs.find((v) => assets.has(v.asset.id))!;
-  const [job] = await jobs(waiting.asset.id);
+  const job = await jobOf(waiting.asset.id, "delete_asset");
   assertEquals([job.status, job.attempts], ["pending", 0], "the third waits, no attempt used");
+  // 20261101000100: the author's own deletion is revoked at Mux while its asset deletion waits.
+  assertEquals(assets.get(waiting.asset.id)!.playback_ids, [], "the third's playback is revoked although its asset waits");
+  assertEquals((await jobOf(waiting.asset.id, "sync_playback")).status, "done");
+  assertEquals((await row(waiting.id))?.mux_playback_id, null);
+  assertEquals(destructive(founderVideo.asset.id), [], "the founder's video is never touched");
   const h = await health();
   assert(hasProblem(h, "deletions_paused", "alert"), "paused deletions alert");
   assertEquals([h.metrics.deletion_cap, h.metrics.deletions_due], [2, 1]);
@@ -1107,6 +1112,47 @@ Deno.test("deletion cap: past the cap deletions pause and alert, revocations go 
   assert(!assets.has(waiting.asset.id), "resumed: the third is deleted");
   assert(!hasProblem(await health(), "deletions_paused", "alert"));
   await service("mux_cleanup_set_deletion_cap", { p_cap: null, p_by: `test-${run}` });
+});
+
+Deno.test("deletion cap: with every deletion held, a revocation that fails part-way is retried, never recorded as done early, and finishes", async () => {
+  const kai = await member("kai");
+  const v = await liveVideo(kai);
+  const other = await liveVideo(kai);
+  // A second public id on the asset, so the revocation needs two DELETEs at Mux.
+  v.asset.playback_ids.push({ id: nid("pb"), policy: "public" });
+  const [pb1, pb2] = v.asset.playback_ids.map((p) => p.id);
+  await service("mux_cleanup_resume_deletions", { p_by: `test-${run}` });
+  await service("mux_cleanup_set_deletion_cap", { p_cap: 0, p_by: `test-${run}` });
+  assertEquals((await rpc(kai, "delete_video", { p_id: v.id })).status, 204);
+  fault = (method, path) => method === "DELETE" && path === `/video/v1/assets/${v.asset.id}/playback-ids/${pb2}` ? Response.json({ error: "busy" }, { status: 503 }) : null;
+  muxCalls.length = 0;
+  await drain(1);
+  fault = () => null;
+  let sync = await jobOf(v.asset.id, "sync_playback");
+  assertEquals([sync.status, sync.attempts, sync.last_error], ["pending", 1, "mux_503"], "retried, not done");
+  assertEquals(assets.get(v.asset.id)!.playback_ids.map((p) => p.id), [pb2], "one id revoked, the other still at Mux");
+  await patchJobs(v.asset.id, { not_before: due() });
+  await drainAll();
+  sync = await jobOf(v.asset.id, "sync_playback");
+  assertEquals([sync.status, sync.result?.outcome], ["done", "revoked"]);
+  assertEquals(assets.get(v.asset.id)!.playback_ids, [], "no public id left");
+  assertEquals(calls("DELETE", `/playback-ids/${pb1}`), 1, "the id already revoked is not deleted again");
+  assertEquals((await row(v.id))?.mux_playback_id, null);
+  assert(assets.has(v.asset.id), "the asset waits for the cap");
+  assertEquals(assetDeletes(v.asset.id), 0);
+  const del = await jobOf(v.asset.id, "delete_asset");
+  assertEquals([del.status, del.attempts], ["pending", 0], "the deletion waits, no attempt used");
+  assertEquals(assets.get(other.asset.id)!.playback_ids.length, 1, "her other video still plays");
+  // Draining again changes nothing at Mux.
+  muxCalls.length = 0;
+  await drainAll();
+  assertEquals(muxCalls.filter((c) => c.method !== "GET"), [], "nothing more is changed");
+  await service("mux_cleanup_set_deletion_cap", { p_cap: null, p_by: `test-${run}` });
+  await service("mux_cleanup_resume_deletions", { p_by: `test-${run}` });
+  await drainAll();
+  assert(!assets.has(v.asset.id), "resumed: the asset is deleted");
+  assert(assets.has(other.asset.id));
+  assertEquals(destructive(founderVideo.asset.id), []);
 });
 
 Deno.test("worker not live: the switch live and the function in dry run; nothing changes at Mux and the health check alerts", async () => {
