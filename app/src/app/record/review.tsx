@@ -18,7 +18,7 @@ import { GlassTool, LiveProgressLine, VideoGradients } from '@/ui/dark';
 import { failedTitle } from '@/ui/failedPost';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
 import { OverlaySheet } from '@/ui/OverlaySheet';
-import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
+import { KEYBOARD_BEHAVIOR, useBlurOnKeyboardHide } from '@/ui/keyboard';
 import { createProgress } from '@/ui/progress';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { ReplyCard } from '@/ui/ReplyCard';
@@ -44,6 +44,9 @@ export default function ReviewScreen() {
   const current = getCurrentRecording();
   const [caption, setCaption] = useState('');
   const [editing, setEditing] = useState(false);
+  // Hiding the keyboard ends the caption's editing, so Post and Re-record come back (Android's Back).
+  const captionInput = useRef<TextInput>(null);
+  useBlurOnKeyboardHide(captionInput);
   // The 2pt line's progress, outside this screen's state (ui/progress.ts).
   const [progress] = useState(createProgress);
   const [discardAsk, setDiscardAsk] = useState(false);
@@ -239,6 +242,7 @@ export default function ReviewScreen() {
           <LiveProgressLine source={progress} />
           <Glass style={s.captionBox} radius={14}>
             <TextInput
+              ref={captionInput}
               style={s.captionInput}
               value={caption}
               onChangeText={(v) => setCaption(v.slice(0, CAPTION_MAX))}

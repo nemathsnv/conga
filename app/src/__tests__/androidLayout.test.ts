@@ -4,9 +4,20 @@
 // - The keyboard covered the comment field, the email screen's Continue and the caption: the app draws
 //   edge to edge, so the window no longer shrinks for the keyboard (ui/keyboard.ts).
 // - The notification channel asked for a sound file named "default" and logged an error on every launch.
-import { Platform } from 'react-native';
+// - Back hid the keyboard but left the caption focused, so Post Review never showed Post again.
+import { createElement, useRef } from 'react';
+import { Keyboard, Platform, type TextInput } from 'react-native';
 
+import { useBlurOnKeyboardHide } from '@/ui/keyboard';
 import { routeKey, statusBarStyleFor } from '@/ui/statusBar';
+
+// react-test-renderer comes with jest-expo; it has no type declarations here.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const renderer = require('react-test-renderer') as {
+  create: (el: React.ReactElement) => { unmount: () => void };
+  act: (fn: () => void | Promise<void>) => Promise<void>;
+};
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Node's fs and path, without Node's type definitions (not a dependency of the app).
 declare const __dirname: string;
@@ -79,6 +90,33 @@ describe('keyboard avoidance (ui/keyboard.ts)', () => {
     const style = code(path.join(SRC, 'app', 'comments', '[responseId].tsx')).match(/inputBar: \{[^}]*\}/)?.[0] ?? '';
     expect(style).toContain("marginTop: 'auto'");
     expect(style).not.toContain("position: 'absolute'");
+  });
+});
+
+describe('useBlurOnKeyboardHide', () => {
+  it('leaves the field when the keyboard hides, and stops listening when the screen goes', async () => {
+    const listeners: (() => void)[] = [];
+    const remove = jest.fn();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, l: () => void) => {
+      if (event === 'keyboardDidHide') listeners.push(l);
+      return { remove } as unknown as ReturnType<typeof Keyboard.addListener>;
+    }) as typeof Keyboard.addListener);
+    const blur = jest.fn();
+    function Screen() {
+      const input = useRef<TextInput>({ blur } as unknown as TextInput);
+      useBlurOnKeyboardHide(input);
+      return null;
+    }
+    let tree!: ReturnType<typeof renderer.create>;
+    await renderer.act(() => {
+      tree = renderer.create(createElement(Screen));
+    });
+    expect(listeners).toHaveLength(1);
+    listeners[0]();
+    expect(blur).toHaveBeenCalledTimes(1);
+    await renderer.act(() => tree.unmount());
+    expect(remove).toHaveBeenCalledTimes(1);
+    jest.restoreAllMocks();
   });
 });
 
