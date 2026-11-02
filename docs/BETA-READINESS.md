@@ -6023,11 +6023,22 @@ Nothing pushed, deployed or published; no hosted service, Mux or migration touch
 - **Launch:** with no Metro running, the app launched and stayed running.
   - expo-updates marked `01a15879…` accessed at 12:29:41 UTC on that launch, so the founder update
     (the 20 Oct profile swipe fix) is what runs.
-- **Not yet checked on the phone:** signed in on launch, existing responses, Pause/Resume, the Me
-  tab, and a mid-take flip with sound across the joins.
-  - Post Review mints a Mux upload URL as it opens (`review.tsx`, `uploadTickets.prefetch`).
-  - So the flip check is done in Airplane Mode: record, flip and pause, open Review, watch it, then
-    Discard. The offline mint fails, is forgotten, and creates nothing at Mux.
+- **Why the camera check ran in Airplane Mode:** Post Review mints a Mux upload URL as it opens
+  (`review.tsx`, `uploadTickets.prefetch`). Offline, that mint fails, is forgotten, and creates
+  nothing at Mux.
+- **Checked on the phone by Nemat (2 Nov; Nemat reported "all checked and okay"; not observed by
+  Claude):**
+  - signed in on launch, with no sign-in screen;
+  - existing responses on Me, playing;
+  - the Me tab: Responses and Replies switch with the header still;
+  - in Airplane Mode, one take with Pause, Resume and two camera flips. Review played it as one
+    clip with continuous sound across the joins, and it was then discarded, not posted.
+- **After the check (2 Nov, read-only file listing over devicectl):**
+  - `Documents/recordings/take` is empty, and so is the stitcher cache: Discard removed the
+    segments and the stitched file.
+  - Only the 18 Oct orphan is left.
+- **Still not checked:** a flipped take posted and played as a live response (the last part of the
+  B-1 check). It needs a real Mux upload, which this step ruled out.
 
 ## Gates
 

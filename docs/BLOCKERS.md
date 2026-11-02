@@ -12,9 +12,18 @@ entry only when the check has been run on a real device.
 16 Oct the flip works during a take: one segment per camera (and per Pause/Resume stretch), stitched
 on Post Review by `app/modules/video-stitcher` (iOS `AVMutableComposition`; Android Media3, compiled
 only). On the founder iPhone, Nemat reported zoom, flip and torch working, with the control placement
-still to refine (1 Nov chat); a mid-take flip with sound checked across the joins on a live response is
-not recorded anywhere. Still open: that check on the iPhone, and the whole check on a real Android
-phone.
+still to refine (1 Nov chat).
+
+**2 Nov 2026, iPhone.** Nemat checked this on the founder iPhone, on the re-signed 19 Oct build
+with the founder update (`docs/BETA-READINESS.md` section 51):
+- One take in Airplane Mode, with Pause, Resume and two flips.
+- Review played it as one continuous clip with sound across the joins. It was discarded, not posted,
+  so no Mux upload was created.
+
+Still open:
+- On the iPhone: that a flipped take, once posted, plays the same as a live response. This needs one
+  real upload.
+- The whole check on a real Android phone.
 
 **Requirement.** `R-Record` has a camera flip control and the flip must work while recording
 (SPEC.md Section 6, "Controls: cancel, camera flip, light, 1× zoom …"; Nemat, 6 Oct 2026, recorded in
