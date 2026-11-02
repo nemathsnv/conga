@@ -6040,6 +6040,27 @@ Nothing pushed, deployed or published; no hosted service, Mux or migration touch
 - **Still not checked:** a flipped take posted and played as a live response (the last part of the
   B-1 check). It needs a real Mux upload, which this step ruled out.
 
+## 52. Revocation fix preflight (2 Nov, about 07:00 to 08:30 UTC): GO held for a clean health check; nothing deployed
+
+Branch `claude/conga-revocation-preflight` from `3ee6d95`. Local commits only. **Nothing hosted was
+changed; reads only. No Mux change, no app or device change.** Full report:
+`docs/release/REVOCATION-FIX-PREFLIGHT.md`.
+
+- **Hosted:** 29 migrations, the fingerprint equal to `cu-expected-29-migrations.fp` (no drift).
+  Live, cap 2, 0 counted, 0 open jobs. `mux-cleanup` v23 is semantically the repo's worker.
+  Reconciliation `ok` (6 assets, all in use). No deleted video holds a playback id.
+- **Health `alert` (`worker_errors`):** the 2 Nov 04:45 UTC sweep got a gateway `502` in 40 ms.
+  The alert was delivered. The worker answers its own `405` to a GET now.
+- **Backups:** `backups list` is empty and PITR is off.
+- **Local (`shortcut-rvk`):** every backend step PASS. pgTAP 1931 tests, with the new 0036 (30
+  tests). The clean-up integration suite is 38/38, with a new partial-failure test under a held cap.
+  The app checks failed only for missing `node_modules`; on the identical app code they PASS (42
+  suites, 528 tests). The new `scripts/revocation-rollback-check.sh` is 10/10.
+- **Residual (not fixed here):** a video deleted before Mux made its asset still queues only the
+  deletion. Its playback id was never stored or shown to another member.
+- **Verdict:** GO for the migration alone, after the 3 Nov 04:45 UTC sweep answers 200 and health is
+  `ok`. Awaiting Nemat's approval.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
