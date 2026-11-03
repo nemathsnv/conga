@@ -342,3 +342,21 @@ GET must answer 405.
 - deletions paused;
 - `mux-cleanup` not v23;
 - another 502.
+
+## 13. Deployment result (3 Nov 2026)
+
+Nemat approved the deploy on condition of a clean 3 Nov sweep, health `ok`, no drift or failure, and
+a protected, verified logical backup. **Every condition was met; the migration was deployed alone at
+06:39 UTC and passed a 30-minute watch.** Full record: `docs/BETA-READINESS.md` section 53.
+
+| Step | Result |
+| --- | --- |
+| D0 gate | Sweep request 39 `200`/ok. Health `ok` (the 04:55 message was the recovery). `live` check 18/18, no drift. 0 open jobs, v23, reconciliation `ok`, worker GET `405`. |
+| Backup | Schema and data dumps, folder 700 and files 600, with SHA-256 sums. Restored into a throwaway stack: 39/39 table hashes equal. Protected baseline saved. |
+| D1 | Dry run from `git archive f5aea9c` lists only `20261101000100`. Pushed 06:39:00 to 06:39:02 UTC. |
+| D2 | `revoke` check 18/18 (30 migrations, fingerprint equal to `rv-expected-30`, cap 2, v23). Table hashes equal to the backup's. |
+| D3 | The catalog shows the revocation queued first and due at once. Security definer, `search_path` empty, `postgres` only. |
+| D4 | 06:40 to 07:10 UTC: health `ok` at every reading, 0 open jobs, 79 cron runs with 0 failed, no new alert. Baseline unchanged, reconciliation `ok`, a second `revoke` check 18/18. |
+
+**Not exercised on hosted:** no video was deleted. Check the first real deletion, discard or
+replacement: its `sync_playback` job should finish `done` before its `delete_asset`. R1 to R4 stand.

@@ -6061,6 +6061,45 @@ changed; reads only. No Mux change, no app or device change.** Full report:
 - **Verdict:** GO for the migration alone, after the 3 Nov 04:45 UTC sweep answers 200 and health is
   `ok`. Awaiting Nemat's approval.
 
+## 53. Revocation fix deployed to hosted (3 Nov, 06:39 UTC; Nemat approved, conditional on a clean sweep and a verified backup)
+
+Exactly one forward migration, `20261101000100_forget_video_revokes_playback.sql` (md5 `ee9c5b85…`),
+from commit `f5aea9c`. **No other change:** no Edge Function deploy, no secret, no cap change, no
+Mux change, no test account or media, no app or device change. Report section 13 of
+`docs/release/REVOCATION-FIX-PREFLIGHT.md`.
+
+- **Conditions (all met before the push):**
+  - The 3 Nov 04:45 UTC sweep (request 39) answered `200`, ok, complete.
+  - Health `ok`, no problems. The 04:55 message was the **recovery** for the 2 Nov `502`.
+  - The `live` check passed 18/18. The fingerprint, functions and secrets were identical to the 2 Nov
+    preflight. The only table changes were the run, the recovery alert, one analytics event and a
+    rate-limit counter.
+  - 0 open jobs, not paused, `mux-cleanup` v23, reconciliation `ok`, the worker answered `405` to a
+    GET.
+- **Backup:** `~/.conga-provider/backups/rv-before-20261101000100-<ts>/` (folder 700, files 600, with
+  SHA-256 sums).
+  - It holds a schema dump and a data dump. No table changed while they were taken.
+  - Restored into a throwaway stack of the 29 migrations, it gave every public table and `auth.users`
+    the hosted row count and content hash (39 of 39). That stack is stopped.
+  - A protected baseline of the accounts and the 6 Mux assets was saved too.
+- **Push:** a dry run from a `git archive` of `f5aea9c` listed only this migration; the push applied
+  it at 06:39:00 to 06:39:02 UTC.
+- **After:**
+  - The `revoke` check passed 18/18: 30 migrations, the fingerprint equal to
+    `rv-expected-30-migrations.fp`, cap 2, not paused, health `ok`, v23, 14 secrets.
+  - All 39 table hashes were equal to the backup's: no row changed.
+  - The catalog showed one `mux_forget_video` that queues the revocation first and due at once. It is
+    security definer with an empty `search_path` and executable by `postgres` only.
+- **Watch, 06:40 to 07:10 UTC (7 readings):** health `ok` every time and 0 open jobs (10 in all,
+  unchanged). 79 cron runs, 0 failed. No new alert.
+  - At 07:10 the protected-baseline comparison was unchanged and reconciliation was `ok`. A second
+    `revoke` check passed 18/18, with every table hash equal to just after the push.
+- **Not exercised:** no video was deleted on hosted. The new path runs the first time a member
+  deletes, discards or replaces a video, and that first revocation is worth checking (a
+  `sync_playback` job `done`, before its `delete_asset`). The 2 Nov residual risks (R1 to R4) stand.
+- **Rollback:** not needed. If ever needed it is `supabase/rollback/20261101000100_…down.sql`. It was
+  rehearsed locally, and queued revocations still run after it.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
