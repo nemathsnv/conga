@@ -1,6 +1,7 @@
 // The video layer's data model. Product code talks to these types and the functions in
 // this folder, never to expo-camera, expo-video or Mux directly, so Android-specific
 // behaviour can change later without touching screens.
+import { Platform } from 'react-native';
 
 export type CameraFacing = 'front' | 'back';
 
@@ -40,7 +41,12 @@ export const MAX_DURATION_MS = 30000;
 export const RECORDING_SETTINGS = {
   codec: 'avc1' as const,
   videoBitrate: 2_500_000,
-  videoQuality: '1080p' as const,
+  /**
+   * iPhone 1080p. Android 720p (Nemat, 12 Nov 2026; docs/release/ANDROID-DEVICE-STREAMING-12NOV.md):
+   * Android raises a 1080p variable-bitrate encode to its minimum-quality floor, so a Galaxy A15 wrote
+   * 4.7 Mbps whatever was asked; at 720p it wrote 3.0 Mbps, a third smaller to upload.
+   */
+  videoQuality: Platform.OS === 'android' ? ('720p' as const) : ('1080p' as const),
   /** Native 1x on the wide camera; the spec allows only 1x. */
   zoom: 0,
   /** expo-camera drops the torch when recording starts; re-apply it this long after start. */

@@ -5,6 +5,7 @@
 //   edge to edge, so the window no longer shrinks for the keyboard (ui/keyboard.ts).
 // - The notification channel asked for a sound file named "default" and logged an error on every launch.
 // - Back hid the keyboard but left the caption focused, so Post Review never showed Post again.
+// Galaxy A15 through Device Streaming, 12 Nov 2026: Android raised 1080p recordings to 4.7 Mbps; 720p on Android.
 import { createElement, useRef } from 'react';
 import { Keyboard, Platform, type TextInput } from 'react-native';
 
@@ -117,6 +118,28 @@ describe('useBlurOnKeyboardHide', () => {
     await renderer.act(() => tree.unmount());
     expect(remove).toHaveBeenCalledTimes(1);
     jest.restoreAllMocks();
+  });
+});
+
+describe('recording resolution per platform (video/types.ts)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+  const settingsOn = (os: 'ios' | 'android') => {
+    let settings!: typeof import('@/video/types').RECORDING_SETTINGS;
+    jest.isolateModules(() => {
+      // The isolated registry has its own react-native: set the platform on that one.
+      /* eslint-disable @typescript-eslint/no-require-imports */
+      jest.replaceProperty((require('react-native') as typeof import('react-native')).Platform, 'OS', os);
+      settings = (require('@/video/types') as typeof import('@/video/types')).RECORDING_SETTINGS;
+      /* eslint-enable @typescript-eslint/no-require-imports */
+    });
+    return settings;
+  };
+
+  it('records 720p on Android and 1080p on iPhone, both at 2.5 Mbps H.264', () => {
+    expect(settingsOn('android')).toMatchObject({ videoQuality: '720p', videoBitrate: 2_500_000, codec: 'avc1' });
+    expect(settingsOn('ios')).toMatchObject({ videoQuality: '1080p', videoBitrate: 2_500_000, codec: 'avc1' });
   });
 });
 
