@@ -6134,6 +6134,26 @@ access.** Full report: `docs/release/ACCESS-CONTROL-AUDIT.md`.
   - Runbook G0 to G5: `ACCESS-CONTROL-AUDIT.md` section 7.
   - At 10:35 UTC hosted still had 29 migrations, so nothing was run.
 
+## 55. Member gate integrated into main and re-verified locally (12 Nov); nothing hosted
+
+Branch `claude/conga-member-gate-integration` from `bbf2101` with the 2 Nov branch merged in. Details:
+`docs/release/ACCESS-CONTROL-AUDIT.md` section 8.
+
+- **Nothing in `supabase/` changed on main since the gate was written.** The app gained no API call,
+  and its calls before Home are still all on the allowlist.
+- **New Jest guard** `memberGate.test.ts`: GitHub CI now fails if the app calls something before Home
+  that the gate would refuse, or if the allowlist widens unreviewed.
+- **Isolated stack `shortcut-mgi`:**
+  - pgTAP 1972 of 1972; every Deno, rehearsal and auth step passed; typecheck, lint and Jest (545
+    tests) passed.
+  - The HTTP bypass probe passed 50 of 50: 63 member functions in three non-member states, tables,
+    `HEAD` counts, GraphQL, path tricks, Storage, Edge, suspension and session revocation.
+  - Rollback reopened the gap (20 probe failures), and re-apply closed it again.
+  - The fingerprint equals `mg-expected-31-migrations.fp`.
+- **Deploy:** still the 2 Nov conditional approval and runbook G0 to G5. The precondition (the
+  revocation deployed and verified, 3 Nov, section 53) is recorded as met, but hosted was not read
+  in this pass. Nothing was deployed.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

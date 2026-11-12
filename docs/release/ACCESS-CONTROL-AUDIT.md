@@ -177,7 +177,8 @@ the request path is one of these:
 keeps server access, because they have a profile. The app still sends them to O-Invite, as before.
 
 **Maintenance rule:** any new call the app makes before Home must be added to
-`pre_member_allowed_path` and to test 0037's expected list, or onboarding will get a 403.
+`pre_member_allowed_path` and to test 0037's expected list, or onboarding will get a 403. Since
+12 Nov the Jest test `app/src/__tests__/memberGate.test.ts` enforces this in GitHub CI (section 8).
 
 **Not verified:** the installed founder binary (19 Oct build plus OTA). Its onboarding calls were
 read from the current app source only, not observed on the phone. The only account on it is a
@@ -290,3 +291,76 @@ and the state, and report for Nemat's recovery decision. The options to put to h
 **Separation from the Mux deployment:** the migration touches no Mux table, function, job,
 schedule, secret or Edge function. It is deployed in its own step after the revocation's D5. A
 problem in either one is reported on its own.
+
+## 8. Integration into main (12 Nov 2026): re-verified on an isolated stack; nothing hosted
+
+Branch `claude/conga-member-gate-integration` from `origin/main` `bbf2101` (PRs 1 to 3), with this
+branch merged in unchanged (merge commit; its three commits keep their ids). **No hosted read or
+write, no Mux call, no account outside the local stack, no app build.**
+
+- **What changed on main since the gate was written (`f5aea9c`):**
+  - Nothing in `supabase/`: no migration, function, test or config. The gate's `pre_request` is
+    still built on the newest definition (`20261016000202_session_lifecycle.sql`), and the revocation
+    migration `20261101000100` touches neither `pre_request` nor any path the gate reads.
+  - In `app/`: the Android, 720p and status-bar work (PR 2). It adds no API call: the set of RPCs,
+    table reads and Edge functions the app uses is the same. Every call the app makes before Home
+    is still on the allowlist, and `syncTimezone` and the push registration still wait for Home.
+  - Conflicts: documentation only (this audit is now BETA-READINESS section 54; the DECISIONS row
+    points there).
+- **New regression test, `app/src/__tests__/memberGate.test.ts` (6 tests, runs in GitHub CI):**
+  - The allowlist parsed from the newest migration equals the reviewed list, and member functions
+    (feeds, profiles, comments, search, follows, places, push registration, GraphQL) are not on it.
+  - Every RPC in the onboarding screens, the invite link screen and the modules they use is on
+    `pre_member_allowed_path` or `suspended_allowed_path` (except `set_profile_photo`, which runs
+    after `create_profile`); none of them reads a table directly; they import from `content` and
+    `notifications` only `requestReview` and `setSuspendedHandler`; sign-out, the suspended screen
+    and the invite link reach only open paths.
+  - Mutation-checked: removing `confirm_age` from the migration fails 2 tests; importing `homeFeed`
+    into an onboarding screen fails 1.
+  - pgTAP 0037 needs a local stack, which CI does not run, so this is CI's only gate check.
+- **Full local verification** (`scripts/full-local-verification.sh mgi 571`, stack `shortcut-mgi`,
+  31 migrations): 28 of 29 steps passed on the first run.
+  - Passed: pgTAP 1972 of 1972 (27 files, 0037 included); every Deno unit and integration suite;
+    the idempotency rollback check (older suite 1089, re-apply fingerprint equal); scheduler; C1
+    rehearsal 52 of 52; provider rehearsal; auth integration; lint; Jest.
+  - Failed: the app typecheck, on the new test's Node imports. Fixed with the typed `require`
+    pattern of `androidLayout.test.ts`. Typecheck, lint (0 warnings) and Jest (44 suites, 545
+    tests) then passed.
+- **HTTP bypass probe** (scratch script, real email-code sessions through Kong, PostgREST, Auth,
+  Storage and the Edge runtime with fake Mux): **50 of 50.**
+  - **Sweep:** every one of the 63 member functions granted to `authenticated` gives 403
+    `profile_required` in three non-member states (signed in only, invite redeemed without a
+    profile, mid-onboarding). The member is never refused by the gate.
+  - **Onboarding over HTTP:** age, invite check and redeem, username status and suggestions, and
+    `create_profile` pass; the same session reads `home_feed` straight after.
+  - **Tables and counts:** direct `GET` on 10 tables, and `HEAD /places` with `count=exact`, give 403
+    with no count header.
+  - **GraphQL:** refused, both `/graphql/v1` and `/rpc/graphql` with `Content-Profile:
+    graphql_public`.
+  - **Path tricks:** trailing or double slash, percent-encoding, upper case, `..` segments from an
+    allowed path (plain and encoded), a name with an allowed prefix, the `GET` form, and an allowed
+    name in another schema. Each gives 403 or 404, never data. No allowlisted function returns a
+    table row type, so none can embed other tables.
+  - **Storage and Edge:** a non-member cannot upload an avatar; `mux-create-upload` answers 403
+    `profile_required`; `abandon-submission` refuses.
+  - **Unchanged:** anon `home_feed` 401, anon and signed-in `web_video` 200.
+  - **Order with the November security work:** a suspended non-member gets `suspended`, not
+    `profile_required`, and `set_timezone` stays open to them. After a global sign-out, a non-member
+    gets `session_revoked` even on an allowed path, and so does a member.
+- **Rollback rehearsal on the integrated branch:** the down file returns `pre_request` to md5
+  `68e72efa…` (production's recorded value) at 30 migrations, and drops the allowlist function.
+  - The same probe then fails 20 checks, reproducing section 2's exposure: `home_feed` 200 without a
+    profile, whole tables, the `HEAD` count `0-3/4`, and the path tricks.
+  - `supabase migration up` re-applies it: md5 `9281c320…`, 31 migrations, the allowlist not
+    executable by anon or authenticated, the probe 50 of 50.
+  - After a reset (the probe's leftover rows break pgTAP 0002's fixtures, unrelated to the gate),
+    pgTAP passed 1972 of 1972 again.
+- **Fingerprint:** the integrated stack's 907 lines equal `mg-expected-31-migrations.fp`. That file
+  differs from `rv-expected-30-migrations.fp` only in `pre_request` and the new
+  `pre_member_allowed_path`.
+- **Realtime:** the `supabase_realtime` publication has 0 tables and the app opens no channel, so
+  Realtime gives no path to member rows. Not run on the stack (Realtime is off there).
+- **Still not verified:**
+  - The hosted state since 3 Nov: not read in this pass (G0 and G1 do that, with approval).
+  - A device or simulator: no app behaviour changed.
+  - The avatars listing finding (F3): still open, separate.
