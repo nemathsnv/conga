@@ -189,3 +189,18 @@ Use Android Device Streaming's free 30 minutes on one partner-lab mid-range phon
 **Still to try:** whether `adb reverse` works over the streamed connection. If it does, the debug build can use the isolated stack, so no hosted data at all. If it doesn't, a preview APK against the hosted project needs Nemat's approval.
 
 **Still needs a phone in hand:** the picture and heard-sound checks (1 and 2).
+
+## 7. iOS regression check of the shared changes (12 Nov, iOS simulator)
+
+Four of the Android fixes run on iPhone too. They were checked on the iPhone 18 Pro simulator after the branch was merged with
+`main` (`b5abbe2`), using the 19 Oct iOS dev build (no native change since that affects these screens) and Metro, against the isolated
+local stack. **Simulator only:** not run on the founder iPhone.
+
+| Shared change | iOS result | Screenshot |
+| --- | --- | --- |
+| Status bar rule (`afbec50`) | Welcome and Home light; Discover and Me dark; **Home light again after Me**; Comments over video light | [25](screenshots/android-emulator-2nov/25-ios-statusbar-discover-me-home.jpg) |
+| Comment bar in the flow, `KEYBOARD_BEHAVIOR` (`d3d2855`) | The bar sits directly above the keyboard while typing; a comment posted (local DB) and the bar returned to the bottom. Email and code screens: Continue above the keyboard as before. | [26](screenshots/android-emulator-2nov/26-ios-comments-keyboard.jpg) |
+| Only a swipe changes the page (`9f9063e`) | Home opens on For you; a drag goes to Following and back to For you. A very fast synthetic swipe did not register on the simulator, but a normal drag did. | [27](screenshots/android-emulator-2nov/27-ios-swipe-following-foryou.jpg) |
+| `useBlurOnKeyboardHide` on Post Review (`23da137`) | Not exercised: the simulator has no camera to reach Post Review. On iOS the keyboard only hides when the field is left, so the hook cannot change anything there. | n/a |
+
+Android-only changes (hidden code field opacity, notification channel, 720p) do not run on iOS.
