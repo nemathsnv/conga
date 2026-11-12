@@ -22,7 +22,9 @@ Notifications.setNotificationHandler({
 export async function ensureNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   try {
-    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, { name: ANDROID_CHANNEL_NAME, importance: Notifications.AndroidImportance.DEFAULT, sound: 'default' });
+    // No `sound` key: the channel then plays the phone's default sound. A string names a sound file
+    // bundled in the app, so 'default' was looked up as a file and logged an error on every launch.
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, { name: ANDROID_CHANNEL_NAME, importance: Notifications.AndroidImportance.DEFAULT });
   } catch (e) {
     console.warn('notification channel failed', e);
   }

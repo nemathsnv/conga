@@ -65,9 +65,17 @@ export function SwipePages<K extends string>({
     ref.current?.scrollTo({ x: index * size.width, y: 0, animated: true });
   }, [index, size.width]);
 
-  const settle = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  // Only a swipe changes the tab. Android also ends a momentum scroll with no drag at all: at launch,
+  // sometimes at offset 0 before the starting page is applied (emulator, 2 Nov 2026: Home opened on
+  // Following in 2 of 3 cold starts). Such an end puts the pager back on the selected page instead.
+  const dragged = useRef(false);
+  const settle = (e: NativeSyntheticEvent<NativeScrollEvent>, end: boolean) => {
     const i = settledPage(e.nativeEvent.contentOffset.x, size.width, pages.length);
-    if (i !== null && pages[i] !== selected) onSelect(pages[i]);
+    if (i !== null && pages[i] !== selected) {
+      if (dragged.current) onSelect(pages[i]);
+      else ref.current?.scrollTo({ x: index * size.width, y: 0, animated: false });
+    }
+    if (end) dragged.current = false;
   };
 
   const pager = (
@@ -88,9 +96,12 @@ export function SwipePages<K extends string>({
       }}
       onScroll={onScroll}
       scrollEventThrottle={16}
-      onScrollBeginDrag={onDragStart}
-      onMomentumScrollEnd={settle}
-      onScrollEndDrag={settle}
+      onScrollBeginDrag={() => {
+        dragged.current = true;
+        onDragStart?.();
+      }}
+      onMomentumScrollEnd={(e) => settle(e, true)}
+      onScrollEndDrag={(e) => settle(e, false)}
       style={[s.fill, style]}
     >
       {pages.map((page, i) => {

@@ -5,9 +5,8 @@
 // A take with a camera flip arrives as several segments: they are stitched once, here, and the
 // stitched file is what plays and what Post sends (docs/BLOCKERS.md B-1, video/stitch.ts).
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, BackHandler, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -19,6 +18,7 @@ import { GlassTool, LiveProgressLine, VideoGradients } from '@/ui/dark';
 import { failedTitle } from '@/ui/failedPost';
 import { CloseIcon, CommentIcon, PersonIcon, RecordDotIcon, ShareIcon } from '@/ui/Icons';
 import { OverlaySheet } from '@/ui/OverlaySheet';
+import { KEYBOARD_BEHAVIOR, useBlurOnKeyboardHide } from '@/ui/keyboard';
 import { createProgress } from '@/ui/progress';
 import { useOpenRecord } from '@/ui/recordEntry';
 import { ReplyCard } from '@/ui/ReplyCard';
@@ -44,6 +44,9 @@ export default function ReviewScreen() {
   const current = getCurrentRecording();
   const [caption, setCaption] = useState('');
   const [editing, setEditing] = useState(false);
+  // Hiding the keyboard ends the caption's editing, so Post and Re-record come back (Android's Back).
+  const captionInput = useRef<TextInput>(null);
+  useBlurOnKeyboardHide(captionInput);
   // The 2pt line's progress, outside this screen's state (ui/progress.ts).
   const [progress] = useState(createProgress);
   const [discardAsk, setDiscardAsk] = useState(false);
@@ -195,7 +198,6 @@ export default function ReviewScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
       <VideoSurface playbackId={null} localUri={localUri} active={!discardAsk && !disclosure} loop onProgress={progress.set} />
       <VideoGradients top={240} bottom={330} topAlpha={0.55} bottomAlpha={0.7} />
 
@@ -235,11 +237,12 @@ export default function ReviewScreen() {
         />
       ) : null}
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.bottomArea} pointerEvents="box-none">
+      <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR} style={s.bottomArea} pointerEvents="box-none">
         <View style={{ paddingBottom: Math.max(insets.bottom, 10) + 10 }}>
           <LiveProgressLine source={progress} />
           <Glass style={s.captionBox} radius={14}>
             <TextInput
+              ref={captionInput}
               style={s.captionInput}
               value={caption}
               onChangeText={(v) => setCaption(v.slice(0, CAPTION_MAX))}

@@ -1,6 +1,6 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
+import { setStatusBarStyle } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { claimPush } from '@/lib/pushRoutes';
 import { SessionProvider, useSession } from '@/lib/session';
 import { resetAccountScopedUi } from '@/ui/accountScope';
 import { RecordEntryProvider } from '@/ui/recordEntry';
+import { routeKey, statusBarStyleFor } from '@/ui/statusBar';
 import { PostingProvider } from '@/video/posting';
 
 void SplashScreen.preventAutoHideAsync();
@@ -50,6 +51,14 @@ function RootNavigator() {
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
+
+  // The status bar follows the screen in front (ui/statusBar.ts); screens do not mount their own.
+  const segments = useSegments();
+  const route = routeKey(segments);
+  useEffect(() => {
+    const style = statusBarStyleFor(route.split('/'));
+    if (style) setStatusBarStyle(style);
+  }, [route]);
 
   // The event queue and the connection watch live for the whole app.
   useEffect(() => {
@@ -93,7 +102,6 @@ function RootNavigator() {
   const inApp = step === 'home';
   return (
     <>
-      <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         <Stack.Screen name="i/[code]" options={{ animation: 'none' }} />
         <Stack.Protected guard={inApp}>

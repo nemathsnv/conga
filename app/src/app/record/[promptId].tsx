@@ -16,7 +16,6 @@
 // (PR-Discard's words). NOT ON A BOARD: these controls and the paused timer need Nemat's approval.
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -451,7 +450,6 @@ export default function RecordScreen() {
     // Board A-Camera
     return (
       <View style={[s.root, { backgroundColor: '#111113' }]}>
-        <StatusBar style="light" />
         <View style={[s.header, { top: insets.top + 3 }]}>
           <GlassTool label="Cancel" onPress={() => router.back()}>
             <CloseIcon />
@@ -477,7 +475,6 @@ export default function RecordScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
       {camera?.granted ? (
         <CameraView
           key={cameraKey}

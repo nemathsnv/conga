@@ -2,7 +2,6 @@
 // the next response from someone you follow (Following). SPEC.md Section 4. Swipe sideways or tap
 // the tabs to change list (ui/SwipePages.tsx).
 import { useFocusEffect, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { memo, useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { FlatList, StyleSheet, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInfo } from '@/ui/safeArea';
@@ -137,7 +136,6 @@ export default function HomeTab() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
       {/* Swipe sideways between Following and For you, or tap the tabs (founder iPhone test, 19 Oct). */}
       <SwipePages pages={PAGES} selected={tab} onSelect={changeTab} renderPage={renderPage} />
       <FeedHeader tab={tab} onTab={changeTab} />

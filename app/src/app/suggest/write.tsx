@@ -2,11 +2,12 @@
 // works and one on what won't be published.
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getSuggestion } from '@/lib/content';
 import { resetSuggestDraft, setSuggestDraft, SUGGEST_MAX, suggestionTextOk, useSuggestDraft } from '@/lib/suggestFlow';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 export default function SuggestWriteScreen() {
@@ -25,7 +26,7 @@ export default function SuggestWriteScreen() {
 
   const ok = suggestionTextOk(draft.text);
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.root} behavior={KEYBOARD_BEHAVIOR}>
       <View style={[s.header, { marginTop: insets.top + 8 }]}>
         <Pressable accessibilityRole="button" onPress={() => { resetSuggestDraft(); router.back(); }} hitSlop={8}>
           <Text style={s.headerLink}>Cancel</Text>

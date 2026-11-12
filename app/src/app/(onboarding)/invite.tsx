@@ -1,7 +1,7 @@
 // Boards O-Invite (closed beta code step) and W-Invalid (code not found, expired or used).
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl, checkInvite, joinWaitlist, redeemInvite, type InviteCheck } from '@/lib/api';
@@ -11,6 +11,7 @@ import { useAdvance } from '@/lib/useStepNavigation';
 import { inviteCodeComplete, normaliseInviteCode } from '@/lib/validation';
 import { Avatar, Button, Header, Lead, Pill, Title } from '@/ui/components';
 import { DEV_INVITE_FACES } from '@/ui/devPlaceholders';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { colors, fontFamily, layout, type } from '@/ui/theme';
 
 
@@ -105,7 +106,7 @@ export default function InviteScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.root} behavior={KEYBOARD_BEHAVIOR}>
       <Header onBack={() => void leave()} />
       <View style={s.body}>
         <View style={s.faces}>

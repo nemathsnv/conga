@@ -10,6 +10,7 @@ import { useSession } from '@/lib/session';
 import { NAME_MAX, nameOk, normaliseName, normaliseUsername, usernameFormatOk } from '@/lib/validation';
 import { pickPhoto, prepareAvatar, uploadAvatar } from '@/lib/photo';
 import { Avatar, Group, Separator } from '@/ui/components';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { colors, fontFamily, type } from '@/ui/theme';
 
 const BIO_MAX = 150;
@@ -69,7 +70,7 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.root} behavior={KEYBOARD_BEHAVIOR}>
       <View style={[s.header, { marginTop: Platform.OS === 'ios' ? 14 : insets.top + 7 }]}>
         <Pressable accessibilityRole="button" onPress={() => router.back()} hitSlop={8}>
           <Text style={s.headerAction}>Cancel</Text>

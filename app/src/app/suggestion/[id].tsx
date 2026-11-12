@@ -1,7 +1,6 @@
 // Boards C-Live (the suggestion is live, no draft) and C-Draft (publish the private draft?).
 // SPEC.md Section 12: a draft is never published automatically.
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,7 +62,6 @@ export default function SuggestionOutcomeScreen() {
   if (sg.draft) {
     return (
       <View style={s.dark}>
-        <StatusBar style="light" />
         <VideoSurface playbackId={sg.draft.playback_id} active={playing} loop onProgress={() => undefined} />
         <View style={[s.gradTop]} />
         <View style={[s.gradBottom]} />
@@ -125,7 +123,6 @@ export default function SuggestionOutcomeScreen() {
   // Board C-Live
   return (
     <View style={s.dark}>
-      <StatusBar style="light" />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,12,0.5)' }]} />
       <Glass style={[s.banner, { top: insets.top + 53 }]} radius={16}>
         <View style={s.bannerIcon}>

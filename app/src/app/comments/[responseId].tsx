@@ -6,7 +6,7 @@ import { track } from '@/lib/analytics';
 import { Image } from 'expo-image';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { avatarUrl } from '@/lib/api';
@@ -18,6 +18,7 @@ import { Avatar } from '@/ui/components';
 import { OverlaySheet } from '@/ui/OverlaySheet';
 import { Spinner } from '@/ui/HomeStates';
 import { CloseIcon, HeartIcon, VideoReplyIcon } from '@/ui/Icons';
+import { KEYBOARD_BEHAVIOR } from '@/ui/keyboard';
 import { useOverlayWhileMounted } from '@/ui/playerOverlay';
 import { useGoBack } from '@/ui/navigation';
 import { colors, fontFamily, type } from '@/ui/theme';
@@ -219,7 +220,7 @@ export default function CommentsScreen() {
         </View>
       ) : null}
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.sheet, { top: sheetTop }]}>
+      <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR} style={[s.sheet, { top: sheetTop }]}>
         <View style={s.handle} />
         <View style={s.titleRow}>
           <Text style={s.title}>{sheet ? `${sheet.count} ${sheet.count === 1 ? 'comment' : 'comments'}` : ''}</Text>
@@ -232,7 +233,7 @@ export default function CommentsScreen() {
             <Spinner light={false} />
           </View>
         ) : (
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 90 }}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
             {vr && vr.count > 0 ? (
               <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/replies/[rootId]', params: { rootId: sheet.response.id } })} style={({ pressed }) => [s.roomCard, pressed && { opacity: 0.8 }]}>
                 <View style={{ flexDirection: 'row', gap: 4 }}>
@@ -334,7 +335,8 @@ const s = StyleSheet.create({
   actions: { marginTop: 5, flexDirection: 'row', gap: 16 },
   action: { ...type.caption13, fontWeight: '500', color: colors.textTertiary, fontFamily },
   like: { width: 32, alignItems: 'center', paddingTop: 6 },
-  inputBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 8, paddingHorizontal: 12, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // In the flow at the bottom of the sheet, not absolute, so the keyboard padding lifts it (ui/keyboard.ts).
+  inputBar: { marginTop: 'auto', paddingTop: 8, paddingHorizontal: 12, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator, flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: { flex: 1, height: 38, borderRadius: 19, backgroundColor: colors.fill, color: colors.text, paddingHorizontal: 14, ...type.label15, fontFamily },
   videoButton: { height: 38, paddingLeft: 10, paddingRight: 12, borderRadius: 19, backgroundColor: colors.text, flexDirection: 'row', alignItems: 'center', gap: 6 },
   videoText: { ...type.semi14, color: colors.white, fontFamily },

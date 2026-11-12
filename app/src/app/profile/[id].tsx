@@ -1,6 +1,5 @@
 // Board R-Profile: someone else's profile. The … menu opens SF-Menu (Copy link, Share to…, Report, Block).
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,7 +17,6 @@ export default function ProfileScreen() {
   const { profile, responses } = useProfile({ id });
   return (
     <View style={s.root}>
-      <StatusBar style="dark" />
       <View style={[s.header, { marginTop: insets.top + 3 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={s.headerButton}>
           <ChevronLeft />

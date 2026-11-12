@@ -2,7 +2,6 @@
 // root's room) and A-Orphan (the root response was deleted). SPEC.md Section 7.
 import { track } from '@/lib/analytics';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -86,7 +85,6 @@ export default function ReplyPlayerScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
       {unavailable ? (
         <View style={[s.root, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}>
           <Text style={s.unavailableTitle}>This response isn&apos;t available</Text>
