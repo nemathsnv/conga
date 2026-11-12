@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "channel": "development",
+      "ios": { "simulator": true },
+      "env": { "EXPO_PUBLIC_DEV_TOOLS": "1" }
+    },
+    "preview": {
+      "distribution": "internal",
+      "autoIncrement": true,
+      "environment": "preview",
+      "channel": "preview",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://picvoavfxnajfjkqawju.supabase.co",
+        "EXPO_PUBLIC_WEB_BASE_URL": "https://conga.churntech.com",
+        "EXPO_PUBLIC_DEV_TOOLS": "0",
+        "EXPO_PUBLIC_FOUNDER_BUILD": "0"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "environment": "production",
+      "channel": "production",
+      "android": { "buildType": "app-bundle" },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://picvoavfxnajfjkqawju.supabase.co",
+        "EXPO_PUBLIC_WEB_BASE_URL": "https://conga.churntech.com",
+        "EXPO_PUBLIC_DEV_TOOLS": "0",
+        "EXPO_PUBLIC_FOUNDER_BUILD": "0"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

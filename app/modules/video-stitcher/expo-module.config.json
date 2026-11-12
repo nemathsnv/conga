@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["VideoStitcherModule"]
+  },
+  "android": {
+    "modules": ["app.shortcut.videostitcher.VideoStitcherModule"]
+  }
+}

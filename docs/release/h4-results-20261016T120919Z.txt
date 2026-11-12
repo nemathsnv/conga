@@ -1,0 +1,26 @@
+# H4 post-push verification, 20261016T120919Z, project picvoavfxnajfjkqawju
+PASS  1 migrations (count|latest): 24|20261016000204
+PASS  2 session_is_current|session_started_at|invite_lookup_unlimited|avatar_removals|rate_limit_rules|rate_limit_counters: true|true|true|true|true|true
+2 new functions: invite_lookup(p_code text);request_client_ip();signin_providers_limited(p_email text, p_client text);web_event_allowed(p_client text)
+3 policies on profiles/follows/comments: comments: signed-in users read only their own directly;follows: signed-in users read only their own follows directly;profiles: signed-in users read only their own directly
+PASS  3 own-row read policies replace the broad ones: comments: signed-in users read only their own directly;follows: signed-in users read only their own follows directly;profiles: signed-in users read only their own directly
+PASS  4 column grants: suggested_by hidden|note hidden|moderator hidden|prompt text readable: true|true|true|true
+PASS  4 truncate/trigger revoked from API roles: true|true|true
+PASS  5 avatar policies: 4|avatars: anyone can read;avatars: delete your own folder;avatars: insert into your own folder;avatars: update your own folder
+PASS  6 cron jobs (203 adds avatar-cleanup, 204 adds prune-rate-limit-counters): 10|avatar-cleanup;mux-cleanup;mux-cleanup-monitor;mux-sweep;prune-moderation-records;prune-mux-cleanup-jobs;prune-rate-limit-counters;purge-deleted-accounts;send-push;tonight-prompt
+7 rate_limit_rules|counters|avatar_removals: 5|0|0
+PASS  7 counters and removals empty
+PASS  7 rules (SECURITY.md 1b defaults): invite_client=10/900s;invite_stem=100/3600s;signin_address=5/900s;signin_client=30/900s;web_event=60/3600s
+PASS  8 session_is_current() for a connection with no session claim: true
+8 auth.sessions rows (count only): 1
+PASS  9 fingerprint vs local 24-migration stack (objects|md5): 847|8bddf2614e7c2d55acfcd10d951dddc5
+PASS  10 founder response unchanged: c9918f8241a2c45eefb106b5d0ec0a8f|live
+PASS  10 founder ledger unchanged: 9726bb8fdf8d9eb0cb759d13ce59c8b6|claimed
+PASS  10 V unchanged: live|tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo
+PASS  10 responses by status: deleted=1;live=2
+10 deleted accounts|accounts: 0|2
+PASS  11 clean-up mode|health|open jobs: off|ok|0
+12 migration list:
+remote applied: 24 | local only: ['20261016000300', '20261016000301']
+# result: every compared check PASS
+# written to /Users/nemathsnv/Projects/shortcut/.claude/worktrees/shortcut-multi-agent-execution-93fee4/docs/release/h4-results-20261016T120919Z.txt

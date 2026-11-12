@@ -1,14 +1,20 @@
 <!-- Exported from the locked Claude Docs spec (rev 110, 5 Oct 2026):
 https://claude.ai/code/artifact/eee59791-f711-4dac-bc44-d24dfaae2018
-The online doc is the master. If it changes, re-export this file. Diagrams were converted to text. -->
+The online doc is the master. If it changes, re-export this file. Diagrams were converted to text.
+Local revision, 14 Oct 2026 (approved by Nemat): section 19, failed posts, Discard and sign-out.
+Local revision, 17 Oct 2026 (Nemat): the product name is Conga, and the links are on conga.churntech.com
+(section 4). Name and domain only; no behaviour changed.
+Local revision, 19 Oct 2026 (Nemat): several responses per person per prompt (sections 6 and 24), and
+Pause/Resume while recording responses and video replies (sections 2, 6 and 7).
+Not yet in the online master: update the master before the next re-export, or these revisions are lost. -->
 
-# Shortcut v1 — Product and Build Specification
+# Conga v1 — Product and Build Specification
 
 Oct 5, 2026 · @Nemat
 
 ## Status and how to use this spec
 
-**Locked — approved for implementation (5 Oct 2026).** This is the single build source of truth for Shortcut v1, together with the final A1 Native canvas (version 26, approved 5 Oct 2026). Every v1 screen and state is drawn and approved.
+**Locked — approved for implementation (5 Oct 2026).** This is the single build source of truth for Conga v1, together with the final A1 Native canvas (version 26, approved 5 Oct 2026). Every v1 screen and state is drawn and approved.
 
 - **Designs:** the [A1 Native canvas](https://claude.ai/artifact/AUxUiU1muSm6Z61SP2wCUP), 86 boards in 12 rows. Screen IDs below (e.g. `R-Player-2`) are its board names.
 - **Precedence:** where this spec and a canvas note disagree, this spec wins. Where a screen shows different behaviour, the screen gets fixed.
@@ -19,7 +25,7 @@ Oct 5, 2026 · @Nemat
 
 ## 1. Product definition
 
-Shortcut is a social video app where people respond to prompts with short videos and talk back with video replies. It is a global product; the closed beta is seeded in Canggu, Bali.
+Conga is a social video app where people respond to prompts with short videos and talk back with video replies. It is a global product; the closed beta is seeded in Canggu, Bali.
 
 - **Core loop:** a prompt → people record video responses (up to 30 seconds) → others watch, reply on video, comment and follow → the next prompt.
 - **A prompt** is any sentence that invites a response: a question, a statement, an instruction or a challenge. Main example: "Be honest about the place you live."
@@ -38,7 +44,7 @@ v1 ships the full prompt → response → conversation loop, the safety tooling 
 **In v1**
 
 - Home feed (For you, Following), Discover with search, response player, Activity, profiles, Settings
-- Recording responses and video replies in the app: front/back camera, light, 1× zoom, up to 30 seconds
+- Recording responses and video replies in the app: front/back camera, light, 1× zoom, pause and resume, up to 30 seconds of recorded footage
 - Video replies in flat rooms, including replies to replies
 - Text comments on responses (not on video replies)
 - Likes on responses and video replies
@@ -197,9 +203,9 @@ Five tabs, with + in the centre. The player, recording, comments, reply rooms an
 
 | Link | Installed app | No app |
 | --- | --- | --- |
-| shortcut.app/r/{id} | Opens the response or video reply in the player | Web player |
-| shortcut.app/p/{id} | Opens the prompt's first response | Web player |
-| shortcut.app/i/{code} | Invite welcome (`W-Link`) | Store page, then the invite on first open |
+| conga.churntech.com/r/{id} | Opens the response or video reply in the player | Web player |
+| conga.churntech.com/p/{id} | Opens the prompt's first response | Web player |
+| conga.churntech.com/i/{code} | Invite welcome (`W-Link`) | Store page, then the invite on first open |
 
 There are no web profile pages in v1. Share profile creates an app link: it opens the profile in the app, or the store page if the app isn't installed.
 
@@ -245,6 +251,7 @@ A response is a public video of up to 30 seconds made in response to exactly one
 
 - The prompt is shown on screen while recording, with "Responding · up to 30 seconds".
 - Controls: cancel, camera flip, light, 1× zoom, record and stop with a progress ring, red timer.
+- **Pause and Resume** (Nemat, 19 Oct 2026): Record → Pause → Resume → … → Stop, as many times as the person likes within one recording. Only recorded footage counts: the timer, the ring, the 30-second limit and the 2-second minimum exclude paused time, and the video contains only the recorded parts, joined into one clip with its sound in step. The screen always shows whether it is recording or paused. Flip, zoom and light work while recording and while paused. Reaching 30 seconds of footage ends the recording for post review. Leaving the app or a camera interruption pauses the recording and keeps what was recorded. Cancel during a recording asks before discarding it.
 - After stopping → post review: watch, Re-record, add a caption, Post.
 - The first public video of any kind shows the disclosure first (section 16).
 - Camera or microphone access off → `A-Camera` or `A-Mic`. Recording without sound is not allowed.
@@ -256,7 +263,7 @@ A response is a public video of up to 30 seconds made in response to exactly one
 - Buttons: Reply to the author, Respond to the prompt.
 - At the end: "You've seen all 23 responses.", Add your response, Watch again, then the next conversation.
 
-**One primary response per person per prompt.** To change it, the person deletes it and records again. Video replies are not limited.
+**Several responses per person per prompt** (Nemat, 19 Oct 2026; replaces "one primary response per person per prompt"). A person may respond to the same prompt with any number of independent videos, at any time while the prompt is open: a nature prompt answered from the Netherlands today, Norway next month and Japan later. Each response is its own video with its own caption, likes, comments, video replies, reports and moderation. A prompt the person has responded to offers "Respond again". Deleting a response affects only that response. A response removed by moderation stays removed, but does not stop the person posting a different video; account restrictions and suspensions apply as before (section 17). Posting the same recording twice never makes two responses. Video replies are not limited.
 
 ## 7. Video reply model
 
@@ -277,7 +284,7 @@ A video reply is a public video of up to 30 seconds that replies to a response, 
 - A reply to a reply shows "Replying to \[name\]" on its tile.
 - **Watching a reply** (`Reply-Watch`, `Reply-Watch-2`): a card at the top shows what it replies to. Tapping the card opens that video. A reply to a reply adds "In replies to \[root author\]".
 - **Buttons:** "\[Root author\]'s response" and "Reply to \[this reply's author\]". "x of N" counts within the room.
-- **Recording a reply** (`Record-Reply`): the card shows "Replying to \[name\]", their caption and "In replies to \[root author\] · up to 30 seconds".
+- **Recording a reply** (`Record-Reply`): the card shows "Replying to \[name\]", their caption and "In replies to \[root author\] · up to 30 seconds". Pause and Resume work as for a response (section 6).
 
 **When the video it replies to is deleted**
 
@@ -424,7 +431,7 @@ Onboarding runs in this order: sign in (Welcome, plus the email-code screen for 
 
 During the beta, creating a profile needs either a valid invite or admission from the waitlist. One server switch (`invite_required`) turns the whole step off at public launch without changing any other screen.
 
-- **Invite step** (`O-Invite`): "Closed beta" label, "Shortcut is in closed beta." / "Access is limited while we're testing. Use an invite if you have one, or join the waitlist." (same wording on the invalid-invite state, W-Invalid), a code field showing "Invited by Putu Ayu" once the code is valid, and "Opened an invite link? You're already in."
+- **Invite step** (`O-Invite`): "Closed beta" label, "Conga is in closed beta." / "Access is limited while we're testing. Use an invite if you have one, or join the waitlist." (same wording on the invalid-invite state, W-Invalid), a code field showing "Invited by Putu Ayu" once the code is valid, and "Opened an invite link? You're already in."
 - **Invite links** (`W-Link`): open the welcome screen with the inviter's card and the cohort line, then skip the code step.
 - **Codes:** single use, readable (e.g. PUTU-7K2). The team can create codes at any time.
 - **Code errors** (`W-Invalid`): not found, expired or already used. Inline red message plus Join waitlist; Continue stays disabled.
@@ -469,7 +476,7 @@ Every response and video reply is public: anyone with a link can watch it in a b
 
 **Web player** (`SF-Web`)
 
-- A slim top bar with Shortcut and "Open in app". The video is full height, with the prompt label, name, caption and rail counts.
+- A slim top bar with Conga and "Open in app". The video is full height, with the prompt label, name, caption and rail counts.
 - "N more responses" lets a visitor watch the prompt's other responses.
 - A footer: "Watch freely. Sign in to respond, reply, like or follow."
 - Respond, Reply, Like, Follow, Comment and Open in app all open `SF-Web-Signin`: "Join the conversation · Anyone can watch…", Open in the app, Get the app, and during the beta "No invite yet? Join the waitlist".
@@ -480,7 +487,7 @@ Every response and video reply is public: anyone with a link can watch it in a b
 **One-time disclosure** (`A-Disclosure`)
 
 - Shown once, before the person's first public video of any kind: a response, a video reply, or a published draft.
-- Titled "Your videos are public". It says: anyone on Shortcut can watch; people can reply on video and share, and responses can also get comments; shared links work on the web without an account; you can delete any of your videos at any time.
+- Titled "Your videos are public". It says: anyone on Conga can watch; people can reply on video and share, and responses can also get comments; shared links work on the web without an account; you can delete any of your videos at any time.
 - Buttons: Post, Go back. It is not tucked away in the Terms.
 - Enforced on the server: a video can't be published until the account has acknowledged the disclosure (`public_disclosure_ack_at`).
 
@@ -549,19 +556,26 @@ People can delete anything they posted at any time, and deleting an account has 
 
 ## 19. Offline and local drafts
 
-A recording is never lost because of a bad connection. It stays saved on the phone until it posts or the person deletes it. There is no background upload that survives closing the app.
+A recording is never lost because of a bad connection. It stays saved on the phone until it posts or the person discards it. There is no background upload that survives closing the app.
+
+*Revised 14 Oct 2026 (Nemat): Discard, one waiting recording at a time, and sign-out on every route. The new states are approved boards P1 to P9 (`design/html/`, `design/BOARDS.md`), approved by Nemat and built on 16 Oct 2026. Final copy for P4, P6 and P9 approved 14 Oct.*
 
 - **Upload:** starts when Post is tapped and runs while the app is open.
-- **Upload fails** (`X-Upload-Failed`): "Your response didn't post. It's saved on this phone. Check your connection." and Retry.
+- **Upload fails** (`X-Upload-Failed`): "Your response didn't post. It's saved on this phone. Check your connection." with Discard and Retry side by side. For a video reply: "Your video reply didn't post." A recording that can never post ("This recording can't be posted.") or is no longer on the phone ("This recording is no longer on this phone.") offers Discard only.
+- **Discard:** a confirmation comes first: "Discard this recording?" / "Conga will try to stop it from posting. If it has already uploaded, it may still appear." Discard, or Cancel. The recording is deleted from the phone once Conga confirms none of it will be processed.
+  - **Not confirmed yet** (offline, or Conga cannot verify): the recording stays on the phone, shown as "Discarding your response" / "It stays on this phone until Conga confirms." Conga asks again by itself: when the app opens or comes back, when the connection returns, and on a short, limited schedule.
+  - **Already reached Conga:** "This recording already reached Conga" / "It may finish processing. If it appears on your profile, you can delete it there." A video that reached Conga is never deleted automatically.
+- **One waiting recording at a time:** a recording that is posting, waiting offline or failed is never replaced. While one waits, Respond, Reply and Record do not open the camera: "Your last recording hasn't posted yet" / "Retry or discard it first."; while it posts: "Your last recording is still posting" / "Keep Conga open until it's done."
+- **Posting** (`PR-Posting`): for a video reply, "Posting your video reply".
 - **App closed mid-upload:** the recording stays saved. Next time the app opens, the same banner offers Retry.
-- **Offline** (`A-Offline`): "You're offline. Your response stays saved on this phone. Post when you're back online." Already loaded videos keep playing. No offline downloads.
+- **Offline** (`A-Offline`): "You're offline. Your response stays saved on this phone. Post when you're back online." For a video reply, "Your video reply stays saved on this phone." Already loaded videos keep playing. No offline downloads.
 - **Recording offline:** allowed. Post waits for the connection.
 - **Two kinds of draft:**
   - An **unposted recording** lives only on the phone.
   - A **first-response draft** for a suggested prompt is uploaded privately to the server, so it survives reinstalls (section 12).
-- Unposted recordings are deleted from the phone on sign-out, after a warning (below). They show up only through the Upload failed banner (`X-Upload-Failed`); there is no separate list.
+- Unposted recordings are discarded on sign-out by any route, after a warning (below), on the same terms as Discard. One Conga cannot confirm yet stays on the phone, out of reach of any other account, and is discarded the next time that person signs in on this phone. They show up only through the Upload failed banner (`X-Upload-Failed`); there is no separate list.
 
-**Signing out with unposted recordings:** a warning comes first: "You have 1 recording that hasn't posted. Signing out deletes it from this phone." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3).
+**Signing out with unposted recordings:** a warning comes first, on every sign-out route (Settings, LV-Suspended, the end of Delete account, confirm email): "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account." Sign out anyway, or Cancel. Drawn as LV-SignOut (section 3); its revised text and the other routes are proposal board P9.
 
 ## 20. Empty, error and loading states
 
@@ -692,7 +706,7 @@ Most open questions were settled in the spec review on 5 Oct. The decisions are 
 
 **Decided in the spec review (5 Oct)**
 
-- One primary response per person per prompt; video replies are not limited.
+- ~~One primary response per person per prompt~~ Several responses per person per prompt (changed by Nemat, 19 Oct 2026, section 6); video replies are not limited.
 - Prompts stay open after being featured, until archived. Tonight's prompt is featured from about 18:30 until local midnight.
 - 5 invites per member, each valid for 7 days; both configurable.
 - At most 3 suggestions in review per member. Moderators decline rather than rewrite.

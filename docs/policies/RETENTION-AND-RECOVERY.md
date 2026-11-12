@@ -1,0 +1,78 @@
+# Retention and recovery (DRAFT for the Conga closed beta)
+
+> **Status: working draft, not legal advice, not published.** One table of how long each kind of data is kept and
+> whether it can be brought back, taken from `SPEC.md` section 18, `docs/DECISIONS.md` (12 Oct 2026 retention rows),
+> the migrations (`20261008000100_safety.sql`, `20261012000200_video_deletion_cleanup.sql`,
+> `20261013000100_cleanup_reliability.sql`) and `docs/BETA-READINESS.md` section 15. "**Rule exists**" means a
+> deletion rule is implemented in the database; "**No rule**" means nothing deletes the data automatically today
+> and a period still has to be decided (BETA-READINESS section 4, "Data rules"). Statements marked **[NOT YET
+> TRUE]** are intended behaviour the running system does not do yet. Placeholders in square brackets; **[LEGAL
+> REVIEW]** marks claims that depend on law. This is also the internal reference the public Privacy Policy and Account
+> Deletion pages are checked against.
+>
+> **Updated 16 Oct 2026 (integration branch `90eced7`)** for `docs/release/SECURITY.md` (sessions, profile photos,
+> direct reads, sign-out cleanup), `docs/release/VIDEO-RELIABILITY.md` (errored uploads) and
+> `docs/release/CAMERA-FLIP.md` (segment files). **[LOCAL ONLY]** marks behaviour that exists in the repository and was
+> tested on a local stack but is **not deployed** to the hosted project (migrations `20261016000200` to
+> `20261016000203`, function `avatar-cleanup`, `RELEASE-CHECKLIST.md` stage 3).
+
+## 1. Retention table
+
+| Data | Kept for | Rule | Notes and source |
+| --- | --- | --- | --- |
+| **Your own response or video reply, after you delete it** | Hidden at once everywhere (web links included). The file at the video provider is deleted. | Rule exists; the deleting worker is **[NOT YET TRUE]** on the hosted project (dry-run until Nemat switches it to live) | DECISIONS 12 Oct: "an author's deletion is immediate". Effective even when reports on the video are open. No undo. |
+| **A video removed by a moderator** | Kept **privately**, not playable, until **30 days after its moderation case closes**, then the file is deleted for good | Rule exists; worker dry-run, as above | A case closes at the removal when no review is requested. A review requested before the file is permanently deleted pauses the clean-up until the decision, and the case closes at the decision. DECISIONS 12 Oct. |
+| **Restoring a removed video** | Until the file is permanently deleted | Rule exists | After deletion a moderator's restore, or a review decision that reverses the removal, is refused (`asset_deleted`); the review queue shows whether a video is still restorable. |
+| **An account you deleted: the 30-day window** | 30 days from confirmation | Rule exists | Everything is hidden and playback is disabled **[NOT YET TRUE until the worker is live]**. Every session of the account is ended at deletion **[LOCAL ONLY]**; only a **new** sign-in restores it (a session that began after the deletion; an old phone opening the app does not). Username reserved. Profile photo kept during the window. `SECURITY.md` L1, L2. |
+| **An account after day 30** | Deleted by the daily job at 03:15 UTC | Rule exists | `purge_deleted_accounts` -> `purge_account`; failures are logged in `account_purge_failures` and retried daily. Sign-in record deleted; profile, follows, likes, blocks, settings, tokens, waitlist entry, notification list cascade. |
+| **Empty placeholders ("tombstones")** of responses, video replies and comments that other people's replies sit under | While those replies exist | Rule exists | No author, caption, text or media remains. DECISIONS 12 Oct. |
+| **Anonymised moderation records after a purge** | **90 days from the purge**, then deleted | Rule exists (`prune_moderation_records`, daily 03:30 UTC) | Only what was done, to what kind of thing, and when. No account, target, reporter, moderator name, reason text or note. |
+| **Moderation records for a live account** (who, when, why; the reason shown in the notice; internal notes) | As long as the account exists | **No rule** for a period | SPEC 17: "Every action is logged with who, when and why." [PLACEHOLDER: decide a period for active accounts, and for people who were suspended and never deleted.] |
+| **Reports** about live content and live accounts | Until closed; closed reports are kept | **No rule** for closed reports of live accounts | A reporter's identity is held to run the case and is removed when the reporter's account is purged. [PLACEHOLDER: period.] |
+| **Review requests** | With the decision, as above | Same as moderation records | Pending requests close when the requester's account is purged. |
+| **Video clean-up job records** | Successful and skipped: **30 days**. Monitoring run history: **14 days**. Failed or orphan records needing a person: kept until resolved. | Rule exists (`prune_mux_cleanup_jobs`, `mux_cleanup_runs`) | They hold video ids so deletion still runs after the rows are gone. |
+| **Notifications waiting to be sent** | Until sent, or deleted when the video or your account is deleted | Rule exists | `push_outbox` rows already sent: **No rule**. |
+| **Your notification list ("Activity")** | While your account exists | **No rule** for pruning old entries | The list shows recent items; older rows are not deleted. |
+| **Push token** | Until you delete the account, or the push service reports the phone unregistered | Rule exists | Every sign-out route removes this phone's token first, best effort and bounded at 3 s (`SECURITY.md` A2; app code on the integration branch, not in a build on any phone yet). A suspended account keeps its tokens on purpose so it still gets the suspension and review notices. |
+| **Product events** (`analytics_events`) | Unbounded today | **No rule** | Pseudonymous id; unlinked from the person when the account is purged. [PLACEHOLDER: decide a period; DECISIONS 9 Oct fixed the design, not the period.] |
+| **Upload records** (`video_uploads`, `post_submissions`) | Unbounded today for completed rows | **No rule** | Per-account ledgers for the upload limits and idempotent posting; they go with the account at a purge. |
+| **Profile photo files** | A replaced or removed photo and stray uploads over an hour old: queued at once, removed within about 10 minutes. A purged account's whole folder: queued at the purge. Nothing is queued during the 30-day window. | **[LOCAL ONLY]** Rule exists in `20261016000203` (queue `avatar_removals`, function `avatar-cleanup`, cron every 10 minutes); inert on hosted until the function is deployed and its two Vault secrets are set | `SECURITY.md` L5. Until deployed, the earlier gap stands (nothing deletes photos). During the window a deleted account's photo stays readable by anyone with its address. |
+| **Auth sessions** | Deleted when the account is deleted **[LOCAL ONLY]**; otherwise until sign-out or revocation; there is no session timebox or inactivity timeout | Partial | `SECURITY.md` L1, section 3 (no timebox). A revoked session's access token is refused immediately **[LOCAL ONLY]**, not after it expires. |
+| **Moderator names and internal notes** | With the moderation record | Access rule exists **[LOCAL ONLY]** | A member's own `moderation_actions`, `review_requests` and `suggestions` rows no longer expose `moderator`, `note`, `decided_by` or `reviewed_by` (column grants, `SECURITY.md` P3). The records themselves follow the rows above. |
+| **Sign-in emails (provider logs)** | [PLACEHOLDER: Resend's retention of message logs] | Supplier | **[LEGAL REVIEW]** |
+| **Streaming and file-hosting logs, function logs** | [PLACEHOLDER: Mux, Expo, Supabase, jsDelivr log retention] | Supplier | **[LEGAL REVIEW]** |
+| **Database backups** | [PLACEHOLDER] | The hosted project had no backups and no point-in-time recovery at the 9 Oct check (BETA-READINESS section 9) | State the real setting before telling anyone deleted data is gone. **[LEGAL REVIEW]** |
+| **Unposted recordings on your phone** | Until they post or you discard them | Rule exists | SPEC 19. A recording Conga cannot yet confirm as discarded stays private on the phone, out of reach of any other account. A recording whose upload Mux reports as `errored` (or an undocumented state) is kept unverified until 10 minutes after its upload URL's recorded expiry, about 70 minutes after the URL was minted, then retired if Mux still shows no asset (`VIDEO-RELIABILITY.md` section 2). |
+| **Segment files of a take with camera flips** | In the app's storage (`Documents/recordings/take/`) until the stitched clip is kept; the stitched clip until the response is live or you discard it; leftovers of an interrupted take are swept when the next take starts | Rule exists in code, **not run on a phone** | `docs/release/CAMERA-FLIP.md`. A take without a flip is uploaded as recorded. |
+| **Queued analytics events and recent searches on the phone** | Until the account signs out of that phone | **[LOCAL ONLY]** Rule exists | `afterSignOut()` clears both when an account leaves the phone (`SECURITY.md` A2). Recent searches never leave the phone. |
+| **First-response draft on the server** | Until you publish, re-record or delete it; kept when its suggestion is declined or withdrawn; deleted with the account | Rule exists | SPEC 12. |
+
+## 2. Deleting an account outside the app
+
+If an account is deleted any other way than the scheduled purge (the Supabase dashboard, the admin API, SQL), the same
+preparation runs first: video files queued for deletion, tombstones created, comments that others reply to kept as
+placeholders, moderation records anonymised. A database trigger (`accounts_before_delete`) makes this impossible to skip
+(DECISIONS 12 Oct, "stage 3 safeguard").
+
+## 3. Recovery: what can be brought back, and by whom
+
+| Situation | Can it be recovered? | How |
+| --- | --- | --- |
+| You deleted your own video or comment | **No** | There is no undo after you confirm. |
+| You deleted your account, within 30 days | **Yes, everything** | Sign in again with the same method: a **new** sign-in. Phones that were signed in are signed out at deletion **[LOCAL ONLY]**. |
+| You deleted your account, after day 30 | **No** | The account and its content are gone. You can join again as a new person with an invite. |
+| A moderator removed your video and it is still stored | **Possibly** | Ask for a review. If the review reverses the decision, or a moderator restores it, the video returns, unless the file has already been permanently deleted. |
+| Your account is restricted | Time-limited | Posting resumes on the date shown; you can request a review. |
+| Your account is suspended | Possibly | Request a review; if reversed, the account is restored. |
+| You lost your Apple, Google or email sign-in | **By hand** | Contact us ([PLACEHOLDER: contact]); there are no passwords; we verify you. [PLACEHOLDER: the verification we require.] |
+| A recording that did not post | Yes, while on the phone | Retry, or discard it (SPEC 19). |
+| Data lost by us (an outage, a mistake) | **Not promised** | The beta is not a backup service. [PLACEHOLDER and **[LEGAL REVIEW]**: see backups above.] |
+
+## 4. Statements the public pages are allowed to make today
+
+Only these are fully supported by the running system without a caveat (the session and photo rules above are
+**[LOCAL ONLY]** until deployed, and are not in this list): the 30-day window and restore-by-sign-in; the
+hiding of everything at once; the 90-day anonymised moderation record; tombstones; "no undo" for your own deletions;
+that Conga is 18+ and invite-only. Everything about a video file being deleted at the video provider, about profile
+photos, about how long product events, backups and logs are kept, and about who can read moderation records needs the
+checks in `PRIVACY-POLICY.md` and `ACCOUNT-DELETION.md` to be done first.

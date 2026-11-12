@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 980" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <!-- R-Record control layouts on an iPhone 17 Pro (402 x 874 pt), drawn at 1:1. A proposal, not a board. -->
+  <rect width="900" height="980" fill="#ffffff"/>
+  <text x="225" y="34" font-size="20" font-weight="600" text-anchor="middle" fill="#1c1c1e">Now (built 19 Oct)</text>
+  <text x="675" y="34" font-size="20" font-weight="600" text-anchor="middle" fill="#1c1c1e">Proposed</text>
+
+  <!-- Phone 1 -->
+  <g transform="translate(24,60)">
+    <rect width="402" height="874" rx="48" fill="#1b1d22"/>
+    <rect x="0" y="560" width="402" height="314" rx="0" fill="#22252b"/>
+    <circle cx="34" cy="84" r="22" fill="#3a3d44"/><text x="34" y="90" font-size="18" text-anchor="middle" fill="#fff">✕</text>
+    <rect x="166" y="70" width="70" height="30" rx="15" fill="#ff3b30"/><text x="201" y="90" font-size="14" font-weight="600" text-anchor="middle" fill="#fff">0:12</text>
+    <rect x="51" y="122" width="300" height="62" rx="16" fill="#3a3d44"/><text x="201" y="150" font-size="15" font-weight="600" text-anchor="middle" fill="#fff">Be honest about the place you live.</text><text x="201" y="170" font-size="12" text-anchor="middle" fill="#cfd0d4">Responding · up to 30 seconds</text>
+    <!-- zoom above Record -->
+    <rect x="177" y="676" width="48" height="32" rx="16" fill="#3a3d44" stroke="#ff9f0a" stroke-width="2"/><text x="201" y="697" font-size="14" font-weight="600" text-anchor="middle" fill="#fff">1×</text>
+    <!-- bottom row -->
+    <circle cx="91" cy="764" r="22" fill="#3a3d44"/><text x="91" y="770" font-size="16" text-anchor="middle" fill="#fff">ϟ</text>
+    <circle cx="201" cy="764" r="40" fill="none" stroke="#fff" stroke-width="3.5"/><circle cx="201" cy="764" r="33" fill="#ff3b30"/>
+    <circle cx="311" cy="764" r="22" fill="#3a3d44"/><text x="311" y="770" font-size="16" text-anchor="middle" fill="#fff">⟳</text>
+    <text x="201" y="830" font-size="12" text-anchor="middle" fill="#cfd0d4">Up to 0:30</text>
+    <text x="236" y="660" font-size="12" fill="#ff9f0a">14 pt above Stop; 32 pt tall</text>
+  </g>
+
+  <!-- Phone 2 -->
+  <g transform="translate(474,60)">
+    <rect width="402" height="874" rx="48" fill="#1b1d22"/>
+    <rect x="0" y="560" width="402" height="314" fill="#22252b"/>
+    <circle cx="34" cy="84" r="22" fill="#3a3d44"/><text x="34" y="90" font-size="18" text-anchor="middle" fill="#fff">✕</text>
+    <rect x="166" y="70" width="70" height="30" rx="15" fill="#ff3b30"/><text x="201" y="90" font-size="14" font-weight="600" text-anchor="middle" fill="#fff">0:12</text>
+    <!-- Light top right, where the approved R-Record board had Flip -->
+    <circle cx="368" cy="84" r="22" fill="#3a3d44" stroke="#0a84ff" stroke-width="2"/><text x="368" y="90" font-size="16" text-anchor="middle" fill="#fff">ϟ</text>
+    <rect x="51" y="122" width="300" height="62" rx="16" fill="#3a3d44"/><text x="201" y="150" font-size="15" font-weight="600" text-anchor="middle" fill="#fff">Be honest about the place you live.</text><text x="201" y="170" font-size="12" text-anchor="middle" fill="#cfd0d4">Responding · up to 30 seconds</text>
+    <!-- bottom row: Zoom | Record | Flip -->
+    <circle cx="91" cy="764" r="22" fill="#3a3d44" stroke="#0a84ff" stroke-width="2"/><text x="91" y="769" font-size="14" font-weight="600" text-anchor="middle" fill="#fff">1×</text>
+    <circle cx="201" cy="764" r="40" fill="none" stroke="#fff" stroke-width="3.5"/><circle cx="201" cy="764" r="33" fill="#ff3b30"/>
+    <circle cx="311" cy="764" r="22" fill="#3a3d44"/><text x="311" y="770" font-size="16" text-anchor="middle" fill="#fff">⟳</text>
+    <text x="201" y="830" font-size="12" text-anchor="middle" fill="#cfd0d4">Up to 0:30</text>
+    <text x="201" y="660" font-size="12" text-anchor="middle" fill="#8e8e93">nothing above Stop · pinch still zooms</text>
+  </g>
+
+  <text x="450" y="962" font-size="13" text-anchor="middle" fill="#6e6e73">Blue: what moves (Light to the approved board's top-right slot; zoom to the bottom row). Orange: the mis-tap risk now.</text>
+</svg>

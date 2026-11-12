@@ -1,4 +1,4 @@
-# Shortcut
+# Conga
 
 A social video app where people respond to prompts with short videos and talk back with video replies. The product is global; the closed beta is seeded in Canggu.
 
@@ -16,8 +16,8 @@ A social video app where people respond to prompts with short videos and talk ba
 
 The online masters are the [spec doc](https://claude.ai/code/artifact/eee59791-f711-4dac-bc44-d24dfaae2018) and the [design canvas](https://claude.ai/artifact/AUxUiU1muSm6Z61SP2wCUP). If either changes, re-export it here.
 
-## Starting
+## Status
 
-1. Open this folder in Claude Code.
-2. Paste the prompt from `prompts/PHASE-1-video-spike.md`.
-3. Give it the accounts and keys it asks for, run the spike on your phones, then pick the provider (gate 1).
+Phase 1's video spike ran on a real iPhone; its Android run is outstanding. Phases 2 to 7 are implemented and await real-device verification. The current state, the open gates and the rules are in `CLAUDE.md`; everything still open before the beta is in `docs/BETA-READINESS.md`.
+
+`prompts/PHASE-1-video-spike.md` is kept as the record of the spike. Don't rerun it; the outstanding Android run uses `spike/CHECKLIST.md` (`spike/REPORT.md` Section 8).

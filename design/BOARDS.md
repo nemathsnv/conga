@@ -2,10 +2,13 @@
 
 86 approved boards from the Claude Design canvas (version 26): https://claude.ai/artifact/AUxUiU1muSm6Z61SP2wCUP
 
+Plus 14 failed-post boards (`P1` to `P9`, with their video reply versions), approved as drawn by Nemat on 16 Oct 2026 and drawn after the canvas: 100 boards in all. They are in the section "Failed posts" below. Their history (the proposal page, review package and screenshots) is in `proposals/`.
+
 - `boards/<ID>.jpg` is a 2x render of each board (390x844 pt iPhone frame).
 - `html/<ID>.html` is the static board markup. Open it in a browser and use it for exact colours, sizes, spacing and copy. It is a design reference, not app code. Rebuild in React Native and do not port the HTML.
 - Board IDs match the screen IDs in `SPEC.md`. Where a canvas note below disagrees with SPEC.md, **SPEC.md wins**.
 - People and photos in the boards are placeholders.
+- Product name: the boards were drawn as "Shortcut". Since 17 Oct 2026 the product is **Conga** (`docs/DECISIONS.md`): the name is replaced in `html/<ID>.html` and in the notes below, which stay the copy source word for word. The `boards/<ID>.jpg` renders are unchanged images and still show "Shortcut"; read the name from the HTML.
 
 ## A1 Native — prompt, video responses, conversation. Press Play and tap through.
 
@@ -89,7 +92,7 @@
 | `X-Activity-Empty` | A1 · Activity, empty | [jpg](boards/X-Activity-Empty.jpg) | [html](html/X-Activity-Empty.html) |
 | `X-Me-Empty` | A1 · Your profile, before your first response | [jpg](boards/X-Me-Empty.jpg) | [html](html/X-Me-Empty.html) |
 
-> **Canvas note:** Loading shows the layout without fake content. A failed upload keeps the video on the phone with Retry; uploading uses the same banner with progress. A deleted or removed response shows one neutral message, never the reason; a video that just failed to load offers Try again. Empty Following suggests people from prompts you watched; empty Activity and your own profile point to tonight's prompt.
+> **Canvas note:** Loading shows the layout without fake content. A failed upload keeps the video on the phone with Discard and Retry side by side (P1); uploading uses the same banner with progress. A recording that can never post, or whose file is gone, offers Discard only (P2, P3); see "Failed posts". A deleted or removed response shows one neutral message, never the reason; a video that just failed to load offers Try again. Empty Following suggests people from prompts you watched; empty Activity and your own profile point to tonight's prompt.
 >
 > Not designed yet: offline banner, camera/microphone permission denied, reporting and moderation, suspended account.
 
@@ -150,7 +153,7 @@
 >
 > Enforcement is manual in the beta: a first ordinary violation means removal plus a warning; a repeated similar one, a temporary posting pause; further or severe abuse, suspension. Severe cases can skip stages. Copy never promises automatic thresholds or review times, and never shows who reported. Review requests: "We'll review it again."
 >
-> Offline: recordings stay saved on the phone; the person posts again when back online. No background upload queue in v1.
+> Offline: recordings stay saved on the phone; the person posts again when back online. No background upload queue in v1. For a video reply the line reads "Your video reply stays saved on this phone. Post when you're back online." (16 Oct 2026).
 
 ## A1 — Post review: from recording to posted
 
@@ -164,11 +167,40 @@
 | `PR-Posting` | A1 · Posting in progress | [jpg](boards/PR-Posting.jpg) | [html](html/PR-Posting.html) |
 | `PR-Short` | A1 · Under 2 seconds | [jpg](boards/PR-Short.jpg) | [html](html/PR-Short.html) |
 
-> **Canvas note:** Order after recording: Review (play back, optional caption up to 150 characters, Discard, Re-record or Post) → first public video of any type only: the one-time "Your videos are public" sheet opens when Post is tapped (no hint on the review screen itself) → back to the feed, with a "Posting" banner. Uploads run in the foreground: the banner says to keep Shortcut open. On failure: the existing Upload failed state (recording kept on the phone). After the first successful post only: the notification ask.
+> **Canvas note:** Order after recording: Review (play back, optional caption up to 150 characters, Discard, Re-record or Post) → first public video of any type only: the one-time "Your videos are public" sheet opens when Post is tapped (no hint on the review screen itself) → back to the feed, with a "Posting" banner. Uploads run in the foreground: the banner says to keep Conga open. On failure: the Upload failed state (recording kept on the phone; P1 to P3). After the first successful post only: the notification ask.
 >
-> Variants: a video reply shows who and what it answers and says "Post reply"; the first response to your own suggested prompt says "Only you" and "Save draft", and is never published automatically.
+> Variants: the posting banner for a video reply says "Posting your video reply" (P8-R); a video reply shows who and what it answers and says "Post reply"; the first response to your own suggested prompt says "Only you" and "Save draft", and is never published automatically.
 >
 > Leaving review asks "Discard this recording?". Recordings under 2 seconds don't reach review: a toast says to keep going.
+
+## A1 — Failed posts: Discard, camera entry and sign-out (approved 16 Oct 2026)
+
+| Board | Title | Image | Markup |
+|---|---|---|---|
+| `P1` | A1 · Upload failed: Retry and Discard, side by side | [jpg](boards/P1.jpg) | [html](html/P1.html) |
+| `P1-R` | A1 · Upload failed: a video reply | [jpg](boards/P1-R.jpg) | [html](html/P1-R.html) |
+| `P2` | A1 · Upload failed: it can never post | [jpg](boards/P2.jpg) | [html](html/P2.html) |
+| `P2-R` | A1 · Upload failed: a video reply that can never post | [jpg](boards/P2-R.jpg) | [html](html/P2-R.html) |
+| `P3` | A1 · Upload failed: the file is gone | [jpg](boards/P3.jpg) | [html](html/P3.html) |
+| `P3-R` | A1 · Upload failed: a video reply no longer on this phone | [jpg](boards/P3-R.jpg) | [html](html/P3-R.html) |
+| `P4` | A1 · Discard confirmation (revised) | [jpg](boards/P4.jpg) | [html](html/P4.html) |
+| `P5` | A1 · Discarding: not confirmed yet | [jpg](boards/P5.jpg) | [html](html/P5.html) |
+| `P5-R` | A1 · Discarding a video reply: not confirmed yet | [jpg](boards/P5-R.jpg) | [html](html/P5-R.html) |
+| `P6` | A1 · Discard: it already reached Conga | [jpg](boards/P6.jpg) | [html](html/P6.html) |
+| `P7` | A1 · Camera entry: a recording waits (failed or offline) | [jpg](boards/P7.jpg) | [html](html/P7.html) |
+| `P8` | A1 · Camera entry: a recording is still posting | [jpg](boards/P8.jpg) | [html](html/P8.html) |
+| `P8-R` | A1 · PR-Posting: a video reply | [jpg](boards/P8-R.jpg) | [html](html/P8-R.html) |
+| `P9` | A1 · Sign-out warning, every route (shown on LV-Suspended) | [jpg](boards/P9.jpg) | [html](html/P9.html) |
+
+> **Canvas note:** Drawn after canvas version 26 and approved as drawn by Nemat on 16 Oct 2026 (the five decisions of 14 Oct and the final copy for P4, P6 and P9). Each is a state of an approved screen; the layouts are the existing banner, sheet and sign-out sheet. The `-R` boards are the same state for a video reply: only the title changes ("video reply" for "response"). Source: `proposals/failed-post-ux.html`, with the review page `proposals/FAILED-POST-REVIEW.md`.
+>
+> Upload failed (`X-Upload-Failed`): Discard sits beside Retry (P1). Both disappear while an attempt runs; Retry switches the banner to `PR-Posting`. A recording that can never post (already responded, prompt or video gone, removed, closed submission, conflicting request) says "This recording can't be posted." and offers Discard only (P2); one no longer on the phone says "This recording is no longer on this phone." (P3). A busy server, an upload limit and a lost connection stay P1.
+>
+> Discard asks first (P4): "Conga will try to stop it from posting. If it has already uploaded, it may still appear." The recording leaves the phone only once Conga confirms nothing of it will be processed. Not confirmed yet (offline, or Conga cannot verify): it stays on the phone as "Discarding your response" with no buttons, and Conga asks again by itself: when the app opens or comes back, when the connection returns, then after 30 seconds, 2 minutes and 10 minutes (P5). Already at Conga: "It may finish processing. If it appears on your profile, you can delete it there." (P6); it is never deleted automatically.
+>
+> One waiting recording at a time: while one is failed, waiting offline or posting, Respond, Reply and Record do not open the camera. "Your last recording hasn't posted yet" / "Retry or discard it first." (P7); "Your last recording is still posting" / "Keep Conga open until it's done." (P8).
+>
+> Sign out (P9): the revised `LV-SignOut` sheet, shown on every sign-out route while a recording waits. Sign out anyway stops the upload on this phone and never blocks signing out.
 
 ## A1 — Search results
 
@@ -200,6 +232,7 @@
 | `LV-SignOut` | A1 · Sign-out warning | [jpg](boards/LV-SignOut.jpg) | [html](html/LV-SignOut.html) |
 | `LV-CommentActions` | A1 · Comment actions — someone else's comment | [jpg](boards/LV-CommentActions.jpg) | [html](html/LV-CommentActions.html) |
 | `LV-CommentOwn` | A1 · Comment actions — your own comment | [jpg](boards/LV-CommentOwn.jpg) | [html](html/LV-CommentOwn.html) |
+| `LV-CommentDeleted` | A1 · Comments — deleted parent comment keeps its replies (added 7 Oct 2026 for Nemat's deletion rule; built from `Comments`, no new pattern; no render yet) | — | [html](html/LV-CommentDeleted.html) |
 | `LV-WebUnavailable` | Web · Video unavailable | [jpg](boards/LV-WebUnavailable.jpg) | [html](html/LV-WebUnavailable.html) |
 | `LV-WebEmpty` | Web · Prompt with no responses | [jpg](boards/LV-WebEmpty.jpg) | [html](html/LV-WebEmpty.html) |
 
@@ -207,9 +240,11 @@
 >
 > Comment actions: someone else's comment shows Report comment and Block; your own shows Delete comment only, with "Deleting can't be undone" (the sheet is the confirmation; no undo). Response authors can't delete other people's comments.
 >
+> Deleted parent (7 Oct 2026, Nemat): deleting your own top-level comment never removes other people's replies. The row stays in its place as "Comment deleted" (grey, placeholder avatar, no name, no Reply, no heart) with the replies under it; a deleted comment with no replies disappears.
+>
 > Permanent suspension is shown at sign-in; one review request per decision; after it is sent, the button is replaced by "Review requested" and the outcome arrives as a notification. No review-time promise.
 >
-> Sign-out warning only appears when a recording that hasn't posted is saved on this phone.
+> Sign-out warning only appears when a recording that hasn't posted is saved on this phone. Revised 16 Oct 2026 (P9): its body is "You have 1 recording that hasn't posted. Signing out stops the upload on this phone, but it may still finish on Conga. An unresolved recording stays private on this device for your account.", and the same sheet appears on every sign-out route: Settings, the permanent-suspension screen, the end of Delete account and confirm email.
 >
 > Web: an unavailable video and a prompt with no responses both route to the app; no web profiles.
 

@@ -1,0 +1,31 @@
+# H1 preflight, 20261016T114442Z, mode linked
+# project: picvoavfxnajfjkqawju
+PASS  1 migrations (count|latest): 17|20261013000100
+1 migrations list: 20261006000100,20261006000200,20261006000300,20261006000400,20261006000500,20261007000100,20261007000200,20261008000100,20261008000200,20261009000100,20261010000100,20261010000200,20261010000300,20261011000100,20261012000100,20261012000200,20261013000100
+PASS  2 fingerprint (objects|md5): 759|f4990575c686f379fa6bec9c70e37e16
+PASS  3 four_arg|five_arg|post_submissions|abandon_helpers: true|false|false|false
+PASS  4 auth.sessions select|delete, auth.users select: true|true|true
+PASS  4 pg_graphql absent
+PASS  4 avatar policies: 4|avatars: anyone can read;avatars: delete your own folder;avatars: insert into your own folder;avatars: update your own folder
+PASS  5 members with two primary rows on one prompt: 0
+6 health: {"mode": "off", "status": "ok", "metrics": {"due": 0, "held": 0, "stuck": 0, "failed": 0, "review": 0, "worker": {"not_ok_24h": 0, "uncollected": 0, "requests_24h": 0, "timed_out_24h": 0, "no_response_24h": 0, "error_status_24h": 0, "last_sweep_request": null}, "schedules": {"mux-sweep": {"active": true, "last_run": "2026-10-16T04:45:00.106323+00:00", "failed_24h": 0}, "mux-cleanup": {"active": true, "last_run": "2026-10-16T11:44:00.044886+00:00", "failed_24h": 0}, "mux-cleanup-monitor": {"active": true, "last_run": "2026-10-16T11:40:00.040049+00:00", "failed_24h": 0}, "prune-mux-cleanup-jobs": {"active": true, "last_run": "2026-10-16T03:40:00.072569+00:00", "failed_24h": 0}, "purge-deleted-accounts": {"active": true, "last_run": "2026-10-16T03:15:00.047699+00:00", "failed_24h": 0}, "prune-moderation-records": {"active": true, "last_run": "2026-10-16T03:30:00.080008+00:00", "failed_24h": 0}}, "oldest_due": null, "created_24h": 0, "finished_24h": 0, "waiting_since": null, "purge_failures": 0}, "problems": [], "checked_at": "2026-10-16T11:44:55.728884+00:00", "thresholds": {"due_many": 100, "growth_24h": 50, "stuck_minutes": 10, "daily_late_hours": 26, "due_live_minutes": 15, "drain_late_minutes": 5, "waiting_not_live_hours": 24}}
+PASS  6 clean-up mode: off
+PASS  6 health status: ok
+PASS  6 failed|stuck|due jobs: 0|0|0
+PASS  6 open jobs: 0
+PASS  6 purge failures: 0
+PASS  6 cron jobs: mux-cleanup=* * * * */true;mux-cleanup-monitor=*/10 * * * */true;mux-sweep=45 4 * * */true;prune-moderation-records=30 3 * * */true;prune-mux-cleanup-jobs=40 3 * * */true;purge-deleted-accounts=15 3 * * */true;send-push=* * * * */true;tonight-prompt=*/10 * * * */true
+6 job statuses: done=3;skipped=1
+PASS  7 founder response md5|status: c9918f8241a2c45eefb106b5d0ec0a8f|live
+PASS  7 founder ledger md5|status: 9726bb8fdf8d9eb0cb759d13ce59c8b6|claimed
+PASS  7 V status|playback|asset|author: live|tu8ooWH201axyHzgonRLCnDhETAgeWw014kaZMAHMrdmo|01IyQdSiLvAbHXb01Xg1ZQISiMz9UvMxLMgfZDpscKMBw|b0c14e38-4e89-4dbd-a9a3-8a8c01872a78
+PASS  7 T1 active|moderation: true|active
+PASS  7 deleted accounts|removed or deleted videos: 0|1
+PASS  7 the one deleted video is the 12 Oct canary: 6f600f9e-3559-4911-9ebf-13d9d3df509d|reply|deleted|2026-10-12 16:53:19.162388+00
+6 job statuses expected: done=3 (canary deletion 12 Oct; A1 revoke and B1 restore of V, 13 Oct), skipped=1 (A1's retention deletion, skipped by the restore)
+8 functions: auth-signin-method v10 ACTIVE verify_jwt=False; mux-webhook v12 ACTIVE verify_jwt=False; mux-create-upload v10 ACTIVE verify_jwt=False; mux-upload-status v11 ACTIVE verify_jwt=False; mux-cleanup v8 ACTIVE verify_jwt=False
+8 secrets (names only): 11 names: MUX_CLEANUP_KEY, MUX_TOKEN_ID, MUX_TOKEN_SECRET, MUX_WEBHOOK_SECRET, SUPABASE_ANON_KEY, SUPABASE_DB_URL, SUPABASE_JWKS, SUPABASE_PUBLISHABLE_KEYS, SUPABASE_SECRET_KEYS, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL
+8 migration list (remote applied | local only):
+{"migrations":[{"local":"20261006000100","remote":"20261006000100","time":"2026-10-06 00:01:00"},{"local":"20261006000200","remote":"20261006000200","time":"2026-10-06 00:02:00"},{"local":"20261006000300","remote":"20261006000300","time":"2026-10-06 00:03:00"},{"local":"20261006000400","remote":"20261006000400","time":"2026-10-06 00:04:00"},{"local":"20261006000500","remote":"20261006000500","time":"2026-10-06 00:05:00"},{"local":"20261007000100","remote":"20261007000100","time":"2026-10-07 00:01:00"},{"local":"20261007000200","remote":"20261007000200","time":"2026-10-07 00:02:00"},{"local":"20261008000100","remote":"20261008000100","time":"2026-10-08 00:01:00"},{"local":"20261008000200","remote":"20261008000200","time":"2026-10-08 00:02:00"},{"local":"20261009000100","remote":"20261009000100","time":"2026-10-09 00:01:00"},{"local":"20261010000100","remote":"20261010000100","time":"2026-10-10 00:01:00"},{"local":"20261010000200","remote":"20261010000200","time":"2026-10-10 00:02:00"},{"local":"20261010000300","remote":"20261010000300","time":"2026-10-10 00:03:00"},{"local":"20261011000100","remote":"20261011000100","time":"2026-10-11 00:01:00"},{"local":"20261012000100","remote":"20261012000100","time":"2026-10-12 00:01:00"},{"local":"20261012000200","remote":"20261012000200","time":"2026-10-12 00:02:00"},{"local":"20261013000100","remote":"20261013000100","time":"2026-10-13 00:01:00"},{"local":"20261013000200","remote":"","time":"2026-10-13 00:02:00"},{"local":"20261013000300","remote":"","time":"2026-10-13 00:03:00"},{"local":"20261016000200","remote":"","time":"2026-10-16 00:02:00"},{"local":"20261016000201","remote":"","time":"2026-10-16 00:02:01"},{"local":"20261016000202","remote":"","time":"2026-10-16 00:02:02"},{"local":"20261016000203","remote":"","time":"2026-10-16 00:02:03"},{"local":"20261016000204","remote":"","time":"2026-10-16 00:02:04"},{"local":"20261016000300","remote":"","time":"2026-10-16 00:03:00"},{"local":"20261016000301","remote":"","time":"2026-10-16 00:03:01"}],"message":"Migrations listed"}
+# result: every compared block PASS (block 8 and any CHECK line still need a person to read them)
+# written to /Users/nemathsnv/Projects/shortcut/.claude/worktrees/shortcut-multi-agent-execution-93fee4/docs/release/h1-results-20261016T114442Z.txt

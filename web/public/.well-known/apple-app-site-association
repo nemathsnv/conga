@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["APPLE_TEAM_ID.app.shortcut"],
+        "components": [
+          { "/": "/r/*", "comment": "a response or video reply" },
+          { "/": "/p/*", "comment": "a prompt" },
+          { "/": "/i/*", "comment": "an invite" },
+          { "/": "/u/*", "comment": "a profile" }
+        ]
+      }
+    ]
+  }
+}
