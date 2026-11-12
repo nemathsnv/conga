@@ -66,7 +66,7 @@ logcat (209,000 lines) and the screen recordings stay on the Mac in `~/Library/C
    - The floor applies only in variable-bitrate mode, but the A15's encoder (`c2.mtk.avc.encoder`) does not offer constant bitrate, so that route cannot help it. See "Second session" below.
    - **Options (a product decision for Nemat):**
      - (a) accept about 4.7 Mbps at 1080p on Android, doubling upload size and time;
-     - (b) record at 720p on Android: by the same floor formula about 2.1 Mbps, below the 2.5 Mbps target (an estimate, not measured on a phone);
+     - (b) record at 720p on Android: **measured 3.0 Mbps** on the A15, 36 % smaller (see "Third session");
      - (c) the platform's hidden opt-out key: not public API, so not recommended.
 2. **Stitching takes about 0.7× real time** on this mid-range phone: 20 s for a 30 s take.
    - Post Review starts it on open, and Post waits for it. A person who records with a pause and posts at once waits up to about 20 s before the upload even starts.
@@ -88,6 +88,24 @@ logcat (209,000 lines) and the screen recordings stay on the Mac in `~/Library/C
 - **Reverted:** the change does not fix the measured problem, and on phones where it would switch on (hardware encoders that offer CBR) it is untested. The stitcher is as before.
 - **Minutes:** 7 more, about 18 of the 30 free minutes this month. Billing stays disabled.
 
+## Third session: 720p measured (12 Nov, 11:51 to 11:57 WITA)
+
+**Setup:** a temporary, uncommitted 720p setting on Android only (`videoQuality`), served by Metro. It is reverted; the app still records at 1080p. The same back-camera, Light-on takes as before.
+
+| Galaxy A15, back camera, Light on | 1080p (as built) | 720p (test) |
+| --- | --- | --- |
+| What Android did to the 2.5 Mbps asked for | raised to the floor 3.94 Mbps, then +20 % ("requested QP unsupported"): **4.73 Mbps** | no floor; +20 % only: **3.0 Mbps** |
+| One segment, not stitched (10 s) | 4.78 Mbps | **3.00 Mbps**, 4.5 MB |
+| 29 s with a pause, stitched | 4.73 Mbps, 18.0 MB | **3.00 Mbps, 11.6 MB** (−36 %) |
+| Stitch time | 17.3–20.1 s | **14.6 s** |
+| Upload at 1.5–2.1 Mbps (Bali 4G, iPhone spike) | about 70–95 s | **about 45–60 s** |
+
+- **Audio** at 720p is unchanged: 48 kHz stereo, no gap across the pause.
+- **Picture quality** at 720p versus 1080p **cannot be judged** here (the lab camera faces a grey surface). It needs a phone in hand, or Nemat's eye on clips from one.
+- **About the +20 %:** on this phone Android always adds it. Asking for about 2.08 Mbps would land at 2.5 Mbps, but on a phone without the boost it would stay at 2.08. Not recommended without testing more phones.
+- **Not changed.** Recording at 720p on Android would change the phase 1 recording condition (`spike/REPORT.md` section 9, `RECORDING_SETTINGS`): Nemat's decision. If approved, it is one setting (`videoQuality` on Android), and Android's lower resolution needs noting next to the iPhone's 1080p.
+- **Minutes:** about 6 more, **about 25 of the 30 free minutes** this month. Billing stays disabled.
+
 ## Still needs a phone in hand
 
 - **Picture:** the front camera is covered and the back camera sees a surface.
@@ -95,12 +113,12 @@ logcat (209,000 lines) and the screen recordings stay on the Mac in `~/Library/C
 - **Mobile data in Bali,** upload over 4G, and a kill at about 30 % then Retry.
 - **A successful upload on Android:** a real phone does not trust the fake Mux's certificate. A real Mux upload needs Nemat's approval.
 - **Pinch zoom** (multi-touch cannot be sent through `adb`), and thermal behaviour over longer use.
-- **Other chipsets** (Qualcomm, Exynos, Unisoc). About 12 free minutes are left this month: enough for one more short run, for example a Galaxy A16 (Exynos) or a moto g (Qualcomm), to see whether the floor and CBR behave the same.
+- **Other chipsets** (Qualcomm, Exynos, Unisoc). About 5 free minutes are left this month; the quota renews next month. A Galaxy A16 (Exynos) or a moto g (Qualcomm) would show whether the floor behaves the same.
 
 ## Gate 1 on Android
 
 **Not closed.** Real hardware confirms that recording, pause/resume, flip, stitching on the hardware encoder, torch, the 30 s limit, playback and a real 48 kHz microphone path all work. Open items:
-- the bitrate decision (finding 1: 1080p at about 4.7 Mbps, or 720p);
+- the bitrate decision (finding 1: 1080p at about 4.7 Mbps, or 720p at a measured 3.0 Mbps);
 - picture and heard sound on a phone in hand;
 - Bali mobile data;
 - a real Mux round trip.
