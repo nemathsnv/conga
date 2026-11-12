@@ -12,7 +12,7 @@
 #   respond              + (position cached at sign-in), then the first prompt offered
 #   take <name> [plan]   record by plan (r<s> record or resume, p<s> pause, f flip, w<s> wait), then Stop
 #   stitchwait           waits for Media3 Transformer; prints its timing and the codecs it used
-#   pull <name>          the stitched clip, the take's segments, the screen recording
+#   pull <name>          the stitched clip, the take's segments (and the screen recording with SCREENREC=1)
 #   probe <name> [secs]  tracks, audio continuity and frames of the stitched clip
 #   discard              Post Review: Back, then the sheet's Discard
 #   tap <label> [exact]  tap by accessibility label;  ui  list labels;  shot <name>  screenshot
@@ -122,7 +122,9 @@ case "${1:-}" in
     [ -n "$rec" ] && [ -n "$flip" ] || { echo "recorder not ready"; exit 1; }
     set -- $rec; rx=$1; ry=$2; set -- $flip; fx=$1
     sx=$(( 2 * rx - fx )) # Stop sits mirrored to Flip around Record
-    A logcat -c; (A shell screenrecord --time-limit 75 /sdcard/take.mp4 >/dev/null 2>&1 &)
+    A logcat -c
+    # SCREENREC=1: also record the screen (large: 126 MB for a 30 s take took 4 min to pull from a streamed phone).
+    [ "${SCREENREC:-0}" = 1 ] && (A shell screenrecord --time-limit 75 /sdcard/take.mp4 >/dev/null 2>&1 &)
     sleep 1; echo "$(now) record"; A shell input tap $rx $ry
     paused=0
     IFS=, read -ra steps <<< "$plan"
@@ -148,7 +150,7 @@ case "${1:-}" in
     [ -n "$f" ] && A exec-out run-as app.shortcut cat "files/recordings/$f" > "$OUT/$2-stitched.mp4" && echo "stitched: files/recordings/$f"
     for seg in $(A shell run-as app.shortcut ls files/recordings/take 2>/dev/null | tr -d '\r'); do
       A exec-out run-as app.shortcut cat "files/recordings/take/$seg" > "$OUT/$2-seg-$seg"; done
-    A pull /sdcard/take.mp4 "$OUT/$2-screen.mp4" >/dev/null 2>&1
+    [ "${SCREENREC:-0}" = 1 ] && A pull /sdcard/take.mp4 "$OUT/$2-screen.mp4" >/dev/null 2>&1
     ls -la "$OUT" | grep -- "$2" ;;
   probe)
     [ -x "$WORK/probe" ] || swiftc -O "$REPO/scripts/android-device/probe.swift" -o "$WORK/probe" 2>&1 | grep -v warning

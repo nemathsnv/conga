@@ -57,12 +57,17 @@ logcat (209,000 lines) and the screen recordings stay on the Mac in `~/Library/C
 
 ## Findings for Nemat (not changed; each needs a decision or another device run)
 
-1. **The 2.5 Mbps target is not held after stitching on this MediaTek encoder.**
+1. **The 2.5 Mbps target is not held at 1080p on this phone, and the cause is Android itself** (confirmed in a second session, below).
    - The 29 s back-camera clip came out at 4.7 Mbps and 18 MB, about twice the size planned (`RECORDING_SETTINGS`: about 9 MB for 30 s).
    - Over the 1.5–2.1 Mbps measured on Bali 4G, that is roughly 70–95 s of upload instead of about 40 s.
-   - The stitcher asks Media3 for 2.5 Mbps, but the encoder runs variable-rate.
-   - Possible fix: ask for constant bitrate (`VideoEncoderSettings.setBitrateMode(BITRATE_MODE_CBR)`) in `VideoStitcherModule.kt`. It is a native change, so it needs a new build and **another device run to prove it**. Not done.
-   - Only multi-segment takes (pause or flip) are stitched. What CameraX writes for a single-segment take was not measured, because the segments were deleted after stitching. Next run: pull a one-segment take.
+   - The cause is not the stitcher. Android's MediaCodec raises a 1080p variable-bitrate encode to its minimum-quality floor; CameraX's own recording on the A15 logged:
+     `VQApply: raise bitrate: configured 2500000 to floor 3939840` … `target bitrate raised from 2500000 to 4727808 bps`.
+   - The same happens to every recording (one segment, unstitched: 4.78 Mbps) and to the stitch.
+   - The floor applies only in variable-bitrate mode, but the A15's encoder (`c2.mtk.avc.encoder`) does not offer constant bitrate, so that route cannot help it. See "Second session" below.
+   - **Options (a product decision for Nemat):**
+     - (a) accept about 4.7 Mbps at 1080p on Android, doubling upload size and time;
+     - (b) record at 720p on Android: by the same floor formula about 2.1 Mbps, below the 2.5 Mbps target (an estimate, not measured on a phone);
+     - (c) the platform's hidden opt-out key: not public API, so not recommended.
 2. **Stitching takes about 0.7× real time** on this mid-range phone: 20 s for a 30 s take.
    - Post Review starts it on open, and Post waits for it. A person who records with a pause and posts at once waits up to about 20 s before the upload even starts.
    - Is that acceptable for the beta, or does Post Review need to show it? There is no approved board for a stitching state, so it would need design first.
@@ -71,6 +76,18 @@ logcat (209,000 lines) and the screen recordings stay on the Mac in `~/Library/C
    - The iOS workaround turns the torch off and on 0.7 s into each segment. CameraX on the A15 never dropped the torch, so on Android the blink only makes a short (about 110 ms) flicker early in each segment.
    - Whether the flicker is visible needs a phone in hand. If it is, the fix is to skip the blink on Android (`record/[promptId].tsx`, `blinkTorchIfBack`).
 
+## Second session: constant bitrate tried and reverted (12 Nov, 11:34 to 11:41 WITA)
+
+**The tried fix:** ask the stitcher's encoder for constant bitrate, which skips the floor.
+
+- **Asking unconditionally breaks stitching** where no encoder offers CBR. On the emulator, Media3 refused with `ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED`, so a take with a pause or flip could not be posted. That is worse than a large file.
+- **The guarded version** asked for CBR only when a hardware H.264 encoder offers it:
+  - the emulator chose variable mode and stitched normally (14.0 s clip, 2.45 Mbps);
+  - **the A15 also chose variable mode**: its MediaTek encoder does not offer CBR. The stitched 28.9 s take was again 4.73 Mbps, and stitching took 17.3 s.
+- **CameraX's own recording** of a single 10 s back-camera take, not stitched, was **4.78 Mbps** (AAC 48 kHz stereo at 256 kbps). That locates the overshoot in the recorder, before any stitching, and the log names the floor (finding 1).
+- **Reverted:** the change does not fix the measured problem, and on phones where it would switch on (hardware encoders that offer CBR) it is untested. The stitcher is as before.
+- **Minutes:** 7 more, about 18 of the 30 free minutes this month. Billing stays disabled.
+
 ## Still needs a phone in hand
 
 - **Picture:** the front camera is covered and the back camera sees a surface.
@@ -78,12 +95,12 @@ logcat (209,000 lines) and the screen recordings stay on the Mac in `~/Library/C
 - **Mobile data in Bali,** upload over 4G, and a kill at about 30 % then Retry.
 - **A successful upload on Android:** a real phone does not trust the fake Mux's certificate. A real Mux upload needs Nemat's approval.
 - **Pinch zoom** (multi-touch cannot be sent through `adb`), and thermal behaviour over longer use.
-- **Other chipsets** (Qualcomm, Exynos, Unisoc). The free minutes left this month (about 19) cover one more phone, for example a Galaxy A16 or a moto g.
+- **Other chipsets** (Qualcomm, Exynos, Unisoc). About 12 free minutes are left this month: enough for one more short run, for example a Galaxy A16 (Exynos) or a moto g (Qualcomm), to see whether the floor and CBR behave the same.
 
 ## Gate 1 on Android
 
 **Not closed.** Real hardware confirms that recording, pause/resume, flip, stitching on the hardware encoder, torch, the 30 s limit, playback and a real 48 kHz microphone path all work. Open items:
-- the bitrate overshoot (finding 1);
+- the bitrate decision (finding 1: 1080p at about 4.7 Mbps, or 720p);
 - picture and heard sound on a phone in hand;
 - Bali mobile data;
 - a real Mux round trip.
