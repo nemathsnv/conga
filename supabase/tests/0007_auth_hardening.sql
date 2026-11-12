@@ -80,7 +80,8 @@ select set_config('request.path', '/rpc/get_onboarding_state', true);
 select throws_ok($$ select public.pre_request() $$, '42501', 'password_session', 'on every path');
 select set_config('request.jwt.claims', '{"sub":"71111111-1111-1111-1111-111111111111","role":"authenticated","amr":["password"]}', true);
 select throws_ok($$ select public.pre_request() $$, '42501', 'password_session', 'whichever amr format the token uses');
-select set_config('request.path', '/rpc/home_feed', true);
+-- This account has no profile, so only the onboarding paths are open to it (20261102000100).
+select set_config('request.path', '/rpc/get_onboarding_state', true);
 select set_config('request.jwt.claims', '{"sub":"71111111-1111-1111-1111-111111111111","role":"authenticated","amr":[{"method":"otp","timestamp":1}]}', true);
 select lives_ok($$ select public.pre_request() $$, 'an email-code session passes');
 reset role;

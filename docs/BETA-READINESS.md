@@ -6100,6 +6100,40 @@ Mux change, no test account or media, no app or device change. Report section 13
 - **Rollback:** not needed. If ever needed it is `supabase/rollback/20261101000100_…down.sql`. It was
   rehearsed locally, and queued revocations still run after it.
 
+## 54. Closed-beta access control audit (2 Nov): member gate written and tested locally; nothing deployed
+
+Branch `claude/conga-access-control-audit-fbafec` from `f5aea9c`. **Production was read only:
+aggregate selects and the public Auth settings. No account was created there, and no Mux or Notion
+access.** Full report: `docs/release/ACCESS-CONTROL-AUDIT.md`.
+
+- **Finding (section 50's open decision):**
+  - Email sign-up is open on production, so anyone can get a session with no invite.
+  - In all four pre-member states, that session read everything a member reads: feeds, playback
+    ids, profiles, comment text, the follow graph, search and places.
+  - It also wrote `follow_place`, `block_user` and push-token rows.
+  - This is an authorization defect, not intended public access (SPEC.md Sections 13, 14 and 16).
+  - Production has 2 accounts, both members, and its schema is identical to local for every object
+    involved.
+- **Fix, `20261102000100_member_gate.sql`:**
+  - `pre_request` refuses every request from an account without a profile with `profile_required`
+    (403).
+  - The exceptions are the onboarding calls, `track_events`, `delete_account`, `remove_push_token`
+    and the public `web_*` functions.
+  - No function body, grant, policy or row changes. Rollback file in place.
+- **Tests:**
+  - New pgTAP `0037` (41 tests), including deny by default for every function granted to
+    `authenticated`. `0007` adjusted on one assertion.
+  - pgTAP 1972 of 1972; every Deno, rehearsal, auth and app step PASS.
+- **Separate finding, not fixed:** the `avatars` bucket can be listed with the anon key, which
+  enumerates the ids of accounts with a photo.
+- **Deploy:** conditionally approved by Nemat, 2 Nov (`docs/DECISIONS.md`):
+  - only after `20261101000100` is deployed and verified, as a separate step;
+  - a fresh preflight, a verified backup, and a dry run listing only this migration;
+  - no production test account;
+  - no automatic rollback.
+  - Runbook G0 to G5: `ACCESS-CONTROL-AUDIT.md` section 7.
+  - At 10:35 UTC hosted still had 29 migrations, so nothing was run.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
