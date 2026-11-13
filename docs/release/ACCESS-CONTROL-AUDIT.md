@@ -344,7 +344,11 @@ write, no Mux call, no account outside the local stack, no app build.**
     name in another schema. Each gives 403 or 404, never data. No allowlisted function returns a
     table row type, so none can embed other tables.
   - **Storage and Edge:** a non-member cannot upload an avatar; `mux-create-upload` answers 403
-    `profile_required`; `abandon-submission` refuses.
+    `profile_required`. `abandon-submission` does not refuse a signed-in non-member: with an
+    unknown submission id it answers 200 `abandoned`/`no_row` and writes one own-account
+    `post_submissions` tombstone (measured, 13 Nov). A foreign id gets `not_found`, so no other
+    account's data is read or changed; repeated fresh ids grow the caller's own tombstones
+    (low, pre-existing, not limited here). A revoked token gets 401.
   - **Unchanged:** anon `home_feed` 401, anon and signed-in `web_video` 200.
   - **Order with the November security work:** a suspended non-member gets `suspended`, not
     `profile_required`, and `set_timezone` stays open to them. After a global sign-out, a non-member
@@ -455,8 +459,9 @@ exactly.
 
 **Still possible after the fix, by design:** anyone who knows a photo's exact path can fetch it,
 or its metadata through `/object/info` and `/object/authenticated` (a public bucket serves those
-without RLS; measured). Paths reach people only through member RPCs and the author's photo on a
-shared web link.
+without RLS; measured). Photo paths are also intentionally returned by public and onboarding
+endpoints, including `invite_preview` for a valid invite, and appear on shared web links. This
+change prevents foreign-folder listing; it does not make photo paths or known-path reads private.
 
 **Tests** (isolated stack, local only):
 - **pgTAP `0038_avatars_listing.sql`, 31 tests:**
