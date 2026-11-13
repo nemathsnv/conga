@@ -6154,6 +6154,60 @@ Branch `claude/conga-member-gate-integration` from `bbf2101` with the 2 Nov bran
   revocation deployed and verified, 3 Nov, section 53) is recorded as met, but hosted was not read
   in this pass. Nothing was deployed.
 
+## 56. Member gate deployed to hosted (12 Nov, 14:03 UTC; Nemat approved G0/G1, then G2 to G5)
+
+Exactly one forward migration, `20261102000100_member_gate.sql` (md5 `e39d5986…`), from merged
+`main` `e37e5b1` (PR #4). **No other change:** no Edge Function deploy, no secret, no auth or config
+push, no Mux change, no cap or switch change, no test account, no app or device change, nothing on
+the avatars bucket (F3). Runbook: `docs/release/ACCESS-CONTROL-AUDIT.md` section 7; full record in
+its section 9.
+
+- **G0 and G1 (read only, 13:45 UTC):** 30 migrations (latest `20261101000100`, the version list
+  equal to `main`'s first 30); fingerprint equal to `rv-expected-30-migrations.fp`; `pre_request`
+  md5 `68e72efad2fd8695ff04e83fb3667386`; the hook set; `invite_required` true; 2 accounts, 2
+  profiles, 0 without a profile, 0 profiles without beta access; `20261102000100` not applied and no
+  allowlist function; 0 open clean-up jobs, health `ok`; the `revoke` check 18/18.
+- **G2, backup:** `~/.conga-provider/backups/mg-before-20261102000100-20261112T135814Z/` (folder 700,
+  files 600, SHA-256 sums): schema and data dumps, `pre_request`'s definition, the hosted
+  fingerprint and the 39 table hashes. No table changed during the dumps.
+  - Restored into a throwaway stack of the 30 migrations (`shortcut-mgb`, stopped): sums match, the
+    data restored in one transaction, every public table and `auth.users` equal to hosted (39/39),
+    the stack's fingerprint equal to `rv-expected-30`.
+- **G3, repeated preflight and dry run (14:00 UTC):** every G0/G1 value unchanged, and the
+  fingerprint and 39 table hashes equal to the backup's. A dry run from a `git archive` of
+  `e37e5b1` listed only `20261102000100_member_gate.sql` (no seeds, no roles).
+- **G4, push:** applied 14:03:30 to 14:03:33 UTC.
+- **G5, after:**
+  - 31 migrations, latest `20261102000100`; the fingerprint equal to `mg-expected-31-migrations.fp`.
+    Against the backup only two lines differ: `pre_request` changed and `pre_member_allowed_path`
+    added. Policies, grants and every other function, including the revocation's
+    `mux_forget_video`, are unchanged.
+  - `pre_request` md5 `9281c3208e93ff0273528cb44cfa736f`, the value rehearsed locally. The allowlist
+    function is not executable by anon or authenticated.
+  - The 39 table hashes equal to the backup's: no row changed.
+  - **Gate behaviour, server-side, 34/34:** a read-only transaction, always rolled back,
+    impersonating each existing account by its claims (no ids printed).
+    - Both members are allowed on member reads, GraphQL and table paths.
+    - A new account with no profile is allowed only on the onboarding, deletion, analytics,
+      `web_video` and `request_review` paths, and gets `profile_required` elsewhere, including on
+      GraphQL, a table path and an empty path.
+    - A password session still gets `password_session` first.
+  - **Unauthenticated HTTP:** `get_onboarding_state` and `home_feed` 401, as before; `web_video`
+    200 `live` for a visible video and 200 `unavailable` for an unknown id.
+  - **Health:** clean-up live, cap 2, not paused, 0 open jobs, health `ok`, 12/12 schedules, 0 cron
+    failures, `mux-cleanup` v23, the same Edge Function versions and 14 secret names.
+  - **Watch, 14:03 to 14:34 UTC:** a second full reading at 14:34 gave the same results: fingerprint
+    equal to `mg-expected-31`, table hashes equal to the backup's, health `ok`, 0 open jobs, 77 cron
+    runs with 0 failed, 0 clean-up alerts, function versions unchanged.
+- **Not verified yet:**
+  - Member access in the app on the founder iPhone (Home, a profile, comments, search, a video reply
+    room).
+  - A shared link playing logged out on `conga.churntech.com` in a browser.
+  - Onboarding end to end on production: it needs a new account, so it needs separate approval.
+    pgTAP 0037 and the local HTTP probe stand in for it.
+- **Rollback:** not needed, and never automatic. The down file reopens the gap; it runs only on
+  Nemat's instruction.
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the

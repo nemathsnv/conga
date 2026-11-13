@@ -222,7 +222,7 @@ member, so the gate does not touch it.
 - **Not run:** a real device or simulator. No app code changed, and the app reaches member calls
   only from Home.
 
-## 7. Deployment runbook (conditionally approved by Nemat, 2 Nov; not run)
+## 7. Deployment runbook (conditionally approved by Nemat, 2 Nov; run 12 Nov)
 
 Conditions, from `docs/DECISIONS.md` (2 Nov):
 - only after `20261101000100` is deployed **and verified**, and as a separate deployment;
@@ -232,6 +232,8 @@ Conditions, from `docs/DECISIONS.md` (2 Nov):
 
 **Status at 2 Nov 10:35 UTC:** hosted has 29 migrations (latest `20261021000200`), so the
 precondition is not met and nothing was run.
+
+**Run on 12 Nov 2026:** deployed at 14:03 UTC after every gate passed. See section 9.
 
 **G0. Precondition (read only):**
 - 30 migrations, latest `20261101000100`.
@@ -364,3 +366,55 @@ write, no Mux call, no account outside the local stack, no app build.**
   - The hosted state since 3 Nov: not read in this pass (G0 and G1 do that, with approval).
   - A device or simulator: no app behaviour changed.
   - The avatars listing finding (F3): still open, separate.
+
+## 9. Hosted deployment (12 Nov 2026)
+
+Nemat approved G0 and G1 (read only), then G2 to G5, in chat on 12 Nov. The migration was deployed
+alone at 14:03 UTC. Summary in `docs/BETA-READINESS.md` section 56.
+
+| Gate | Result |
+| --- | --- |
+| G0, 13:45 UTC | PASS. 30 migrations, latest `20261101000100`; the version list equal to `main`'s first 30 (md5 `7967f37a…`); fingerprint equal to `rv-expected-30-migrations.fp` (0 lines differ); the revocation's D2 to D5 recorded PASS (BETA-READINESS 53); the `revoke` check 18/18. |
+| G1, 13:45 UTC | PASS. `pre_request` md5 `68e72efad2fd8695ff04e83fb3667386`, owner postgres, security definer; `pgrst.db_pre_request=public.pre_request`; `invite_required` true; accounts 2, profiles 2, 0 sign-ins and 0 accounts without a profile, 0 profiles without beta access; `20261102000100` not applied, no `pre_member_allowed_path` in any schema; clean-up jobs 8 done and 1 skipped, 0 open, health `ok`. |
+| G2, 13:58 UTC | PASS. Backup `~/.conga-provider/backups/mg-before-20261102000100-20261112T135814Z/` (700/600, SHA-256 sums): schema dump, data dump (71 tables with rows), `pre_request` definition, hosted fingerprint, 39 table hashes; unchanged during the dumps. Restored into the isolated stack `shortcut-mgb` (30 migrations): sums match, one-transaction restore, 39/39 table hashes equal, stack fingerprint equal to `rv-expected-30`, the dump holds `pre_request` and no allowlist function. Stack stopped. |
+| G3, 14:00 UTC | PASS. G0/G1 repeated, every value unchanged; fingerprint and table hashes equal to the backup's. `git archive e37e5b1` (31 migrations; `20261102000100_member_gate.sql` md5 `e39d5986…`, unchanged since `6fc9619`). Dry run: only `20261102000100_member_gate.sql`, no seeds, no roles. |
+| G4, 14:03:30 to 14:03:33 UTC | Applied `20261102000100_member_gate.sql` only. No Edge Function, secret, config, auth, Mux or app change. |
+| G5 | PASS. See below. No rollback needed. |
+
+**G5 evidence:**
+- **Schema:** 31 migrations, latest `20261102000100` (version list md5 `9e65f079…`, equal to `main`).
+  The fingerprint equals `mg-expected-31-migrations.fp`. Against the pre-deploy backup exactly two
+  lines differ, `pre_request()` (`1e469928…` to `fa1c544a…`) and the new
+  `pre_member_allowed_path(text)`; every policy (24 on public and storage), grant, table, trigger,
+  cron job and other function is unchanged, `mux_forget_video` included.
+- **Functions:** `pre_request` md5 `9281c3208e93ff0273528cb44cfa736f`, equal to the local rehearsal.
+  `pre_member_allowed_path` is owned by postgres, immutable, not security definer, executable by
+  postgres and service_role only (not anon, not authenticated).
+- **Data:** the 39 table hashes (every public table and `auth.users`) equal to the backup's before
+  and after the gate check: no row changed. Accounts 2, profiles 2, 0 without a profile.
+- **Gate behaviour, 34/34**, in one `do` block that sets the transaction `READ ONLY` and ends by
+  raising its result, so it always rolls back. Pass/fail only, no ids printed:
+  - each of the 2 accounts on `/rpc/home_feed`, `/rpc/get_profile`, `/rpc/comments_list`,
+    `/rpc/search`, `/places`, `/rpc/graphql`, `/rpc/get_onboarding_state`: `allowed`;
+  - a random uuid with no account (a brand-new sign-in): `allowed` on `get_onboarding_state`,
+    `confirm_age`, `check_invite`, `redeem_invite`, `create_profile`, `web_video`, `delete_account`,
+    `track_events`, `request_review`; `profile_required` on `home_feed`, `/places`, `get_profile`,
+    `graphql`, `search`, `comments_list`, `/profiles` and an empty path;
+  - a password session: `password_session`, first, as before;
+  - no claims (anon): `allowed` by `pre_request`, as before (grants decide).
+- **HTTP, unauthenticated, anon key:** `get_onboarding_state` 401 and `home_feed` 401, as before;
+  `web_video` 200 `live` for a visible video and 200 `unavailable` for an unknown id.
+- **Background jobs and Mux:** the clean-up is live, cap 2, not paused; 0 open jobs (8 done, 1
+  skipped, as before); health `ok` with no problems; 12/12 schedules active, 0 failures in 24 hours;
+  `mux-cleanup` v23; Edge Function versions and the 14 secret names unchanged.
+- **Watch, 14:03 to 14:34 UTC:** a second full reading at 14:34 UTC gave the same: fingerprint
+  equal to `mg-expected-31`, the 39 table hashes equal to the backup's, health `ok`, 0 open jobs, 77
+  cron runs since the push with 0 failed, 0 clean-up alerts, Edge Function versions unchanged. (The
+  `revoke` phase of `cleanup-unattended-hosted-check.sh` now reports its two 30-migration checks as
+  FAIL by design; the fingerprint is compared with `mg-expected-31` instead.)
+
+**Not verified:**
+- Member access on the founder iPhone (Home, a profile, comments, search, a video reply room).
+- A shared link playing logged out on `conga.churntech.com` in a browser.
+- Onboarding end to end on production, which needs a new account and separate approval.
+- The avatars listing finding (F3): still open, separate.
