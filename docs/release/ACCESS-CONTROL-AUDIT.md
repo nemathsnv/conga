@@ -423,3 +423,109 @@ alone at 14:03 UTC. Summary in `docs/BETA-READINESS.md` section 56.
 - A shared link playing logged out on `conga.churntech.com` in a browser.
 - Onboarding end to end on production, which needs a new account and separate approval.
 - The avatars listing finding (F3): still open, separate.
+
+## 10. F3 fixed: `20261113000100_avatars_no_listing.sql` (13 Nov 2026; local only, nothing hosted)
+
+**Finding (section 2):** `avatars: anyone can read` (role `public`) let anyone with the anon key
+list the bucket: `POST /storage/v1/object/list/avatars` returned every account id with a photo, and
+each folder every file in it, replaced photos included. Signed-in sessions, members or not, could
+list every folder too. Severity: low to medium (privacy). It enumerates which accounts have a
+photo and lets anyone collect every member's face during the closed beta. No write, no
+authentication bypass, nothing beyond what a known photo URL already shows.
+
+**Reproduced** on an isolated stack (`shortcut-art-sec`, 31 migrations from `5d362eb`; its
+fingerprint equals `mg-expected-31-migrations.fp` line for line). Anon, a non-owner member and a
+signed-in non-member each listed the root (all account ids) and another person's folder.
+
+**Why the policy is narrowed, not dropped.** Measured with the policy dropped completely:
+- Still working: public URLs, the app's upload (`upsert: false`, `app/src/lib/photo.ts`), the
+  service role's list and remove (`avatar-cleanup`).
+- Broken for the owner: listing their own folder returned nothing, an `x-upsert` re-upload was
+  refused, and a Storage delete answered 200 but removed nothing.
+
+The app uses none of these three today, but a silent no-op delete is a trap.
+
+**The fix:** drop `avatars: anyone can read`; create `avatars: read your own folder` (SELECT, `to
+authenticated`, `bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text`).
+That is the same folder rule as the write policies. No function, grant, bucket setting or row
+changes. The bucket stays public, so `/storage/v1/object/public/avatars/<path>` (the app's
+`avatarUrl()`, the web player's `render.ts`) serves photos without RLS, as SPEC.md Section 9 wants.
+Rollback: `supabase/rollback/20261113000100_avatars_no_listing.down.sql` recreates the old policy
+exactly.
+
+**Still possible after the fix, by design:** anyone who knows a photo's exact path can fetch it,
+or its metadata through `/object/info` and `/object/authenticated` (a public bucket serves those
+without RLS; measured). Paths reach people only through member RPCs and the author's photo on a
+shared web link.
+
+**Tests** (isolated stack, local only):
+- **pgTAP `0038_avatars_listing.sql`, 31 tests:**
+  - Negative: anon, a non-owner member and a signed-in non-member read no other person's rows.
+    `storage.search` and `list_objects_with_delimiter` return no foreign folder, and the old
+    policy is gone.
+  - Positive: the owner reads and lists their own folder, inserts with `RETURNING` and upserts;
+    the service role sees everything; deleting an account still queues its folder for
+    `avatar-cleanup`.
+  - On main it fails 17/31, which are the negative and structure cases.
+- **Full pgTAP suite:** 28 files, 2003 tests, PASS.
+- **Deno `avatar_cleanup_integration_test.ts`:** 3/3.
+- **HTTP probe, 33 cases** (team evidence `T03`): 33/33 "before" on main, 33/33 "after" on the fix.
+- **Rollback rehearsal:**
+  - The down file gives back a fingerprint equal to `mg-expected-31`, and the probe matches
+    "before" again.
+  - Re-applying gives `av-expected-32-migrations.fp`, and the probe matches "after" again.
+
+**Fingerprint:** the new baseline is `av-expected-32-migrations.fp`, 907 lines. It differs from
+`mg-expected-31-migrations.fp` in exactly one line: the `anyone can read` policy is replaced by
+`read your own folder`. After this deploy, `scripts/cleanup-unattended-hosted-check.sh gate` fails
+its migration-count and fingerprint checks by design, as `revoke` did after the member gate. A
+32-migration phase for that script is a separate tooling change.
+
+### Deployment runbook (not run; needs Nemat's approval)
+
+Run this as its own deployment. It touches no Mux table, job, secret or Edge Function, and no
+`public` object.
+
+**F0. Precondition (read only):**
+- Hosted has 31 migrations, latest `20261102000100`.
+- Its fingerprint equals `mg-expected-31-migrations.fp`, using
+  `scripts/cleanup-unattended-hosted-check.sh gate <outdir>`.
+- If either fails, stop.
+
+**F1. Fresh preflight (read only, counts only, no ids):**
+- `storage.objects` has exactly the four `avatars:%` policies. `anyone can read` is `{public}`,
+  SELECT, `(bucket_id = 'avatars'::text)`.
+- No other storage policy or bucket exists that this change ignores.
+- Bucket `avatars` is public.
+- `storage.search` and `storage.list_objects_with_delimiter` are not SECURITY DEFINER on hosted.
+  The local stack runs storage-api v1.79.28, and hosted may differ.
+- The number of `avatars` objects and of profiles with a `photo_path`.
+
+**F2. Backup:**
+- The migration changes one policy and no row.
+- Save the `pg_policies` rows for `storage.objects` (name, roles, cmd, qual, with_check) and the
+  hosted fingerprint before the deploy. These are enough to restore the policy. The rollback file
+  reproduces it exactly (shown locally by the fingerprint).
+
+**F3. Migration:**
+- `git archive` the merged `main`'s `supabase/` into a scratch workdir.
+- `supabase db push --linked --project-ref picvoavfxnajfjkqawju --workdir <scratch> --dry-run`
+  must list exactly `20261113000100_avatars_no_listing.sql`. Anything else means stop.
+- Then run it without `--dry-run`.
+
+**F4. Verification, with no test account:**
+- 32 migrations, and the fingerprint equals `av-expected-32-migrations.fp`.
+- The F1 counts are unchanged.
+- With the anon key, `POST /storage/v1/object/list/avatars {"prefix": ""}` gives 200 with 0
+  entries. Print the count only.
+- `GET /storage/v1/object/public/avatars/<an existing photo_path>` gives 200. Print the status
+  only.
+- Nemat on the founder iPhone: his profile photo shows on his profile and in the feed. Changing
+  the photo is optional: it is his own write as a normal user, so only if he chooses.
+
+**F5. If an F4 check fails:**
+- Unlike G5, rolling back only reopens F3 (low to medium), and it restores the previous policy
+  exactly.
+- So Nemat may pre-approve: if photos stop loading or an upload fails, run the rollback file and
+  delete the `20261113000100` row in `supabase_migrations.schema_migrations`, in one transaction.
+- Otherwise, stop and report.
