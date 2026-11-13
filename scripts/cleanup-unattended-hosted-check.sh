@@ -6,17 +6,19 @@
 # key, secret value, email or Mux id. Writes per-table hashes, the fingerprint, secret names and
 # function versions to <outdir> so two phases can be diffed.
 #
-#   scripts/cleanup-unattended-hosted-check.sh pre|post|live|revoke <outdir>
+#   scripts/cleanup-unattended-hosted-check.sh pre|post|live|revoke|gate <outdir>
 #     pre    before the migration:   28 migrations, switch off, no MUX_CLEANUP_MODE
 #     post   after the migration:    29 migrations, 12 schedules, switch off, no cap, no MUX_CLEANUP_MODE
 #     live   after enabling:         29 migrations, switch live, cap 2, MUX_CLEANUP_MODE=live, alerts set
-#     revoke after 20261101000100:   as live, with 30 migrations (rv-expected-30-migrations.fp)
+#     revoke after 20261101000100:   as live, with 30 migrations (rv-expected-30-migrations.fp); historical
+#     gate   after 20261102000100:   as live, with 31 migrations (mg-expected-31-migrations.fp); the
+#                                    production baseline since the member-gate deploy (12 Nov 2026)
 # Exit 0 only if every check passes.
 set -uo pipefail
 PHASE="${1:-}"; OUT="${2:-}"
-case "$PHASE" in pre|post|live|revoke) ;; *) echo "usage: $0 pre|post|live|revoke <outdir>" >&2; exit 2 ;; esac
-[ -n "$OUT" ] || { echo "usage: $0 pre|post|live|revoke <outdir>" >&2; exit 2; }
-LIVE=no; case "$PHASE" in live|revoke) LIVE=yes ;; esac
+case "$PHASE" in pre|post|live|revoke|gate) ;; *) echo "usage: $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2 ;; esac
+[ -n "$OUT" ] || { echo "usage: $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2; }
+LIVE=no; case "$PHASE" in live|revoke|gate) LIVE=yes ;; esac
 mkdir -p "$OUT"
 REF=picvoavfxnajfjkqawju
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,6 +44,7 @@ envval() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tr -d '"' | head -1; }
 
 if [ "$PHASE" = pre ]; then EXP_MIG="28|20261021000100"; EXP_FP="$REPO/docs/release/inv-expected-28-migrations.fp"; EXP_CRON="10|10"
 elif [ "$PHASE" = revoke ]; then EXP_MIG="30|20261101000100"; EXP_FP="$REPO/docs/release/rv-expected-30-migrations.fp"; EXP_CRON="12|12"
+elif [ "$PHASE" = gate ]; then EXP_MIG="31|20261102000100"; EXP_FP="$REPO/docs/release/mg-expected-31-migrations.fp"; EXP_CRON="12|12"
 else EXP_MIG="29|20261021000200"; EXP_FP="$REPO/docs/release/cu-expected-29-migrations.fp"; EXP_CRON="12|12"; fi
 echo "# $PHASE $(date -u +%FT%TZ)"
 

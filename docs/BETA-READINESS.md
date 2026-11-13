@@ -6207,6 +6207,10 @@ its section 9.
     pgTAP 0037 and the local HTTP probe stand in for it.
 - **Rollback:** not needed, and never automatic. The down file reopens the gap; it runs only on
   Nemat's instruction.
+- **Routine read-only check (13 Nov):** `scripts/cleanup-unattended-hosted-check.sh gate <outdir>`
+  expects this baseline (31 migrations, latest `20261102000100`, `mg-expected-31-migrations.fp`).
+  The `revoke` phase still expects 30 and now fails its migration and fingerprint checks by design.
+  The new phase was checked with `bash -n` and a fake `supabase` only; it has not run against hosted.
 
 ## Gates
 

@@ -412,6 +412,11 @@ alone at 14:03 UTC. Summary in `docs/BETA-READINESS.md` section 56.
   cron runs since the push with 0 failed, 0 clean-up alerts, Edge Function versions unchanged. (The
   `revoke` phase of `cleanup-unattended-hosted-check.sh` now reports its two 30-migration checks as
   FAIL by design; the fingerprint is compared with `mg-expected-31` instead.)
+- **Follow-up, 13 Nov:** the script now has a `gate` phase that expects this baseline: 31
+  migrations, latest `20261102000100`, fingerprint `mg-expected-31-migrations.fp`, otherwise the same
+  checks as `revoke`. Use `scripts/cleanup-unattended-hosted-check.sh gate <outdir>` for routine
+  read-only checks; `revoke` stays as the historical 30-migration phase. Checked with `bash -n` and a
+  fake `supabase` on PATH only; not yet run against hosted.
 
 **Not verified:**
 - Member access on the founder iPhone (Home, a profile, comments, search, a video reply room).
