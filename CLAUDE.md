@@ -42,14 +42,14 @@ Expo / React Native / TypeScript / Expo Router, and Supabase (Postgres, Auth, St
 - A **comment** is text.
 - Never use "answer" or "post" as a noun for these, in code identifiers, UI copy or docs.
 
-## Current state (9 Oct 2026)
+## Current state (14 Nov 2026)
 
 **Current work: beta readiness and real-device validation.** No new feature phase is authorized. Don't add features, screens or flows. Change app code only to fix a demonstrated setup or verification blocker, and say so.
 
-- **Phase 1, video spike:** run on a real iPhone 17 Pro over mobile data (4 rounds, 22 recordings, 21 uploads, 31 playbacks; `spike/REPORT.md`). Android has not been run. `spike/` is throwaway code, not the app.
-- **Phases 2 to 7:** implemented in `app/` and `supabase/`. None has been verified on a real device. What was seen on the iOS simulator is listed in each `docs/PHASE-*-REPORT.md`. Android has never run.
+- **Hosted (production) Supabase `picvoavfxnajfjkqawju`:** 32 migrations, latest `20261113000100_avatars_no_listing` (F3, deployed 14 Nov 03:46 UTC). Routine read-only check: `PROVIDER_APPROVED_BY_NEMAT=yes scripts/cleanup-unattended-hosted-check.sh avatars <outdir>` (fingerprint `docs/release/av-expected-32-migrations.fp`). The `gate` phase (31) now fails by design. Every hosted read script refuses without `PROVIDER_APPROVED_BY_NEMAT=yes`; set it only after Nemat approves in chat. Details: `docs/BETA-READINESS.md` sections 56 and 57.
+- **Real devices:** the founder iPhone 17 Pro ran the app from main `ea7a46b` against hosted on 14 Nov (member access, sign-in, F3 photo, recording with pause/resume/flip, posting): section 57. Android has run on the emulator and a lab Galaxy A15 (12 Nov), not yet on a phone in hand. `spike/` is throwaway code, not the app.
 - **Provisional stack:** Mux (video hosting and playback) and expo-camera, selected on the iPhone spike evidence and used for implementation since phase 2. Provisional means Gate 1 is not passed and SPEC.md Section 22's video rows are not settled. Don't swap either without Nemat.
-- **Outstanding:** Android video validation (the spike checklist on a real mid-range Android over Bali mobile data), and B-1, camera flip during a take (segment stitching; `docs/BLOCKERS.md`).
+- **Outstanding:** a real mid-range Android over Bali mobile data (Gate 1), and the fixes waiting for one combined test pass (section 57).
 - **Authorized 19 Oct 2026 (Nemat):** several responses per person per prompt, and Pause/Resume while recording (`docs/DECISIONS.md`; `docs/release/MULTI-RESPONSE-PAUSE-19OCT.md`). Built locally; deploying, publishing and installing each need Nemat's approval.
 - **Gates 1, 2, 5 and 7 are open.** Only Nemat closes a gate, and it is recorded in `docs/DECISIONS.md`. Never mark a gate passed.
 - **What is still open:** `docs/BETA-READINESS.md` (consolidated) and `docs/BLOCKERS.md` (B-1 to B-4).

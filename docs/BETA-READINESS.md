@@ -6212,6 +6212,34 @@ its section 9.
   The `revoke` phase still expects 30 and now fails its migration and fingerprint checks by design.
   The new phase was checked with `bash -n` and a fake `supabase` only; it has not run against hosted.
 
+## 57. Integration, F3 deployed, founder iPhone session (13 and 14 Nov; Nemat approved each step)
+
+- **Merged to main** (merge commits, CI TypeScript/ESLint/Jest green on each head and on main):
+  #7 `3e80ce2` (hosted check refuses without `PROVIDER_APPROVED_BY_NEMAT=yes`), #8 `a075783` (F3 fix:
+  `20261113000100_avatars_no_listing.sql`, pgTAP 0038, rollback file), #9 `ea7a46b` (`avatars` phase,
+  32 migrations).
+- **Hosted, read only:** `gate` 18/18 at 03:26, 03:40 and 03:45 UTC on 14 Nov.
+- **F3 deployed** 14 Nov 03:46:54 to 03:46:58 UTC, that migration only, after F0 to F2 (backup
+  `~/.conga-provider/backups/av-before-20261113000100-20261114T034219Z/`) and a dry run listing only it.
+  F4: `avatars` 18/18; `avatars: anyone can read` gone, `read your own folder` present, the other three
+  policies unchanged; the 39 table hashes equal the backup's. No rollback.
+- **F3 functional (founder iPhone, 05:16 UTC):** Nemat's own photo uploaded and shows; its public URL 200;
+  anonymous list of `avatars` 200 with 0 entries while 1 object exists. **F3 is closed.**
+- **Founder iPhone, build from `ea7a46b`, hosted:** member access PASS (Home, profile, search, video
+  reply room, Me; no `profile_required`); sign-out and sign-in by email code PASS; recording PASS
+  (pause/resume, flips, 30 s limit, backgrounding: stitched audio equals video within 0.002 s, AAC 48 kHz,
+  no gap); response and comment posting PASS. **FAIL:** a video reply opened right after it went live
+  showed its still and never started (Mux served it; reopening played it). Observation: about 0.4 to 0.5 s
+  is lost per join (a 30 s take with 4 joins is 28.07 s). Not run: incoming call, mobile data, logged-out
+  shared link. Records: Artemis team folder `evidence/T06/results.md`.
+- **Android T5 take 2 explained:** after Resume, CameraX started no second segment on the emulator, so
+  the take had one segment and skipped stitching (raw AMR file). Whether Resume can silently fail on a
+  real Android phone is the open question for the final test.
+- **Fixes waiting for one combined test pass (Nemat, 14 Nov: fix first, test once at the end):**
+  `claude/fix-video-stall-try-again` (a player with no first frame after 15 s shows Try again; own
+  responses read only at the Home step, finding F-QA-1) and `claude/hosted-script-guards` (the last two
+  hosted scripts refuse without the approval flag).
+
 ## Gates
 
 - **Gate 1** (video provider and camera library picked): open. Mux and expo-camera are the
