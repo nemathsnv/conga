@@ -6,7 +6,9 @@
 # key, secret value, email or Mux id. Writes per-table hashes, the fingerprint, secret names and
 # function versions to <outdir> so two phases can be diffed.
 #
-#   scripts/cleanup-unattended-hosted-check.sh pre|post|live|revoke|gate <outdir>
+#   PROVIDER_APPROVED_BY_NEMAT=yes scripts/cleanup-unattended-hosted-check.sh pre|post|live|revoke|gate <outdir>
+#   Every phase reads the hosted project, so the script refuses (exit 2, before any `supabase` call)
+#   unless PROVIDER_APPROVED_BY_NEMAT=yes, as provider-sql.sh does. Set it only after Nemat approves.
 #     pre    before the migration:   28 migrations, switch off, no MUX_CLEANUP_MODE
 #     post   after the migration:    29 migrations, 12 schedules, switch off, no cap, no MUX_CLEANUP_MODE
 #     live   after enabling:         29 migrations, switch live, cap 2, MUX_CLEANUP_MODE=live, alerts set
@@ -16,8 +18,9 @@
 # Exit 0 only if every check passes.
 set -uo pipefail
 PHASE="${1:-}"; OUT="${2:-}"
-case "$PHASE" in pre|post|live|revoke|gate) ;; *) echo "usage: $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2 ;; esac
-[ -n "$OUT" ] || { echo "usage: $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2; }
+case "$PHASE" in pre|post|live|revoke|gate) ;; *) echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2 ;; esac
+[ -n "$OUT" ] || { echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2; }
+[ "${PROVIDER_APPROVED_BY_NEMAT:-}" = "yes" ] || { echo "refusing: the hosted run is not enabled (PROVIDER_APPROVED_BY_NEMAT)" >&2; exit 2; }
 LIVE=no; case "$PHASE" in live|revoke|gate) LIVE=yes ;; esac
 mkdir -p "$OUT"
 REF=picvoavfxnajfjkqawju
