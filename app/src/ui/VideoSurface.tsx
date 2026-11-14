@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 
-import { isPlaybackFailure, shouldResumeOnForeground } from '@/ui/playbackRules';
+import { FIRST_FRAME_LIMIT_MS, isPlaybackFailure, shouldResumeOnForeground, watchFirstFrame } from '@/ui/playbackRules';
 import { applyPlaybackSettings, hlsUrl, rewind, setLooping, thumbnailUrl } from '@/video/playback';
 
 export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFailed, retryKey = 0, localUri, load = true }: {
@@ -84,6 +84,14 @@ export function VideoSurface({ playbackId, active, loop, onEnd, onProgress, onFa
       .catch(() => latest.current.onFailed?.());
     // `source` is derived from props that do not change on a retry.
   }, [retryKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A stream that stalls without an error would show the still forever: past the limit, count it
+  // as failed so the page shows Try again (playbackRules.ts, FIRST_FRAME_LIMIT_MS).
+  useEffect(() => {
+    if (!watchFirstFrame({ active, hasSource: source !== null, firstFrame })) return;
+    const timer = setTimeout(() => latest.current.onFailed?.(), FIRST_FRAME_LIMIT_MS);
+    return () => clearTimeout(timer);
+  }, [active, firstFrame, player, retryKey, source === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const t = player.addListener('timeUpdate', (e) => {
