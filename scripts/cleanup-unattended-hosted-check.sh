@@ -6,7 +6,7 @@
 # key, secret value, email or Mux id. Writes per-table hashes, the fingerprint, secret names and
 # function versions to <outdir> so two phases can be diffed.
 #
-#   PROVIDER_APPROVED_BY_NEMAT=yes scripts/cleanup-unattended-hosted-check.sh pre|post|live|revoke|gate <outdir>
+#   PROVIDER_APPROVED_BY_NEMAT=yes scripts/cleanup-unattended-hosted-check.sh pre|post|live|revoke|gate|avatars <outdir>
 #   Every phase reads the hosted project, so the script refuses (exit 2, before any `supabase` call)
 #   unless PROVIDER_APPROVED_BY_NEMAT=yes, as provider-sql.sh does. Set it only after Nemat approves.
 #     pre    before the migration:   28 migrations, switch off, no MUX_CLEANUP_MODE
@@ -15,13 +15,15 @@
 #     revoke after 20261101000100:   as live, with 30 migrations (rv-expected-30-migrations.fp); historical
 #     gate   after 20261102000100:   as live, with 31 migrations (mg-expected-31-migrations.fp); the
 #                                    production baseline since the member-gate deploy (12 Nov 2026)
+#     avatars after 20261113000100:  as live, with 32 migrations (av-expected-32-migrations.fp); the
+#                                    baseline after the F3 deploy (ACCESS-CONTROL-AUDIT.md section 10, F4)
 # Exit 0 only if every check passes.
 set -uo pipefail
 PHASE="${1:-}"; OUT="${2:-}"
-case "$PHASE" in pre|post|live|revoke|gate) ;; *) echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2 ;; esac
-[ -n "$OUT" ] || { echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post|live|revoke|gate <outdir>" >&2; exit 2; }
+case "$PHASE" in pre|post|live|revoke|gate|avatars) ;; *) echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post|live|revoke|gate|avatars <outdir>" >&2; exit 2 ;; esac
+[ -n "$OUT" ] || { echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post|live|revoke|gate|avatars <outdir>" >&2; exit 2; }
 [ "${PROVIDER_APPROVED_BY_NEMAT:-}" = "yes" ] || { echo "refusing: the hosted run is not enabled (PROVIDER_APPROVED_BY_NEMAT)" >&2; exit 2; }
-LIVE=no; case "$PHASE" in live|revoke|gate) LIVE=yes ;; esac
+LIVE=no; case "$PHASE" in live|revoke|gate|avatars) LIVE=yes ;; esac
 mkdir -p "$OUT"
 REF=picvoavfxnajfjkqawju
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,6 +50,7 @@ envval() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tr -d '"' | head -1; }
 if [ "$PHASE" = pre ]; then EXP_MIG="28|20261021000100"; EXP_FP="$REPO/docs/release/inv-expected-28-migrations.fp"; EXP_CRON="10|10"
 elif [ "$PHASE" = revoke ]; then EXP_MIG="30|20261101000100"; EXP_FP="$REPO/docs/release/rv-expected-30-migrations.fp"; EXP_CRON="12|12"
 elif [ "$PHASE" = gate ]; then EXP_MIG="31|20261102000100"; EXP_FP="$REPO/docs/release/mg-expected-31-migrations.fp"; EXP_CRON="12|12"
+elif [ "$PHASE" = avatars ]; then EXP_MIG="32|20261113000100"; EXP_FP="$REPO/docs/release/av-expected-32-migrations.fp"; EXP_CRON="12|12"
 else EXP_MIG="29|20261021000200"; EXP_FP="$REPO/docs/release/cu-expected-29-migrations.fp"; EXP_CRON="12|12"; fi
 echo "# $PHASE $(date -u +%FT%TZ)"
 
