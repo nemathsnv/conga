@@ -7,6 +7,19 @@ export function shouldResumeOnForeground(appState: string, active: boolean): boo
   return appState === 'active' && active;
 }
 
+/** How long the video on screen may go without its first frame before it counts as failed to load.
+ *  A stream can stall without ever reporting an error (a Mux asset opened seconds after it went
+ *  live did, on the founder iPhone, 14 Nov 2026); without this limit the page shows its still
+ *  forever. Failing shows X-Unavailable's Try again (SPEC.md Section 20), which loads it again.
+ *  15 s is about 2.5 times the slowest cold first frame measured over Bali mobile data (5.8 s). */
+export const FIRST_FRAME_LIMIT_MS = 15_000;
+
+/** Whether to start the first-frame watchdog: only for a player that is on screen, has a stream to
+ *  load, and has not drawn its first frame for this load yet. */
+export function watchFirstFrame({ active, hasSource, firstFrame }: { active: boolean; hasSource: boolean; firstFrame: boolean }): boolean {
+  return active && hasSource && !firstFrame;
+}
+
 /** The file to show a still of: a recording's video file on the phone, or nothing (no file, an empty
  *  string). An image view cannot show it; the banner plays it paused on its first frame. */
 export function stillSource(uri: string | null | undefined): string | null {
