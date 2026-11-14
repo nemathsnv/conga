@@ -483,8 +483,9 @@ change prevents foreign-folder listing; it does not make photo paths or known-pa
 **Fingerprint:** the new baseline is `av-expected-32-migrations.fp`, 907 lines. It differs from
 `mg-expected-31-migrations.fp` in exactly one line: the `anyone can read` policy is replaced by
 `read your own folder`. After this deploy, `scripts/cleanup-unattended-hosted-check.sh gate` fails
-its migration-count and fingerprint checks by design, as `revoke` did after the member gate. A
-32-migration phase for that script is a separate tooling change.
+its migration-count and fingerprint checks by design, as `revoke` did after the member gate. From
+then on use its `avatars` phase (32 migrations, latest `20261113000100`, this fingerprint; added 14
+Nov 2026).
 
 ### Deployment runbook (not run; needs Nemat's approval)
 
@@ -519,7 +520,9 @@ Run this as its own deployment. It touches no Mux table, job, secret or Edge Fun
 - Then run it without `--dry-run`.
 
 **F4. Verification, with no test account:**
-- 32 migrations, and the fingerprint equals `av-expected-32-migrations.fp`.
+- 32 migrations, and the fingerprint equals `av-expected-32-migrations.fp`, using
+  `scripts/cleanup-unattended-hosted-check.sh avatars <outdir>` (every other check in that phase is
+  the same as `gate`'s).
 - The F1 counts are unchanged.
 - With the anon key, `POST /storage/v1/object/list/avatars {"prefix": ""}` gives 200 with 0
   entries. Print the count only.
