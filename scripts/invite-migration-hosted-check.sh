@@ -3,9 +3,15 @@
 # Every query is one SELECT through `supabase db query --linked --project-ref` (Management API), checked
 # here to be select-only. Prints counts, hashes and verdicts only: no invite code, email, token or secret
 # value. Writes the fingerprint, per-table hashes and secret names to <outdir> for a pre/post diff.
-#   scripts/invite-migration-hosted-check.sh pre|post <outdir>
+#   PROVIDER_APPROVED_BY_NEMAT=yes scripts/invite-migration-hosted-check.sh pre|post <outdir>
+#   Both phases read the hosted project, so the script refuses (exit 2, before any `supabase` call)
+#   unless PROVIDER_APPROVED_BY_NEMAT=yes, as provider-sql.sh does. Set it only after Nemat approves.
 set -uo pipefail
-PHASE="$1"; OUT="$2"; mkdir -p "$OUT"
+PHASE="${1:-}"; OUT="${2:-}"
+case "$PHASE" in pre|post) ;; *) echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post <outdir>" >&2; exit 2 ;; esac
+[ -n "$OUT" ] || { echo "usage: PROVIDER_APPROVED_BY_NEMAT=yes $0 pre|post <outdir>" >&2; exit 2; }
+[ "${PROVIDER_APPROVED_BY_NEMAT:-}" = "yes" ] || { echo "refusing: the hosted run is not enabled (PROVIDER_APPROVED_BY_NEMAT)" >&2; exit 2; }
+mkdir -p "$OUT"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 FAILED=0
 # Select-only: one statement starting with select/with, no semicolon, no DML/DDL keyword.

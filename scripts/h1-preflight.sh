@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # H1: the read-only hosted preflight of docs/release/H1-PREFLIGHT.md as one command.
 #
-#   scripts/h1-preflight.sh               hosted project (the folder must be linked: supabase link)
+#   PROVIDER_APPROVED_BY_NEMAT=yes scripts/h1-preflight.sh   hosted project (the folder must be linked)
 #   scripts/h1-preflight.sh --local DIR   a local stack folder, for testing the script itself
 #
 # Every query is one SELECT (the CLI runs one statement per call). Nothing is written anywhere except the
@@ -15,6 +15,11 @@ MODE="linked"; STACK=""
 if [ "${1:-}" = "--local" ]; then MODE="local"; STACK="${2:?stack folder}"; fi
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 cd "$REPO"
+# The hosted mode reads the hosted project: refuse (exit 2, before any `supabase` call) unless
+# PROVIDER_APPROVED_BY_NEMAT=yes, as provider-sql.sh does. The --local mode needs no approval.
+if [ "$MODE" = "linked" ] && [ "${PROVIDER_APPROVED_BY_NEMAT:-}" != "yes" ]; then
+  echo "refusing: the hosted run is not enabled (PROVIDER_APPROVED_BY_NEMAT)" >&2; exit 2
+fi
 if [ "$MODE" = "linked" ] && [ ! -s supabase/.temp/project-ref ]; then
   echo "not linked: run 'supabase link --project-ref picvoavfxnajfjkqawju' in $REPO first (it writes local files only)" >&2; exit 2
 fi
