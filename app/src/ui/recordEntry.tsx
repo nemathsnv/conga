@@ -27,8 +27,10 @@ const RecordEntryContext = createContext<RecordEntry | null>(null);
 export function RecordEntryProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const posting = usePosting();
-  const { session } = useSession();
-  const ownerId = session?.user.id ?? null;
+  const { session, step } = useSession();
+  // Only a member (step 'home') may read profile_responses: before that the member gate refuses
+  // it with profile_required (20261102000100_member_gate.sql), so it would only fail in the background.
+  const ownerId = step === 'home' ? session?.user.id ?? null : null;
   const block = cameraBlock(posting.state);
 
   // The member's own responses (the + sheet's "Respond again"): at sign-in and whenever the app

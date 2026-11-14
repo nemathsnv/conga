@@ -128,3 +128,10 @@ describe('calls the app makes before Home pass the member gate', () => {
     }
   });
 });
+
+describe('RecordEntryProvider waits for Home (finding F-QA-1, 13 Nov 2026)', () => {
+  it('reads the member\'s own responses only at the home step', () => {
+    const src = read('ui/recordEntry.tsx');
+    expect(src).toMatch(/const ownerId = step === 'home' \? session\?\.user\.id \?\? null : null;/);
+  });
+});
